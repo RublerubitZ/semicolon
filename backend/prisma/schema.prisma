@@ -72,6 +72,9 @@ model Task {
   submissions TaskSubmission[]
   feedbacks   Feedback[]
   studyLogs   StudyTimeLog[]
+
+  @@index([menteeId, date])
+  @@index([mentorId, date])
 }
 
 enum Subject {
@@ -142,6 +145,9 @@ model StudyTimeLog {
 
   mentee User  @relation(fields: [menteeId], references: [id])
   task   Task? @relation(fields: [taskId], references: [id])
+
+  @@index([menteeId, date])
+  @@index([menteeId, subject, date])
 }
 
 // 플래너 코멘트/질문
@@ -153,6 +159,8 @@ model PlannerComment {
   createdAt DateTime @default(now())
 
   mentee User @relation(fields: [menteeId], references: [id])
+
+  @@index([menteeId, date])
 }
 
 // 알림

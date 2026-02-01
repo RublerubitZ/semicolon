@@ -44,13 +44,28 @@
 
 ### 2.2 멘티 화면 (모바일 웹앱)
 
-#### 일일 플래너
+#### 플래너 (일일/주간/월간)
+**일일 플래너 (메인)**
 - 날짜가 상단에 표시
 - 플래너 상단: 코멘트/질문 입력 영역
 - 멘토 고정 '할 일' (멘티 변경 불가)
 - 멘티 추가 '할 일' 등록 가능
 - 할일 옆 '공부 시간 체크'
-- 주 단위 미니 캘린더, 월간 캘린더
+- 완료/미완료 상태 표시
+
+**주간 플래너**
+- 주 단위 캘린더 뷰
+- 날짜별 할 일 요약 표시
+- 날짜 클릭 시 일일 플래너로 이동
+- 주간 학습 시간 통계
+- 과목별 주간 달성률
+
+**월간 플래너**
+- 월간 캘린더 뷰
+- 날짜별 할 일 개수 표시
+- 완료율 시각화 (색상/아이콘)
+- 날짜 클릭 시 일일 플래너로 이동
+- 월간 학습 통계 요약
 
 #### 과제 상세 페이지
 - 할 일 클릭 → 과제 상세 이동
@@ -260,26 +275,40 @@ enum NotificationType {
 - `GET /api/auth/me` - 현재 사용자 정보
 
 ### 멘티 API
-- `GET /api/mentee/planner?date=` - 일일 플래너 (해당 날짜 할 일 + 코멘트)
+**플래너**
+- `GET /api/mentee/planner/daily?date=` - 일일 플래너 (해당 날짜 할 일 + 코멘트)
+- `GET /api/mentee/planner/weekly?startDate=` - 주간 플래너 (주간 할 일 + 통계)
+- `GET /api/mentee/planner/monthly?year=&month=` - 월간 플래너 (월간 할 일 + 통계)
+
+**할 일**
 - `POST /api/mentee/tasks` - 할 일 추가 (멘티 자체 등록)
 - `PATCH /api/mentee/tasks/:id/complete` - 완료 처리
 - `POST /api/mentee/tasks/:id/time` - 공부 시간 기록
 - `GET /api/mentee/tasks/:id` - 과제 상세
 - `POST /api/mentee/tasks/:id/submit` - 과제 제출 (이미지 업로드)
+
+**피드백 & 기타**
 - `GET /api/mentee/feedbacks` - 피드백 목록 (과목별 필터)
 - `GET /api/mentee/feedbacks/:id` - 피드백 상세
 - `POST /api/mentee/comments` - 코멘트/질문 작성
-- `GET /api/mentee/stats` - 통계 (과목별 달성률)
+- `GET /api/mentee/stats` - 통계 (과목별 달성률, 주간/월간 포함)
 
 ### 멘토 API
+**멘티 관리**
 - `GET /api/mentor/mentees` - 담당 멘티 목록
 - `GET /api/mentor/mentees/:id` - 멘티 상세 (할 일, 제출물, 피드백)
-- `GET /api/mentor/mentees/:id/planner?date=` - 멘티 플래너 조회
+- `GET /api/mentor/mentees/:id/planner/daily?date=` - 멘티 일일 플래너 조회
+- `GET /api/mentor/mentees/:id/planner/weekly?startDate=` - 멘티 주간 플래너 조회
+- `GET /api/mentor/mentees/:id/planner/monthly?year=&month=` - 멘티 월간 플래너 조회
+
+**할 일 & 피드백**
 - `POST /api/mentor/tasks` - 할 일 생성 (고정 과제)
 - `PUT /api/mentor/tasks/:id` - 할 일 수정
 - `DELETE /api/mentor/tasks/:id` - 할 일 삭제
 - `POST /api/mentor/feedbacks` - 피드백 작성
 - `PUT /api/mentor/feedbacks/:id` - 피드백 수정
+
+**학습지**
 - `GET /api/mentor/worksheets` - 학습지 목록
 - `POST /api/mentor/worksheets` - 학습지 생성
 
@@ -302,7 +331,8 @@ enum NotificationType {
 
 ├── (mentee)/                 # 멘티 그룹 (모바일 웹앱)
 │   ├── /                     # 일일 플래너 (메인)
-│   ├── /calendar             # 월간 캘린더
+│   ├── /planner/weekly       # 주간 플래너
+│   ├── /planner/monthly      # 월간 플래너
 │   ├── /tasks/[id]           # 과제 상세
 │   ├── /feedbacks            # 피드백 목록
 │   ├── /feedbacks/[id]       # 피드백 상세
@@ -312,7 +342,9 @@ enum NotificationType {
 ├── (mentor)/                 # 멘토 그룹 (PC 우선)
 │   ├── /                     # 담당 멘티 목록 (대시보드)
 │   ├── /mentees/[id]         # 멘티 상세
-│   ├── /mentees/[id]/planner # 멘티 플래너 조회
+│   ├── /mentees/[id]/planner # 멘티 일일 플래너 조회
+│   ├── /mentees/[id]/planner/weekly   # 멘티 주간 플래너 조회
+│   ├── /mentees/[id]/planner/monthly  # 멘티 월간 플래너 조회
 │   ├── /tasks/new            # 할 일 생성
 │   ├── /tasks/[id]/edit      # 할 일 수정
 │   ├── /feedbacks/new        # 피드백 작성
@@ -337,13 +369,24 @@ enum NotificationType {
 - `SubjectBadge.tsx` - 과목 뱃지 (국/영/수)
 
 ### 플래너 (멘티)
+**일일 플래너**
 - `DailyPlanner.tsx` - 일일 플래너 메인
-- `WeekMiniCalendar.tsx` - 주간 미니 캘린더
-- `MonthCalendar.tsx` - 월간 캘린더
 - `TaskItem.tsx` - 할 일 아이템
 - `TaskForm.tsx` - 할 일 추가 폼
 - `StudyTimeInput.tsx` - 공부 시간 입력
 - `PlannerCommentInput.tsx` - 코멘트/질문 입력
+
+**주간 플래너**
+- `WeeklyPlanner.tsx` - 주간 플래너 메인
+- `WeekCalendarView.tsx` - 주간 캘린더 뷰
+- `WeeklyStats.tsx` - 주간 통계 (학습 시간, 달성률)
+- `DayTaskSummary.tsx` - 날짜별 할 일 요약
+
+**월간 플래너**
+- `MonthlyPlanner.tsx` - 월간 플래너 메인
+- `MonthCalendar.tsx` - 월간 캘린더
+- `MonthlyStats.tsx` - 월간 통계
+- `CalendarDateCell.tsx` - 캘린더 날짜 셀 (완료율 표시)
 
 ### 과제 (멘티)
 - `TaskDetail.tsx` - 과제 상세
@@ -381,13 +424,15 @@ enum NotificationType {
 - [ ] 로그인 API + 페이지
 - [ ] 역할별 라우팅 미들웨어
 
-### Day 2: 멘티 일일 플래너
+### Day 2: 멘티 플래너 (일일/주간/월간)
 - [ ] 멘티 레이아웃 (모바일 최적화)
 - [ ] 일일 플래너 UI
 - [ ] 할 일 목록 API 연동
 - [ ] 할 일 완료/시간 기록
-- [ ] 주간 미니 캘린더
 - [ ] 코멘트/질문 입력
+- [ ] 주간 플래너 뷰
+- [ ] 월간 플래너 뷰
+- [ ] 플래너 통계 API 연동
 
 ### Day 3: 과제 상세 + 멘토 화면
 - [ ] 과제 상세 페이지

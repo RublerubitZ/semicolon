@@ -14,7 +14,10 @@
 ### 주요 기능
 
 **멘티 (학생)**
-- 일일 플래너 - 오늘의 할 일 확인 및 완료 체크
+- 플래너 - 일일/주간/월간 학습 계획 관리
+  - 일일: 오늘의 할 일 확인 및 완료 체크
+  - 주간: 주간 학습 통계 및 달성률
+  - 월간: 월간 캘린더 및 학습 현황
 - 공부 시간 기록 - 과목별 학습 시간 추적
 - 과제 제출 - 학습 결과물 이미지 업로드
 - 피드백 확인 - 멘토의 과목별 피드백 열람
@@ -22,6 +25,7 @@
 
 **멘토 (선생님)**
 - 멘티 관리 - 담당 학생 목록 및 현황 파악
+  - 일일/주간/월간 플래너 조회
 - 할 일 등록 - 학생별 맞춤 과제 생성
 - 학습지 관리 - 칼럼/PDF 형태의 학습 자료 업로드
 - 피드백 작성 - 과목별 상세 피드백 제공
@@ -57,6 +61,8 @@ semicolon/
 ├── frontend/                 # Next.js 프론트엔드
 │   └── src/app/
 │       ├── (mentee)/        # 멘티 페이지 (모바일 최적화)
+│       │   ├── /            # 일일 플래너
+│       │   └── planner/     # 주간/월간 플래너
 │       ├── (mentor)/        # 멘토 페이지 (PC 최적화)
 │       └── login/           # 로그인
 │
@@ -140,7 +146,9 @@ cd frontend && npm run dev
 - `GET /api/auth/me` - 현재 사용자
 
 ### 멘티
-- `GET /api/mentee/planner?date=` - 일일 플래너
+- `GET /api/mentee/planner/daily?date=` - 일일 플래너
+- `GET /api/mentee/planner/weekly?startDate=` - 주간 플래너
+- `GET /api/mentee/planner/monthly?year=&month=` - 월간 플래너
 - `POST /api/mentee/tasks` - 할 일 추가
 - `PATCH /api/mentee/tasks/:id/complete` - 완료 처리
 - `POST /api/mentee/tasks/:id/submit` - 과제 제출
@@ -159,9 +167,10 @@ cd frontend && npm run dev
 ---
 
 ## 팀
-
-- **프론트엔드**: [팀원 이름]
-- **백엔드**: [팀원 이름]
+- **PM**: 이승민
+- **프론트엔드**: 김민석
+- **백엔드**: 구승율 / 조현빈
+- **UI/UX**: 공지호 / 김태희
 
 ---
 

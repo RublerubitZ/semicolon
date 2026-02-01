@@ -17,6 +17,11 @@ out/
 *.swp
 *.swo
 
+# Claude Code CLI
+.claude/
+.agents/
+.github/
+
 # OS
 .DS_Store
 Thumbs.db
