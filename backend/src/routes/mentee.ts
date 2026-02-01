@@ -1,0 +1,253 @@
+import { Router, Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
+import { authMiddleware, AuthRequest } from '../middleware/auth';
+
+const router = Router();
+const prisma = new PrismaClient();
+
+// 모든 멘티 라우트에 인증 미들웨어 적용
+router.use(authMiddleware);
+
+// 일일 플래너 조회
+router.get('/planner', async (req: AuthRequest, res: Response) => {
+  try {
+    const { date } = req.query;
+    const menteeId = req.user!.userId;
+
+    const targetDate = date ? new Date(date as string) : new Date();
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        menteeId,
+        date: targetDate,
+      },
+      include: {
+        worksheet: true,
+        submissions: true,
+        studyLogs: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const comment = await prisma.plannerComment.findFirst({
+      where: {
+        menteeId,
+        date: targetDate,
+      },
+    });
+
+    res.json({ tasks, comment, date: targetDate });
+  } catch (error) {
+    console.error('Planner error:', error);
+    res.status(500).json({ error: '플래너를 불러오는데 실패했습니다.' });
+  }
+});
+
+// 할 일 추가 (멘티 자체 등록)
+router.post('/tasks', async (req: AuthRequest, res: Response) => {
+  try {
+    const menteeId = req.user!.userId;
+    const { title, description, subject, date } = req.body;
+
+    const task = await prisma.task.create({
+      data: {
+        menteeId,
+        title,
+        description,
+        subject,
+        date: new Date(date),
+        isFixed: false,
+      },
+    });
+
+    res.status(201).json(task);
+  } catch (error) {
+    console.error('Create task error:', error);
+    res.status(500).json({ error: '할 일 생성에 실패했습니다.' });
+  }
+});
+
+// 할 일 완료 처리
+router.patch('/tasks/:id/complete', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { isCompleted } = req.body;
+
+    const task = await prisma.task.update({
+      where: { id },
+      data: { isCompleted },
+    });
+
+    res.json(task);
+  } catch (error) {
+    console.error('Complete task error:', error);
+    res.status(500).json({ error: '할 일 완료 처리에 실패했습니다.' });
+  }
+});
+
+// 공부 시간 기록
+router.post('/tasks/:id/time', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const menteeId = req.user!.userId;
+    const { duration, date } = req.body;
+
+    const task = await prisma.task.findUnique({ where: { id } });
+    if (!task) {
+      return res.status(404).json({ error: '할 일을 찾을 수 없습니다.' });
+    }
+
+    const studyLog = await prisma.studyTimeLog.create({
+      data: {
+        menteeId,
+        taskId: id,
+        subject: task.subject,
+        date: new Date(date),
+        duration,
+      },
+    });
+
+    res.status(201).json(studyLog);
+  } catch (error) {
+    console.error('Study time error:', error);
+    res.status(500).json({ error: '공부 시간 기록에 실패했습니다.' });
+  }
+});
+
+// 과제 상세 조회
+router.get('/tasks/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const task = await prisma.task.findUnique({
+      where: { id },
+      include: {
+        worksheet: true,
+        submissions: true,
+        feedbacks: {
+          include: { mentor: { select: { name: true } } },
+        },
+        studyLogs: true,
+      },
+    });
+
+    if (!task) {
+      return res.status(404).json({ error: '과제를 찾을 수 없습니다.' });
+    }
+
+    res.json(task);
+  } catch (error) {
+    console.error('Task detail error:', error);
+    res.status(500).json({ error: '과제를 불러오는데 실패했습니다.' });
+  }
+});
+
+// 과제 제출
+router.post('/tasks/:id/submit', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const menteeId = req.user!.userId;
+    const { imageUrls, comment } = req.body;
+
+    const submission = await prisma.taskSubmission.create({
+      data: {
+        taskId: id,
+        menteeId,
+        imageUrls,
+        comment,
+      },
+    });
+
+    res.status(201).json(submission);
+  } catch (error) {
+    console.error('Submit task error:', error);
+    res.status(500).json({ error: '과제 제출에 실패했습니다.' });
+  }
+});
+
+// 피드백 목록 조회
+router.get('/feedbacks', async (req: AuthRequest, res: Response) => {
+  try {
+    const menteeId = req.user!.userId;
+    const { subject } = req.query;
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        menteeId,
+        feedbacks: { some: {} },
+        ...(subject && { subject: subject as any }),
+      },
+      include: {
+        feedbacks: {
+          include: { mentor: { select: { name: true } } },
+        },
+      },
+      orderBy: { date: 'desc' },
+    });
+
+    res.json(tasks);
+  } catch (error) {
+    console.error('Feedbacks error:', error);
+    res.status(500).json({ error: '피드백을 불러오는데 실패했습니다.' });
+  }
+});
+
+// 코멘트/질문 작성
+router.post('/comments', async (req: AuthRequest, res: Response) => {
+  try {
+    const menteeId = req.user!.userId;
+    const { date, content } = req.body;
+
+    const comment = await prisma.plannerComment.upsert({
+      where: {
+        id: '', // placeholder for upsert
+      },
+      create: {
+        menteeId,
+        date: new Date(date),
+        content,
+      },
+      update: {
+        content,
+      },
+    });
+
+    res.status(201).json(comment);
+  } catch (error) {
+    console.error('Comment error:', error);
+    res.status(500).json({ error: '코멘트 저장에 실패했습니다.' });
+  }
+});
+
+// 통계 조회 (과목별 달성률)
+router.get('/stats', async (req: AuthRequest, res: Response) => {
+  try {
+    const menteeId = req.user!.userId;
+
+    const tasks = await prisma.task.groupBy({
+      by: ['subject', 'isCompleted'],
+      where: { menteeId },
+      _count: true,
+    });
+
+    const stats = {
+      KOREAN: { total: 0, completed: 0 },
+      ENGLISH: { total: 0, completed: 0 },
+      MATH: { total: 0, completed: 0 },
+    };
+
+    tasks.forEach((t) => {
+      stats[t.subject].total += t._count;
+      if (t.isCompleted) {
+        stats[t.subject].completed += t._count;
+      }
+    });
+
+    res.json(stats);
+  } catch (error) {
+    console.error('Stats error:', error);
+    res.status(500).json({ error: '통계를 불러오는데 실패했습니다.' });
+  }
+});
+
+export default router;

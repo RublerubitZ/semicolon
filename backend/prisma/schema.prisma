@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 사용자
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  password     String
+  name         String
+  role         Role     @default(MENTEE)
+  profileImage String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  menteeTasks     Task[]           @relation("MenteeTasks")
+  mentorTasks     Task[]           @relation("MentorTasks")
+  submissions     TaskSubmission[]
+  feedbacksGiven  Feedback[]       @relation("FeedbacksMentor")
+  worksheets      Worksheet[]
+  studyTimeLogs   StudyTimeLog[]
+  plannerComments PlannerComment[]
+  notifications   Notification[]
+  mentorRelation  MentorMentee[]   @relation("Mentor")
+  menteeRelation  MentorMentee[]   @relation("Mentee")
+}
+
+enum Role {
+  MENTEE
+  MENTOR
+  ADMIN
+}
+
+// 멘토-멘티 관계
+model MentorMentee {
+  id        String   @id @default(cuid())
+  mentorId  String
+  menteeId  String
+  createdAt DateTime @default(now())
+
+  mentor User @relation("Mentor", fields: [mentorId], references: [id])
+  mentee User @relation("Mentee", fields: [menteeId], references: [id])
+
+  @@unique([mentorId, menteeId])
+}
+
+// 할 일 (과제)
+model Task {
+  id          String   @id @default(cuid())
+  menteeId    String
+  mentorId    String?
+  title       String
+  description String?
+  subject     Subject
+  date        DateTime @db.Date
+  worksheetId String?
+  pdfUrl      String?
+  isFixed     Boolean  @default(false)
+  isCompleted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  mentee      User             @relation("MenteeTasks", fields: [menteeId], references: [id])
+  mentor      User?            @relation("MentorTasks", fields: [mentorId], references: [id])
+  worksheet   Worksheet?       @relation(fields: [worksheetId], references: [id])
+  submissions TaskSubmission[]
+  feedbacks   Feedback[]
+  studyLogs   StudyTimeLog[]
+}
+
+enum Subject {
+  KOREAN
+  ENGLISH
+  MATH
+}
+
+// 과제 제출
+model TaskSubmission {
+  id        String   @id @default(cuid())
+  taskId    String
+  menteeId  String
+  imageUrls String[]
+  comment   String?
+  createdAt DateTime @default(now())
+
+  task   Task @relation(fields: [taskId], references: [id])
+  mentee User @relation(fields: [menteeId], references: [id])
+}
+
+// 피드백
+model Feedback {
+  id           String   @id @default(cuid())
+  taskId       String
+  mentorId     String
+  content      String
+  summary      String?
+  subject      Subject
+  feedbackDate DateTime @db.Date
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  task   Task @relation(fields: [taskId], references: [id])
+  mentor User @relation("FeedbacksMentor", fields: [mentorId], references: [id])
+}
+
+// 학습지
+model Worksheet {
+  id          String        @id @default(cuid())
+  createdById String
+  title       String
+  subject     Subject
+  content     Json?
+  pdfUrl      String?
+  type        WorksheetType @default(COLUMN)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  createdBy User   @relation(fields: [createdById], references: [id])
+  tasks     Task[]
+}
+
+enum WorksheetType {
+  COLUMN
+  PDF
+}
+
+// 공부 시간 기록
+model StudyTimeLog {
+  id        String   @id @default(cuid())
+  menteeId  String
+  taskId    String?
+  subject   Subject
+  date      DateTime @db.Date
+  duration  Int      // 분 단위
+  createdAt DateTime @default(now())
+
+  mentee User  @relation(fields: [menteeId], references: [id])
+  task   Task? @relation(fields: [taskId], references: [id])
+}
+
+// 플래너 코멘트/질문
+model PlannerComment {
+  id        String   @id @default(cuid())
+  menteeId  String
+  date      DateTime @db.Date
+  content   String
+  createdAt DateTime @default(now())
+
+  mentee User @relation(fields: [menteeId], references: [id])
+}
+
+// 알림
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  content   String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum NotificationType {
+  TASK_INCOMPLETE
+  NEW_FEEDBACK
+  REMINDER
+}
