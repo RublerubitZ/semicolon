@@ -3,13 +3,13 @@
 ## 필수 설치
 
 ### 1. Node.js
-- **버전**: 20.x LTS 이상
+- **버전**: 20.x 이상 (24.x 호환 확인됨)
 - **다운로드**: https://nodejs.org/
 
 ```bash
 # 버전 확인
-node -v  # v20.x.x
-npm -v   # 10.x.x
+node -v  # v20.x.x 이상
+npm -v   # 10.x.x 이상
 ```
 
 ### 2. PostgreSQL
