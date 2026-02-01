@@ -57,7 +57,7 @@ router.get('/mentees', async (req: AuthRequest, res: Response) => {
 // 멘티 상세 조회
 router.get('/mentees/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     const mentee = await prisma.user.findUnique({
       where: { id },
@@ -72,6 +72,7 @@ router.get('/mentees/:id', async (req: AuthRequest, res: Response) => {
           include: {
             submissions: true,
             feedbacks: true,
+            studyLogs: true,
           },
         },
       },
@@ -88,17 +89,17 @@ router.get('/mentees/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 멘티 플래너 조회
-router.get('/mentees/:id/planner', async (req: AuthRequest, res: Response) => {
+// 멘티 일일 플래너 조회
+router.get('/mentees/:id/planner/daily', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const { date } = req.query;
 
     const targetDate = date ? new Date(date as string) : new Date();
 
     const tasks = await prisma.task.findMany({
       where: {
-        menteeId: id,
+        menteeId: id as string,
         date: targetDate,
       },
       include: {
@@ -112,7 +113,7 @@ router.get('/mentees/:id/planner', async (req: AuthRequest, res: Response) => {
 
     const comment = await prisma.plannerComment.findFirst({
       where: {
-        menteeId: id,
+        menteeId: id as string,
         date: targetDate,
       },
     });
@@ -121,6 +122,169 @@ router.get('/mentees/:id/planner', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Mentee planner error:', error);
     res.status(500).json({ error: '플래너를 불러오는데 실패했습니다.' });
+  }
+});
+
+// 멘티 플래너 조회 (하위 호환성)
+router.get('/mentees/:id/planner', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params as { id: string };
+    const { date } = req.query;
+
+    const targetDate = date ? new Date(date as string) : new Date();
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        menteeId: id as string,
+        date: targetDate,
+      },
+      include: {
+        worksheet: true,
+        submissions: true,
+        feedbacks: true,
+        studyLogs: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const comment = await prisma.plannerComment.findFirst({
+      where: {
+        menteeId: id as string,
+        date: targetDate,
+      },
+    });
+
+    res.json({ tasks, comment, date: targetDate });
+  } catch (error) {
+    console.error('Mentee planner error:', error);
+    res.status(500).json({ error: '플래너를 불러오는데 실패했습니다.' });
+  }
+});
+
+// 멘티 주간 플래너 조회
+router.get('/mentees/:id/planner/weekly', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params as { id: string };
+    const { startDate } = req.query;
+
+    const start = startDate ? new Date(startDate as string) : new Date();
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        menteeId: id as string,
+        date: {
+          gte: start,
+          lte: end,
+        },
+      },
+      include: {
+        worksheet: true,
+        submissions: true,
+        feedbacks: true,
+        studyLogs: true,
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    const stats = {
+      totalTasks: tasks.length,
+      completedTasks: tasks.filter((t) => t.isCompleted).length,
+      totalStudyTime: 0,
+      subjectStats: {
+        KOREAN: { total: 0, completed: 0, studyTime: 0 },
+        ENGLISH: { total: 0, completed: 0, studyTime: 0 },
+        MATH: { total: 0, completed: 0, studyTime: 0 },
+      },
+    };
+
+    tasks.forEach((task) => {
+      const subject = task.subject;
+      stats.subjectStats[subject].total++;
+      if (task.isCompleted) {
+        stats.subjectStats[subject].completed++;
+      }
+
+      const studyTime = task.studyLogs.reduce((sum: number, log: any) => sum + log.duration, 0);
+      stats.subjectStats[subject].studyTime += studyTime;
+      stats.totalStudyTime += studyTime;
+    });
+
+    res.json({ tasks, stats, startDate: start, endDate: end });
+  } catch (error) {
+    console.error('Mentee weekly planner error:', error);
+    res.status(500).json({ error: '주간 플래너를 불러오는데 실패했습니다.' });
+  }
+});
+
+// 멘티 월간 플래너 조회
+router.get('/mentees/:id/planner/monthly', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params as { id: string };
+    const { year, month } = req.query;
+
+    const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
+    const targetMonth = month ? parseInt(month as string) : new Date().getMonth() + 1;
+
+    const start = new Date(targetYear, targetMonth - 1, 1);
+    const end = new Date(targetYear, targetMonth, 0);
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        menteeId: id as string,
+        date: {
+          gte: start,
+          lte: end,
+        },
+      },
+      include: {
+        worksheet: true,
+        submissions: true,
+        feedbacks: true,
+        studyLogs: true,
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    const tasksByDate: Record<string, any[]> = {};
+    tasks.forEach((task) => {
+      const dateKey = task.date.toISOString().split('T')[0];
+      if (!tasksByDate[dateKey]) {
+        tasksByDate[dateKey] = [];
+      }
+      tasksByDate[dateKey].push(task);
+    });
+
+    const stats = {
+      totalTasks: tasks.length,
+      completedTasks: tasks.filter((t) => t.isCompleted).length,
+      totalStudyTime: tasks.reduce(
+        (sum: number, task) => sum + task.studyLogs.reduce((s: number, log: any) => s + log.duration, 0),
+        0
+      ),
+      subjectStats: {
+        KOREAN: { total: 0, completed: 0, studyTime: 0 },
+        ENGLISH: { total: 0, completed: 0, studyTime: 0 },
+        MATH: { total: 0, completed: 0, studyTime: 0 },
+      },
+    };
+
+    tasks.forEach((task) => {
+      const subject = task.subject;
+      stats.subjectStats[subject].total++;
+      if (task.isCompleted) {
+        stats.subjectStats[subject].completed++;
+      }
+
+      const studyTime = task.studyLogs.reduce((sum: number, log: any) => sum + log.duration, 0);
+      stats.subjectStats[subject].studyTime += studyTime;
+    });
+
+    res.json({ tasksByDate, stats, year: targetYear, month: targetMonth });
+  } catch (error) {
+    console.error('Mentee monthly planner error:', error);
+    res.status(500).json({ error: '월간 플래너를 불러오는데 실패했습니다.' });
   }
 });
 
@@ -154,7 +318,7 @@ router.post('/tasks', async (req: AuthRequest, res: Response) => {
 // 할 일 수정
 router.put('/tasks/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const { title, description, subject, date, worksheetId, pdfUrl } = req.body;
 
     const task = await prisma.task.update({
@@ -179,7 +343,7 @@ router.put('/tasks/:id', async (req: AuthRequest, res: Response) => {
 // 할 일 삭제
 router.delete('/tasks/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
 
     await prisma.task.delete({ where: { id } });
 
@@ -217,7 +381,7 @@ router.post('/feedbacks', async (req: AuthRequest, res: Response) => {
 // 피드백 수정
 router.put('/feedbacks/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params as { id: string };
     const { content, summary } = req.body;
 
     const feedback = await prisma.feedback.update({

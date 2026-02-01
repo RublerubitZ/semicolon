@@ -9,6 +9,41 @@ const prisma = new PrismaClient();
 router.use(authMiddleware);
 
 // 일일 플래너 조회
+router.get('/planner/daily', async (req: AuthRequest, res: Response) => {
+  try {
+    const { date } = req.query;
+    const menteeId = req.user!.userId;
+
+    const targetDate = date ? new Date(date as string) : new Date();
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        menteeId,
+        date: targetDate,
+      },
+      include: {
+        worksheet: true,
+        submissions: true,
+        studyLogs: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const comment = await prisma.plannerComment.findFirst({
+      where: {
+        menteeId,
+        date: targetDate,
+      },
+    });
+
+    res.json({ tasks, comment, date: targetDate });
+  } catch (error) {
+    console.error('Planner error:', error);
+    res.status(500).json({ error: '플래너를 불러오는데 실패했습니다.' });
+  }
+});
+
+// 일일 플래너 조회 (하위 호환성)
 router.get('/planner', async (req: AuthRequest, res: Response) => {
   try {
     const { date } = req.query;
@@ -40,6 +75,134 @@ router.get('/planner', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Planner error:', error);
     res.status(500).json({ error: '플래너를 불러오는데 실패했습니다.' });
+  }
+});
+
+// 주간 플래너 조회
+router.get('/planner/weekly', async (req: AuthRequest, res: Response) => {
+  try {
+    const { startDate } = req.query;
+    const menteeId = req.user!.userId;
+
+    const start = startDate ? new Date(startDate as string) : new Date();
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        menteeId,
+        date: {
+          gte: start,
+          lte: end,
+        },
+      },
+      include: {
+        worksheet: true,
+        submissions: true,
+        studyLogs: true,
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    // 주간 통계 계산
+    const stats = {
+      totalTasks: tasks.length,
+      completedTasks: tasks.filter((t) => t.isCompleted).length,
+      totalStudyTime: 0,
+      subjectStats: {
+        KOREAN: { total: 0, completed: 0, studyTime: 0 },
+        ENGLISH: { total: 0, completed: 0, studyTime: 0 },
+        MATH: { total: 0, completed: 0, studyTime: 0 },
+      },
+    };
+
+    tasks.forEach((task) => {
+      const subject = task.subject;
+      stats.subjectStats[subject].total++;
+      if (task.isCompleted) {
+        stats.subjectStats[subject].completed++;
+      }
+
+      const studyTime = task.studyLogs.reduce((sum, log) => sum + log.duration, 0);
+      stats.subjectStats[subject].studyTime += studyTime;
+      stats.totalStudyTime += studyTime;
+    });
+
+    res.json({ tasks, stats, startDate: start, endDate: end });
+  } catch (error) {
+    console.error('Weekly planner error:', error);
+    res.status(500).json({ error: '주간 플래너를 불러오는데 실패했습니다.' });
+  }
+});
+
+// 월간 플래너 조회
+router.get('/planner/monthly', async (req: AuthRequest, res: Response) => {
+  try {
+    const { year, month } = req.query;
+    const menteeId = req.user!.userId;
+
+    const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
+    const targetMonth = month ? parseInt(month as string) : new Date().getMonth() + 1;
+
+    const start = new Date(targetYear, targetMonth - 1, 1);
+    const end = new Date(targetYear, targetMonth, 0);
+
+    const tasks = await prisma.task.findMany({
+      where: {
+        menteeId,
+        date: {
+          gte: start,
+          lte: end,
+        },
+      },
+      include: {
+        worksheet: true,
+        submissions: true,
+        studyLogs: true,
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    // 날짜별로 그룹화
+    const tasksByDate: Record<string, any[]> = {};
+    tasks.forEach((task) => {
+      const dateKey = task.date.toISOString().split('T')[0];
+      if (!tasksByDate[dateKey]) {
+        tasksByDate[dateKey] = [];
+      }
+      tasksByDate[dateKey].push(task);
+    });
+
+    // 월간 통계
+    const stats = {
+      totalTasks: tasks.length,
+      completedTasks: tasks.filter((t) => t.isCompleted).length,
+      totalStudyTime: tasks.reduce(
+        (sum, task) => sum + task.studyLogs.reduce((s, log) => s + log.duration, 0),
+        0
+      ),
+      subjectStats: {
+        KOREAN: { total: 0, completed: 0, studyTime: 0 },
+        ENGLISH: { total: 0, completed: 0, studyTime: 0 },
+        MATH: { total: 0, completed: 0, studyTime: 0 },
+      },
+    };
+
+    tasks.forEach((task) => {
+      const subject = task.subject;
+      stats.subjectStats[subject].total++;
+      if (task.isCompleted) {
+        stats.subjectStats[subject].completed++;
+      }
+
+      const studyTime = task.studyLogs.reduce((sum, log) => sum + log.duration, 0);
+      stats.subjectStats[subject].studyTime += studyTime;
+    });
+
+    res.json({ tasksByDate, stats, year: targetYear, month: targetMonth });
+  } catch (error) {
+    console.error('Monthly planner error:', error);
+    res.status(500).json({ error: '월간 플래너를 불러오는데 실패했습니다.' });
   }
 });
 
