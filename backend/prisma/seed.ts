@@ -27,6 +27,7 @@ async function main() {
       email: 'mentor@seolstudy.com',
       password: mentorPassword,
       name: '김멘토',
+      nickname: '멘토쌤',
       role: 'MENTOR',
     },
   });
@@ -38,6 +39,7 @@ async function main() {
       email: 'mentee1@seolstudy.com',
       password: menteePassword,
       name: '이학생',
+      nickname: '열공이',
       role: 'MENTEE',
     },
   });
@@ -48,6 +50,7 @@ async function main() {
       email: 'mentee2@seolstudy.com',
       password: menteePassword,
       name: '박학생',
+      nickname: '공부왕',
       role: 'MENTEE',
     },
   });
@@ -116,11 +119,25 @@ async function main() {
   });
   console.log('샘플 학습지 생성 완료');
 
-  // 오늘 날짜
+  // 날짜 설정
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // 멘티1에게 샘플 할 일 생성
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const twoDaysAgo = new Date(today);
+  twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+
+  const threeDaysAgo = new Date(today);
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+  const lastWeek = new Date(today);
+  lastWeek.setDate(lastWeek.getDate() - 7);
+
+  // === 멘티1 할 일 생성 ===
+
+  // 오늘 할 일 (미완료)
   const task1 = await prisma.task.create({
     data: {
       menteeId: mentee1.id,
@@ -131,10 +148,11 @@ async function main() {
       date: today,
       worksheetId: worksheet1.id,
       isFixed: true,
+      isCompleted: false,
     },
   });
 
-  await prisma.task.create({
+  const task2 = await prisma.task.create({
     data: {
       menteeId: mentee1.id,
       mentorId: mentor.id,
@@ -144,6 +162,7 @@ async function main() {
       date: today,
       worksheetId: worksheet2.id,
       isFixed: true,
+      isCompleted: false,
     },
   });
 
@@ -157,10 +176,82 @@ async function main() {
       date: today,
       worksheetId: worksheet3.id,
       isFixed: true,
+      isCompleted: false,
     },
   });
 
-  // 멘티2에게 샘플 할 일 생성
+  // 어제 할 일 (완료됨)
+  const task4 = await prisma.task.create({
+    data: {
+      menteeId: mentee1.id,
+      mentorId: mentor.id,
+      title: '국어 문법 정리',
+      description: '품사 복습',
+      subject: 'KOREAN',
+      date: yesterday,
+      isFixed: true,
+      isCompleted: true,
+    },
+  });
+
+  const task5 = await prisma.task.create({
+    data: {
+      menteeId: mentee1.id,
+      mentorId: mentor.id,
+      title: '영어 듣기 연습',
+      description: '모의고사 20문제',
+      subject: 'ENGLISH',
+      date: yesterday,
+      worksheetId: worksheet2.id,
+      isFixed: true,
+      isCompleted: true,
+    },
+  });
+
+  const task6 = await prisma.task.create({
+    data: {
+      menteeId: mentee1.id,
+      mentorId: mentor.id,
+      title: '수학 기출문제',
+      description: '확률과 통계 15문제',
+      subject: 'MATH',
+      date: yesterday,
+      isFixed: true,
+      isCompleted: true,
+    },
+  });
+
+  // 이틀 전 할 일 (완료됨)
+  const task7 = await prisma.task.create({
+    data: {
+      menteeId: mentee1.id,
+      mentorId: mentor.id,
+      title: '문학 작품 감상',
+      description: '현대소설 읽기',
+      subject: 'KOREAN',
+      date: twoDaysAgo,
+      worksheetId: worksheet1.id,
+      isFixed: true,
+      isCompleted: true,
+    },
+  });
+
+  await prisma.task.create({
+    data: {
+      menteeId: mentee1.id,
+      mentorId: mentor.id,
+      title: '영어 작문 연습',
+      description: '에세이 1편 작성',
+      subject: 'ENGLISH',
+      date: twoDaysAgo,
+      isFixed: true,
+      isCompleted: true,
+    },
+  });
+
+  // === 멘티2 할 일 생성 ===
+
+  // 오늘 할 일
   await prisma.task.create({
     data: {
       menteeId: mentee2.id,
@@ -170,6 +261,7 @@ async function main() {
       subject: 'KOREAN',
       date: today,
       isFixed: true,
+      isCompleted: false,
     },
   });
 
@@ -182,6 +274,7 @@ async function main() {
       subject: 'ENGLISH',
       date: today,
       isFixed: true,
+      isCompleted: false,
     },
   });
 
@@ -193,12 +286,111 @@ async function main() {
       description: '순열 조합 문제 5개',
       subject: 'MATH',
       date: today,
+      worksheetId: worksheet3.id,
       isFixed: true,
+      isCompleted: false,
     },
   });
+
+  // 어제 할 일 (일부 완료)
+  await prisma.task.create({
+    data: {
+      menteeId: mentee2.id,
+      mentorId: mentor.id,
+      title: '독해 연습',
+      description: '비문학 지문 풀이',
+      subject: 'KOREAN',
+      date: yesterday,
+      isFixed: true,
+      isCompleted: true,
+    },
+  });
+
+  await prisma.task.create({
+    data: {
+      menteeId: mentee2.id,
+      mentorId: mentor.id,
+      title: '수학 복습',
+      description: '미분 문제',
+      subject: 'MATH',
+      date: yesterday,
+      isFixed: true,
+      isCompleted: false,
+    },
+  });
+
   console.log('샘플 할 일 생성 완료');
 
-  // 샘플 피드백 생성
+  // === 공부 시간 기록 ===
+  await prisma.studyTimeLog.create({
+    data: {
+      menteeId: mentee1.id,
+      taskId: task4.id,
+      subject: 'KOREAN',
+      date: yesterday,
+      duration: 45,
+    },
+  });
+
+  await prisma.studyTimeLog.create({
+    data: {
+      menteeId: mentee1.id,
+      taskId: task5.id,
+      subject: 'ENGLISH',
+      date: yesterday,
+      duration: 60,
+    },
+  });
+
+  await prisma.studyTimeLog.create({
+    data: {
+      menteeId: mentee1.id,
+      taskId: task6.id,
+      subject: 'MATH',
+      date: yesterday,
+      duration: 90,
+    },
+  });
+
+  await prisma.studyTimeLog.create({
+    data: {
+      menteeId: mentee1.id,
+      taskId: task7.id,
+      subject: 'KOREAN',
+      date: twoDaysAgo,
+      duration: 30,
+    },
+  });
+
+  console.log('공부 시간 기록 생성 완료');
+
+  // === 과제 제출 내역 ===
+  await prisma.taskSubmission.create({
+    data: {
+      taskId: task5.id,
+      menteeId: mentee1.id,
+      imageUrls: [
+        'https://via.placeholder.com/600x800?text=Submission+1',
+        'https://via.placeholder.com/600x800?text=Submission+2',
+      ],
+      comment: '듣기 문제 풀이 완료했습니다. 20번 문제가 어려웠어요.',
+    },
+  });
+
+  await prisma.taskSubmission.create({
+    data: {
+      taskId: task7.id,
+      menteeId: mentee1.id,
+      imageUrls: [
+        'https://via.placeholder.com/600x800?text=Essay+Page+1',
+      ],
+      comment: '소설 감상문 제출합니다.',
+    },
+  });
+
+  console.log('과제 제출 내역 생성 완료');
+
+  // === 피드백 ===
   await prisma.feedback.create({
     data: {
       taskId: task1.id,
@@ -209,7 +401,49 @@ async function main() {
       feedbackDate: today,
     },
   });
+
+  await prisma.feedback.create({
+    data: {
+      taskId: task5.id,
+      mentorId: mentor.id,
+      content: '듣기 실력이 많이 늘었어요! 특히 주제 파악 문제를 잘 풀었습니다. 다음에는 세부 정보 듣기를 집중적으로 연습해보세요.',
+      summary: '세부 정보 듣기 집중 연습',
+      subject: 'ENGLISH',
+      feedbackDate: yesterday,
+    },
+  });
+
+  await prisma.feedback.create({
+    data: {
+      taskId: task6.id,
+      mentorId: mentor.id,
+      content: '확률과 통계 문제 풀이가 정확합니다. 공식을 잘 이해하고 있네요. 다음 주부터는 심화 문제로 넘어가겠습니다.',
+      summary: '기본 개념 완성, 심화 단계로',
+      subject: 'MATH',
+      feedbackDate: yesterday,
+    },
+  });
+
   console.log('샘플 피드백 생성 완료');
+
+  // === 플래너 코멘트 ===
+  await prisma.plannerComment.create({
+    data: {
+      menteeId: mentee1.id,
+      date: yesterday,
+      content: '오늘은 집중이 잘 됐어요! 내일도 열심히 하겠습니다.',
+    },
+  });
+
+  await prisma.plannerComment.create({
+    data: {
+      menteeId: mentee1.id,
+      date: today,
+      content: '수학이 조금 어렵지만 천천히 풀어보고 있어요.',
+    },
+  });
+
+  console.log('플래너 코멘트 생성 완료');
 
   console.log('\n✅ 시드 데이터 생성 완료!');
   console.log('\n테스트 계정:');

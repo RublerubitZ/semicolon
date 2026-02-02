@@ -57,15 +57,20 @@ export default function MenteeLayout({
             onClick={() => router.push('/mentee')}
             className="px-4 py-2 text-sm hover:text-blue-600"
           >
-            플래너
+            📅 플래너
           </button>
           <button
             onClick={() => router.push('/mentee/feedbacks')}
             className="px-4 py-2 text-sm hover:text-blue-600"
           >
-            피드백
+            💬 피드백
           </button>
-          <button className="px-4 py-2 text-sm text-gray-400">마이</button>
+          <button
+            onClick={() => router.push('/mentee/mypage')}
+            className="px-4 py-2 text-sm hover:text-blue-600"
+          >
+            👤 마이
+          </button>
         </div>
       </nav>
     </div>

@@ -13,6 +13,7 @@ model User {
   email        String   @unique
   password     String
   name         String
+  nickname     String?
   role         Role     @default(MENTEE)
   profileImage String?
   createdAt    DateTime @default(now())
@@ -57,7 +58,7 @@ model Task {
   mentorId    String?
   title       String
   description String?
-  subject     Subject
+  subject     String
   date        DateTime @db.Date
   worksheetId String?
   pdfUrl      String?
@@ -75,12 +76,6 @@ model Task {
 
   @@index([menteeId, date])
   @@index([mentorId, date])
-}
-
-enum Subject {
-  KOREAN
-  ENGLISH
-  MATH
 }
 
 // 과제 제출
@@ -103,7 +98,7 @@ model Feedback {
   mentorId     String
   content      String
   summary      String?
-  subject      Subject
+  subject      String
   feedbackDate DateTime @db.Date
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -117,7 +112,7 @@ model Worksheet {
   id          String        @id @default(cuid())
   createdById String
   title       String
-  subject     Subject
+  subject     String
   content     Json?
   pdfUrl      String?
   type        WorksheetType @default(COLUMN)
@@ -138,7 +133,7 @@ model StudyTimeLog {
   id        String   @id @default(cuid())
   menteeId  String
   taskId    String?
-  subject   Subject
+  subject   String
   date      DateTime @db.Date
   duration  Int      // 분 단위
   createdAt DateTime @default(now())

@@ -21,6 +21,7 @@ router.get('/mentees', async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
+            nickname: true,
             email: true,
             profileImage: true,
           },
@@ -64,6 +65,7 @@ router.get('/mentees/:id', async (req: AuthRequest, res: Response) => {
       select: {
         id: true,
         name: true,
+        nickname: true,
         email: true,
         profileImage: true,
         menteeTasks: {
@@ -96,6 +98,7 @@ router.get('/mentees/:id/planner/daily', async (req: AuthRequest, res: Response)
     const { date } = req.query;
 
     const targetDate = date ? new Date(date as string) : new Date();
+    targetDate.setHours(0, 0, 0, 0);
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -132,6 +135,7 @@ router.get('/mentees/:id/planner', async (req: AuthRequest, res: Response) => {
     const { date } = req.query;
 
     const targetDate = date ? new Date(date as string) : new Date();
+    targetDate.setHours(0, 0, 0, 0);
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -168,8 +172,10 @@ router.get('/mentees/:id/planner/weekly', async (req: AuthRequest, res: Response
     const { startDate } = req.query;
 
     const start = startDate ? new Date(startDate as string) : new Date();
+    start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -200,7 +206,7 @@ router.get('/mentees/:id/planner/weekly', async (req: AuthRequest, res: Response
     };
 
     tasks.forEach((task) => {
-      const subject = task.subject;
+      const subject = task.subject as 'KOREAN' | 'ENGLISH' | 'MATH';
       stats.subjectStats[subject].total++;
       if (task.isCompleted) {
         stats.subjectStats[subject].completed++;
@@ -228,7 +234,9 @@ router.get('/mentees/:id/planner/monthly', async (req: AuthRequest, res: Respons
     const targetMonth = month ? parseInt(month as string) : new Date().getMonth() + 1;
 
     const start = new Date(targetYear, targetMonth - 1, 1);
+    start.setHours(0, 0, 0, 0);
     const end = new Date(targetYear, targetMonth, 0);
+    end.setHours(23, 59, 59, 999);
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -271,7 +279,7 @@ router.get('/mentees/:id/planner/monthly', async (req: AuthRequest, res: Respons
     };
 
     tasks.forEach((task) => {
-      const subject = task.subject;
+      const subject = task.subject as 'KOREAN' | 'ENGLISH' | 'MATH';
       stats.subjectStats[subject].total++;
       if (task.isCompleted) {
         stats.subjectStats[subject].completed++;
@@ -294,6 +302,9 @@ router.post('/tasks', async (req: AuthRequest, res: Response) => {
     const mentorId = req.user!.userId;
     const { menteeId, title, description, subject, date, worksheetId, pdfUrl } = req.body;
 
+    const taskDate = new Date(date);
+    taskDate.setHours(0, 0, 0, 0);
+
     const task = await prisma.task.create({
       data: {
         menteeId,
@@ -301,7 +312,7 @@ router.post('/tasks', async (req: AuthRequest, res: Response) => {
         title,
         description,
         subject,
-        date: new Date(date),
+        date: taskDate,
         worksheetId,
         pdfUrl,
         isFixed: true,
@@ -321,13 +332,19 @@ router.put('/tasks/:id', async (req: AuthRequest, res: Response) => {
     const { id } = req.params as { id: string };
     const { title, description, subject, date, worksheetId, pdfUrl } = req.body;
 
+    let taskDate;
+    if (date) {
+      taskDate = new Date(date);
+      taskDate.setHours(0, 0, 0, 0);
+    }
+
     const task = await prisma.task.update({
       where: { id },
       data: {
         title,
         description,
         subject,
-        date: date ? new Date(date) : undefined,
+        date: taskDate,
         worksheetId,
         pdfUrl,
       },
@@ -360,6 +377,9 @@ router.post('/feedbacks', async (req: AuthRequest, res: Response) => {
     const mentorId = req.user!.userId;
     const { taskId, content, summary, subject, feedbackDate } = req.body;
 
+    const fbDate = new Date(feedbackDate);
+    fbDate.setHours(0, 0, 0, 0);
+
     const feedback = await prisma.feedback.create({
       data: {
         taskId,
@@ -367,7 +387,7 @@ router.post('/feedbacks', async (req: AuthRequest, res: Response) => {
         content,
         summary,
         subject,
-        feedbackDate: new Date(feedbackDate),
+        feedbackDate: fbDate,
       },
     });
 

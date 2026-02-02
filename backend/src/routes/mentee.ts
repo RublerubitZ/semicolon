@@ -15,6 +15,7 @@ router.get('/planner/daily', async (req: AuthRequest, res: Response) => {
     const menteeId = req.user!.userId;
 
     const targetDate = date ? new Date(date as string) : new Date();
+    targetDate.setHours(0, 0, 0, 0);
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -50,6 +51,7 @@ router.get('/planner', async (req: AuthRequest, res: Response) => {
     const menteeId = req.user!.userId;
 
     const targetDate = date ? new Date(date as string) : new Date();
+    targetDate.setHours(0, 0, 0, 0);
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -117,7 +119,7 @@ router.get('/planner/weekly', async (req: AuthRequest, res: Response) => {
     };
 
     tasks.forEach((task) => {
-      const subject = task.subject;
+      const subject = task.subject as 'KOREAN' | 'ENGLISH' | 'MATH';
       stats.subjectStats[subject].total++;
       if (task.isCompleted) {
         stats.subjectStats[subject].completed++;
@@ -189,7 +191,7 @@ router.get('/planner/monthly', async (req: AuthRequest, res: Response) => {
     };
 
     tasks.forEach((task) => {
-      const subject = task.subject;
+      const subject = task.subject as 'KOREAN' | 'ENGLISH' | 'MATH';
       stats.subjectStats[subject].total++;
       if (task.isCompleted) {
         stats.subjectStats[subject].completed++;
@@ -212,13 +214,16 @@ router.post('/tasks', async (req: AuthRequest, res: Response) => {
     const menteeId = req.user!.userId;
     const { title, description, subject, date } = req.body;
 
+    const taskDate = new Date(date);
+    taskDate.setHours(0, 0, 0, 0);
+
     const task = await prisma.task.create({
       data: {
         menteeId,
         title,
         description,
         subject,
-        date: new Date(date),
+        date: taskDate,
         isFixed: false,
       },
     });
@@ -230,10 +235,94 @@ router.post('/tasks', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// 할 일 수정 (멘티 자체 등록만 가능)
+router.put('/tasks/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params as { id: string };
+    const menteeId = req.user!.userId;
+    const { title, description, subject, date } = req.body as {
+      title?: string;
+      description?: string;
+      subject?: string;
+      date?: string;
+    };
+
+    // 자신이 만든 할 일이고 isFixed=false인지 확인
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+    });
+
+    if (!existingTask) {
+      return res.status(404).json({ error: '할 일을 찾을 수 없습니다.' });
+    }
+
+    if (existingTask.menteeId !== menteeId) {
+      return res.status(403).json({ error: '수정 권한이 없습니다.' });
+    }
+
+    if (existingTask.isFixed) {
+      return res.status(403).json({ error: '멘토가 등록한 할 일은 수정할 수 없습니다.' });
+    }
+
+    let taskDate;
+    if (date) {
+      taskDate = new Date(date);
+      taskDate.setHours(0, 0, 0, 0);
+    }
+
+    const task = await prisma.task.update({
+      where: { id },
+      data: {
+        ...(title && { title }),
+        ...(description !== undefined && { description }),
+        ...(subject && { subject }),
+        ...(taskDate && { date: taskDate }),
+      },
+    });
+
+    res.json(task);
+  } catch (error) {
+    console.error('Update task error:', error);
+    res.status(500).json({ error: '할 일 수정에 실패했습니다.' });
+  }
+});
+
+// 할 일 삭제 (멘티 자체 등록만 가능)
+router.delete('/tasks/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params as { id: string };
+    const menteeId = req.user!.userId;
+
+    // 자신이 만든 할 일이고 isFixed=false인지 확인
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+    });
+
+    if (!existingTask) {
+      return res.status(404).json({ error: '할 일을 찾을 수 없습니다.' });
+    }
+
+    if (existingTask.menteeId !== menteeId) {
+      return res.status(403).json({ error: '삭제 권한이 없습니다.' });
+    }
+
+    if (existingTask.isFixed) {
+      return res.status(403).json({ error: '멘토가 등록한 할 일은 삭제할 수 없습니다.' });
+    }
+
+    await prisma.task.delete({ where: { id } });
+
+    res.json({ message: '할 일이 삭제되었습니다.' });
+  } catch (error) {
+    console.error('Delete task error:', error);
+    res.status(500).json({ error: '할 일 삭제에 실패했습니다.' });
+  }
+});
+
 // 할 일 완료 처리
 router.patch('/tasks/:id/complete', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const { isCompleted } = req.body;
 
     const task = await prisma.task.update({
@@ -251,7 +340,7 @@ router.patch('/tasks/:id/complete', async (req: AuthRequest, res: Response) => {
 // 공부 시간 기록
 router.post('/tasks/:id/time', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const menteeId = req.user!.userId;
     const { duration, date } = req.body;
 
@@ -280,7 +369,7 @@ router.post('/tasks/:id/time', async (req: AuthRequest, res: Response) => {
 // 과제 상세 조회
 router.get('/tasks/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     const task = await prisma.task.findUnique({
       where: { id },
@@ -308,7 +397,7 @@ router.get('/tasks/:id', async (req: AuthRequest, res: Response) => {
 // 과제 제출
 router.post('/tasks/:id/submit', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const menteeId = req.user!.userId;
     const { imageUrls, comment } = req.body;
 
@@ -400,9 +489,10 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     };
 
     tasks.forEach((t) => {
-      stats[t.subject].total += t._count;
+      const subject = t.subject as 'KOREAN' | 'ENGLISH' | 'MATH';
+      stats[subject].total += t._count;
       if (t.isCompleted) {
-        stats[t.subject].completed += t._count;
+        stats[subject].completed += t._count;
       }
     });
 
