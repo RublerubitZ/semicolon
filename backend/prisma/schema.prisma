@@ -113,7 +113,7 @@ model Worksheet {
   createdById String
   title       String
   subject     String
-  content     Json?
+  content     String?
   pdfUrl      String?
   type        WorksheetType @default(COLUMN)
   createdAt   DateTime      @default(now())
