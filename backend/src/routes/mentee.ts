@@ -380,6 +380,13 @@ router.get('/tasks/:id', async (req: AuthRequest, res: Response) => {
           include: { mentor: { select: { name: true } } },
         },
         studyLogs: true,
+        mentee: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+          },
+        },
       },
     });
 
