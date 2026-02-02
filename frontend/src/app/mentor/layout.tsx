@@ -49,17 +49,17 @@ export default function MentorLayout({
       </header>
 
       <div className="max-w-7xl mx-auto flex">
-        {/* 사이드바 (추후 구현) */}
+        {/* 사이드바 */}
         <aside className="w-64 bg-white border-r min-h-screen p-4">
           <nav className="space-y-2">
-            <a href="/mentor" className="block px-4 py-2 rounded bg-gray-100">
+            <a href="/mentor" className="block px-4 py-2 rounded hover:bg-gray-100">
               멘티 관리
             </a>
-            <a href="#" className="block px-4 py-2 rounded text-gray-600 hover:bg-gray-50">
+            <a href="/mentor/worksheets" className="block px-4 py-2 rounded hover:bg-gray-100">
               학습지 관리
             </a>
-            <a href="#" className="block px-4 py-2 rounded text-gray-600 hover:bg-gray-50">
-              피드백 작성
+            <a href="/mentor/tasks/new" className="block px-4 py-2 rounded hover:bg-gray-100">
+              할 일 등록
             </a>
           </nav>
         </aside>
