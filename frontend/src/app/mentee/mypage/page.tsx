@@ -352,10 +352,10 @@ export default function MyPage() {
               <div key={subject} className="bg-white rounded-lg p-4 border">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${SUBJECT_LABELS[subject].bgColor}`} />
-                    <span className="font-semibold">{SUBJECT_LABELS[subject].label}</span>
+                    <div className={`w-3 h-3 rounded-full ${SUBJECT_LABELS[subject as Subject]?.bgColor || 'bg-gray-600'}`} />
+                    <span className="font-semibold">{SUBJECT_LABELS[subject as Subject]?.label || subject}</span>
                   </div>
-                  <span className={`text-xl font-bold ${SUBJECT_LABELS[subject].color}`}>
+                  <span className={`text-xl font-bold ${SUBJECT_LABELS[subject as Subject]?.color || 'text-gray-600'}`}>
                     {progress}%
                   </span>
                 </div>
@@ -363,7 +363,7 @@ export default function MyPage() {
                 {/* 프로그레스 바 */}
                 <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-2">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${SUBJECT_LABELS[subject].bgColor}`}
+                    className={`h-full rounded-full transition-all duration-500 ${SUBJECT_LABELS[subject as Subject]?.bgColor || 'bg-gray-600'}`}
                     style={{ width: `${progress}%` }}
                   />
                 </div>

@@ -118,8 +118,8 @@ export default function FeedbackDetail() {
       {/* 과제 정보 */}
       <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700 mb-4">
         <div className="flex items-center gap-2 mb-3">
-          <span className={`text-xs px-2 py-1 rounded ${SUBJECT_LABELS[task.subject].color}`}>
-            {SUBJECT_LABELS[task.subject].label}
+          <span className={`text-xs px-2 py-1 rounded ${SUBJECT_LABELS[task.subject as Subject]?.color || 'bg-gray-100 text-gray-800'}`}>
+            {SUBJECT_LABELS[task.subject as Subject]?.label || task.subject}
           </span>
           <span className="text-sm text-gray-900 dark:text-gray-300">
             {formatDate(task.date)}

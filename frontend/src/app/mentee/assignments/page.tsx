@@ -169,14 +169,25 @@ export default function AssignmentsPage() {
           {currentTasks.map((task) => {
             const daysRemaining = getDaysRemaining(task.date);
             const isUrgent = daysRemaining <= 1 && activeTab !== 'completed';
+            const isFutureTask = activeTab === 'upcoming';
+
+            const handleClick = () => {
+              if (isFutureTask) {
+                alert('아직 시작되지 않은 과제입니다.');
+                return;
+              }
+              router.push(`/mentee/tasks/${task.id}`);
+            };
 
             return (
               <div
                 key={task.id}
-                onClick={() => router.push(`/mentee/tasks/${task.id}`)}
-                className={`bg-white p-4 rounded-lg border cursor-pointer hover:border-gray-400 transition-colors ${
-                  isUrgent ? 'border-red-300 bg-red-50' : ''
-                }`}
+                onClick={handleClick}
+                className={`bg-white p-4 rounded-lg border transition-colors ${
+                  isFutureTask
+                    ? 'opacity-60 cursor-not-allowed'
+                    : 'cursor-pointer hover:border-gray-400'
+                } ${isUrgent ? 'border-red-300 bg-red-50' : ''}`}
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">

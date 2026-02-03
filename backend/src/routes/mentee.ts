@@ -479,6 +479,18 @@ router.get('/tasks/:id', async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: '과제를 찾을 수 없습니다.' });
     }
 
+    // 멘토가 생성한 과제(isFixed=true)의 경우 미래 과제는 볼 수 없음
+    if (task.isFixed) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const taskDate = new Date(task.date);
+      taskDate.setHours(0, 0, 0, 0);
+
+      if (taskDate > today) {
+        return res.status(403).json({ error: '아직 시작되지 않은 과제입니다.' });
+      }
+    }
+
     res.json(task);
   } catch (error) {
     console.error('Task detail error:', error);
@@ -492,6 +504,27 @@ router.post('/tasks/:id/submit', async (req: AuthRequest, res: Response) => {
     const id = req.params.id as string;
     const menteeId = req.user!.userId;
     const { imageUrls, comment } = req.body;
+
+    // 과제 존재 여부 및 날짜 확인
+    const task = await prisma.task.findUnique({
+      where: { id },
+    });
+
+    if (!task) {
+      return res.status(404).json({ error: '과제를 찾을 수 없습니다.' });
+    }
+
+    // 멘토가 생성한 과제(isFixed=true)의 경우 미래 과제는 제출할 수 없음
+    if (task.isFixed) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const taskDate = new Date(task.date);
+      taskDate.setHours(0, 0, 0, 0);
+
+      if (taskDate > today) {
+        return res.status(403).json({ error: '아직 시작되지 않은 과제는 제출할 수 없습니다.' });
+      }
+    }
 
     const submission = await prisma.taskSubmission.create({
       data: {
@@ -694,13 +727,24 @@ router.get('/dashboard', async (req: AuthRequest, res: Response) => {
       },
     });
 
-    // 과제 제출 기준으로 달성률 계산
-    const submittedCount = todayTasks.filter((t) => t.submissions && t.submissions.length > 0).length;
+    // 과제 완료 판단:
+    // - 멘토 생성 과제(isFixed=true): 제출 필수
+    // - 멘티 자체 생성 과제(isFixed=false): selfCheck가 DONE이거나 제출이 있으면 완료
+    const completedCount = todayTasks.filter((t: any) => {
+      const hasSubmission = t.submissions && t.submissions.length > 0;
+      if (t.isFixed) {
+        // 멘토 생성 과제: 제출 필수
+        return hasSubmission;
+      } else {
+        // 멘티 자체 생성 과제: selfCheck DONE 또는 제출
+        return t.selfCheck === 'DONE' || hasSubmission;
+      }
+    }).length;
     const todayStats = {
       total: todayTasks.length,
-      completed: submittedCount,
+      completed: completedCount,
       progressRate: todayTasks.length > 0
-        ? Math.round((submittedCount / todayTasks.length) * 100)
+        ? Math.round((completedCount / todayTasks.length) * 100)
         : 0,
     };
 

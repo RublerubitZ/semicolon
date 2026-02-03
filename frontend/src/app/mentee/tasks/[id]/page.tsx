@@ -108,7 +108,11 @@ export default function TaskDetailPage() {
       });
 
       if (!res.ok) {
-        throw new Error('과제를 불러오는데 실패했습니다.');
+        const errorData = await res.json().catch(() => ({}));
+        if (res.status === 403) {
+          throw new Error(errorData.error || '아직 시작되지 않은 과제입니다.');
+        }
+        throw new Error(errorData.error || '과제를 불러오는데 실패했습니다.');
       }
 
       const data = await res.json();
@@ -265,7 +269,11 @@ export default function TaskDetailPage() {
       });
 
       if (!res.ok) {
-        throw new Error('과제 제출에 실패했습니다.');
+        const errorData = await res.json().catch(() => ({}));
+        if (res.status === 403) {
+          throw new Error(errorData.error || '아직 시작되지 않은 과제는 제출할 수 없습니다.');
+        }
+        throw new Error(errorData.error || '과제 제출에 실패했습니다.');
       }
 
       alert('과제가 제출되었습니다.');

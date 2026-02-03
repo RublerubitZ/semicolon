@@ -756,7 +756,17 @@ export default function MenteeDashboard() {
                     )}
                   </div>
                   <button
-                    onClick={() => router.push(`/mentee/tasks/${task.id}`)}
+                    onClick={() => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const taskDate = new Date(task.date);
+                      taskDate.setHours(0, 0, 0, 0);
+                      if (task.isFixed && taskDate > today) {
+                        alert('아직 시작되지 않은 과제입니다.');
+                        return;
+                      }
+                      router.push(`/mentee/tasks/${task.id}`);
+                    }}
                     className={`font-medium text-left hover:text-blue-600 hover:underline ${
                       task.isApproved ? 'line-through text-gray-400' : ''
                     }`}
@@ -768,7 +778,17 @@ export default function MenteeDashboard() {
                   )}
                   {task.worksheet && (
                     <button
-                      onClick={() => router.push(`/mentee/tasks/${task.id}`)}
+                      onClick={() => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const taskDate = new Date(task.date);
+                        taskDate.setHours(0, 0, 0, 0);
+                        if (task.isFixed && taskDate > today) {
+                          alert('아직 시작되지 않은 과제입니다.');
+                          return;
+                        }
+                        router.push(`/mentee/tasks/${task.id}`);
+                      }}
                       className="text-xs text-blue-600 mt-1 hover:underline"
                     >
                       📄 {task.worksheet.title}
@@ -778,7 +798,17 @@ export default function MenteeDashboard() {
               </div>
               <div className="mt-3 flex gap-2 flex-wrap">
                 <button
-                  onClick={() => router.push(`/mentee/tasks/${task.id}`)}
+                  onClick={() => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const taskDate = new Date(task.date);
+                    taskDate.setHours(0, 0, 0, 0);
+                    if (task.isFixed && taskDate > today) {
+                      alert('아직 시작되지 않은 과제입니다.');
+                      return;
+                    }
+                    router.push(`/mentee/tasks/${task.id}`);
+                  }}
                   className="text-xs text-blue-600 underline hover:text-blue-800 font-medium"
                 >
                   상세보기
@@ -790,7 +820,17 @@ export default function MenteeDashboard() {
                   공부 시간 기록
                 </button>
                 <button
-                  onClick={() => openSubmitModal(task.id)}
+                  onClick={() => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const taskDate = new Date(task.date);
+                    taskDate.setHours(0, 0, 0, 0);
+                    if (task.isFixed && taskDate > today) {
+                      alert('아직 시작되지 않은 과제는 제출할 수 없습니다.');
+                      return;
+                    }
+                    openSubmitModal(task.id);
+                  }}
                   className="text-xs text-gray-600 dark:text-gray-300 underline hover:text-black"
                 >
                   빠른 제출

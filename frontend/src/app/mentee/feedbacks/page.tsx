@@ -123,8 +123,8 @@ export default function FeedbackList() {
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-1 rounded ${SUBJECT_LABELS[task.subject].color}`}>
-                      {SUBJECT_LABELS[task.subject].label}
+                    <span className={`text-xs px-2 py-1 rounded ${SUBJECT_LABELS[task.subject as Subject]?.color || 'bg-gray-100 text-gray-800'}`}>
+                      {SUBJECT_LABELS[task.subject as Subject]?.label || task.subject}
                     </span>
                     <span className="text-sm text-gray-900 dark:text-gray-300">
                       {formatDate(feedback.feedbackDate)}
