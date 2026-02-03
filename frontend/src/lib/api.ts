@@ -1,6 +1,11 @@
 // API URL을 동적으로 생성하는 함수
 // 개발 환경에서 모바일 접속 시에도 작동하도록 현재 hostname 사용
 export function getApiUrl(): string {
+  // 환경 변수에 API URL이 설정되어 있으면 우선 사용 (Railway 등 배포 환경)
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+
   if (typeof window === 'undefined') {
     // 서버 사이드에서는 localhost 사용
     return 'http://localhost:4000';

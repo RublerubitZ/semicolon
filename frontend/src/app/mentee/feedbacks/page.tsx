@@ -1,5 +1,6 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
+import { formatDate } from '@/lib/dateUtils';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -126,7 +127,7 @@ export default function FeedbackList() {
                       {SUBJECT_LABELS[task.subject].label}
                     </span>
                     <span className="text-sm text-gray-900 dark:text-gray-300">
-                      {new Date(feedback.feedbackDate).toLocaleDateString('ko-KR')}
+                      {formatDate(feedback.feedbackDate)}
                     </span>
                   </div>
                   <span className="text-xs text-gray-900 dark:text-gray-300">{feedback.mentor.name} 멘토</span>

@@ -264,6 +264,46 @@ enum NotificationType {
   NEW_FEEDBACK      // 새 피드백
   REMINDER          // 리마인더
 }
+
+// 리마인더 (알림 예약)
+model Reminder {
+  id            String         @id @default(cuid())
+  taskId        String
+  menteeId      String
+  scheduledAt   DateTime       // 알림 발송 예정 시각
+  type          ReminderType   @default(BEFORE_DUE)
+  minutesBefore Int            @default(60)  // 마감 몇 분 전 (기본 1시간)
+  isSent        Boolean        @default(false)
+  sentAt        DateTime?      // 실제 발송 시각
+  createdAt     DateTime       @default(now())
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  mentee User @relation(fields: [menteeId], references: [id])
+
+  @@index([scheduledAt, isSent])  // 발송 대기 조회용
+  @@index([menteeId])
+}
+
+enum ReminderType {
+  BEFORE_DUE        // 마감 전 알림
+  MORNING           // 아침 알림 (오늘 할 일 요약)
+  EVENING           // 저녁 알림 (미완료 과제 리마인드)
+  CUSTOM            // 사용자 지정 시간
+}
+
+// 사용자별 알림 설정
+model UserNotificationSetting {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  enableReminder        Boolean  @default(true)
+  morningReminderTime   String?  // "08:00" 형식
+  eveningReminderTime   String?  // "21:00" 형식
+  defaultMinutesBefore  Int      @default(60)  // 기본 마감 전 알림 시간
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
 ```
 
 ---
@@ -319,6 +359,17 @@ enum NotificationType {
 ### 알림
 - `GET /api/notifications` - 알림 목록
 - `PATCH /api/notifications/:id/read` - 읽음 처리
+
+### 리마인더
+- `GET /api/reminders` - 내 리마인더 목록
+- `POST /api/reminders` - 리마인더 생성 (특정 과제에 대해)
+- `PUT /api/reminders/:id` - 리마인더 수정
+- `DELETE /api/reminders/:id` - 리마인더 삭제
+- `GET /api/reminders/settings` - 알림 설정 조회
+- `PUT /api/reminders/settings` - 알림 설정 수정
+
+### 리마인더 처리 (서버 내부/크론)
+- `POST /api/internal/reminders/process` - 발송 대기 리마인더 처리 (크론잡)
 
 ---
 
@@ -524,7 +575,460 @@ enum NotificationType {
 
 ---
 
-## 12. 참고 자료
+## 12. 리마인더 시스템 (확장 기능)
+
+### 12.1 개요
+과제 마감 전 또는 특정 시간에 멘티에게 알림을 발송하는 시스템
+
+### 12.2 리마인더 유형
+
+| 유형 | 설명 | 기본 시간 |
+|------|------|----------|
+| `BEFORE_DUE` | 과제 마감 전 알림 | 마감 1시간 전 |
+| `MORNING` | 아침 알림 (오늘 할 일 요약) | 08:00 |
+| `EVENING` | 저녁 알림 (미완료 과제 리마인드) | 21:00 |
+| `CUSTOM` | 사용자 지정 시간 | 사용자 설정 |
+
+### 12.3 리마인더 생성 시점
+
+1. **자동 생성**
+   - 멘토가 과제(Task) 생성 시 → `BEFORE_DUE` 리마인더 자동 생성
+   - 매일 자정 → 다음 날 `MORNING`, `EVENING` 리마인더 배치 생성
+
+2. **수동 생성**
+   - 멘티가 특정 과제에 대해 커스텀 리마인더 추가
+
+### 12.4 알림 발송 플로우
+
+```
+[크론잡 (매 분 실행)]
+    ↓
+scheduledAt <= NOW AND isSent = false 인 리마인더 조회
+    ↓
+각 리마인더에 대해:
+  1. Notification 레코드 생성 (앱 내 알림)
+  2. (선택) 푸시 알림 발송 (FCM/APNs)
+  3. (선택) 이메일 발송
+  4. Reminder.isSent = true, sentAt = NOW 업데이트
+```
+
+### 12.5 scheduledAt 계산 로직
+
+```typescript
+// BEFORE_DUE: 과제 마감일 - minutesBefore
+// 예: 마감일 2024-01-15, minutesBefore = 60
+// → scheduledAt = 2024-01-14 23:00:00
+
+const task = { date: new Date('2024-01-15') }; // 마감일 (00:00:00)
+const minutesBefore = 60;
+
+// 마감일을 23:59:59로 설정 (하루의 끝)
+const dueDateTime = new Date(task.date);
+dueDateTime.setHours(23, 59, 59, 0);
+
+// minutesBefore 만큼 빼기
+const scheduledAt = new Date(dueDateTime.getTime() - minutesBefore * 60 * 1000);
+// 결과: 2024-01-15 22:59:59 (마감 1시간 전)
+```
+
+### 12.6 사용자 설정
+
+```typescript
+interface UserNotificationSetting {
+  enableReminder: boolean;        // 알림 활성화 여부
+  morningReminderTime: string;    // "08:00"
+  eveningReminderTime: string;    // "21:00"
+  defaultMinutesBefore: number;   // 60 (1시간 전)
+}
+```
+
+### 12.7 구현 우선순위
+
+| 단계 | 기능 | 설명 |
+|------|------|------|
+| **Phase 1** | 기본 리마인더 | Task 생성 시 BEFORE_DUE 자동 생성 + 앱 내 알림 |
+| **Phase 2** | 알림 설정 | 사용자별 알림 시간/활성화 설정 |
+| **Phase 3** | 정기 알림 | MORNING/EVENING 배치 생성 |
+| **Phase 4** | 푸시 알림 | FCM 연동 (모바일 푸시) |
+
+### 12.8 크론잡 설정 (Railway/Vercel)
+
+```javascript
+// Railway: cron job 또는 외부 서비스 (cron-job.org)
+// 매 분 실행: * * * * *
+
+// API 엔드포인트
+POST /api/internal/reminders/process
+Header: X-Cron-Secret: <secret>
+```
+
+### 12.9 관련 UI
+
+**멘티 화면**
+- 과제 상세 페이지: "알림 설정" 버튼 → 리마인더 시간 선택
+- 마이페이지 > 알림 설정: 기본 알림 시간 설정, 알림 ON/OFF
+
+**멘토 화면**
+- 과제 생성 시: "알림 발송" 체크박스, 알림 시간 선택
+
+---
+
+## 13. 플래너 확장 기능
+
+### 13.1 개요
+기존 할일 관리 + 타임테이블 기반 학습 기록 시스템으로 확장
+
+### 13.2 스키마 변경
+
+```prisma
+// 멘티 자가점검 상태
+enum SelfCheckStatus {
+  PENDING      // 미시작 (○)
+  IN_PROGRESS  // 진행 중 (△)
+  DONE         // 완료 (V)
+  NOT_DONE     // 미진행 (X)
+}
+
+model Task {
+  // 기존 필드 유지
+  id          String   @id @default(cuid())
+  menteeId    String
+  mentorId    String?
+  title       String
+  description String?
+  subject     String
+  date        DateTime @db.Date
+  worksheetId String?
+  pdfUrl      String?
+  isFixed     Boolean  @default(false)
+
+  // [NEW] 멘티 자가점검 (V, △, X, ○) - 멘토에게 보여주기용
+  selfCheck       SelfCheckStatus @default(PENDING)
+  selfCheckedAt   DateTime?       // 자가점검 시간
+
+  // [NEW] 멘토 승인 (달성률 반영)
+  isApproved      Boolean   @default(false)
+  approvedAt      DateTime?
+  approvedBy      String?   // 승인한 멘토 ID
+
+  // 기존 isCompleted는 deprecated → isApproved로 대체
+  // isCompleted  Boolean  @default(false)  // 제거 예정
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations...
+}
+
+// StudyTimeLog 확장 (타임테이블 지원)
+model StudyTimeLog {
+  id        String   @id @default(cuid())
+  menteeId  String
+  taskId    String?
+  subject   String
+  date      DateTime @db.Date
+
+  // 기존 (하위 호환)
+  duration  Int      // 분 단위 총 시간
+
+  // 새로 추가 (타임테이블용)
+  startTime String?  // "06:00" 형식
+  endTime   String?  // "07:30" 형식
+
+  createdAt DateTime @default(now())
+
+  mentee User  @relation(fields: [menteeId], references: [id])
+  task   Task? @relation(fields: [taskId], references: [id])
+
+  @@index([menteeId, date])
+}
+```
+
+### 13.3 할 일 목록 (Task Management)
+
+#### 과목별 그룹화
+- 국어, 영어, 수학, 기타과목 등 과목별로 할 일을 묶어서 표시
+- 각 그룹 내에서 생성, 수정, 삭제 가능
+
+#### 2단계 상태 체크 시스템
+
+**1. 멘티 자가점검 (selfCheck)** - 멘토에게 제출/보고용
+| 상태 | 아이콘 | 설명 | 색상 |
+|------|--------|------|------|
+| `DONE` | ✓ (V) | 완료했다고 생각함 | 녹색 테두리 |
+| `IN_PROGRESS` | △ | 일부 진행함 | 노란색 테두리 |
+| `NOT_DONE` | ✗ (X) | 못했음 (솔직한 자가점검) | 빨간색 테두리 |
+| `PENDING` | ○ | 아직 시작 안함 | 회색 테두리 |
+
+> ⚠️ **멘티 자가점검은 달성률에 반영되지 않음!**
+> 멘토에게 "이만큼 했어요"를 보여주는 용도
+
+**2. 멘토 승인 (isApproved)** - 실제 달성률 반영
+| 상태 | 아이콘 | 설명 | 효과 |
+|------|--------|------|------|
+| 승인됨 | ✅ | 멘토가 완료 확인함 | **달성률 +1** |
+| 미승인 | ⬜ | 아직 확인 안됨 | 달성률 반영 X |
+
+> ✅ **멘토가 승인해야만 달성률이 올라감!**
+
+#### UI 표시 예시
+```
+┌─────────────────────────────────────────────────┐
+│         [멘티 자가점검]      [멘토 승인]        │
+├─────────────────────────────────────────────────┤
+│  📘 국어 독서 30분                        🔒   │
+│     멘티: ✓완료  →  멘토: ✅승인됨             │
+├─────────────────────────────────────────────────┤
+│  📗 영어 단어 암기                              │
+│     멘티: △진행중  →  멘토: ⬜대기중           │
+├─────────────────────────────────────────────────┤
+│  📙 수학 기출문제                         🔒   │
+│     멘티: ✗못함  →  멘토: ⬜대기중             │
+└─────────────────────────────────────────────────┘
+
+[오늘의 달성률: 1/3 = 33%]  ← 멘토 승인 기준!
+```
+
+#### 달성률 계산 공식
+```typescript
+// 달성률 = 멘토 승인된 과제 / 전체 과제
+const approvedTasks = tasks.filter(t => t.isApproved).length;
+const totalTasks = tasks.length;
+const completionRate = (approvedTasks / totalTasks) * 100;
+
+// 멘티 자가점검(selfCheck)은 달성률에 영향 없음!
+// 오직 멘토가 승인(isApproved=true)해야 달성률 상승
+```
+
+#### 워크플로우
+```
+[멘티]                          [멘토]
+  │                               │
+  ├── 과제 수행                    │
+  │                               │
+  ├── 자가점검 (V/△/X) ──────────▶│ 멘티 진행상황 확인
+  │                               │
+  │                               ├── 과제 검토
+  │                               │
+  │◀─────────────────────────────── 승인 (✅) → 달성률 반영
+  │                               │
+  └── 달성률 확인                  │
+```
+
+#### 멘토 고정 과제
+- 멘토가 등록한 과제는 삭제/수정 불가
+- 🔒 자물쇠 아이콘 + "멘토 요청" 뱃지로 표시
+- 멘티는 자가점검(V, △, X)만 가능
+
+#### 자체 할 일 추가
+- 멘티가 스스로 공부할 내용 추가 가능
+- 과목 선택 또는 직접 입력 (기타)
+- 멘토가 승인하면 달성률에 반영
+
+### 13.4 타임테이블 및 학습 기록 (Time Tracking)
+
+#### 시간대별 시각화
+```
+[타임테이블 UI]
+06:00 ┃░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+07:00 ┃████████████░░░░░░░░░░░░░░░░░░░░  ← 국어 (1시간)
+08:00 ┃░░░░░░░░░░░░████████████████████  ← 수학 (1.5시간)
+09:00 ┃████████████████████████████████
+10:00 ┃░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+...
+```
+
+- **시간 범위**: 06시 ~ 익일 05시 (24시간)
+- **시각화**: 과목별 색상 블록으로 표시
+- **입력 방식**:
+  - 터치/드래그로 시간 블록 선택
+  - 또는 시작/종료 시간 직접 입력
+
+#### 총 학습 시간 자동 계산
+```
+┌─────────────────────────────────┐
+│  📊 TOTAL TIME: 4시간 30분      │
+│  ├ 국어: 1시간 00분             │
+│  ├ 수학: 2시간 00분             │
+│  └ 영어: 1시간 30분             │
+└─────────────────────────────────┘
+```
+
+### 13.5 메모 및 코멘트 (Memo Area)
+
+#### 데일리 메모
+- 학습 중 느낀 점, 어려웠던 부분 기록
+- 자유 텍스트 입력
+
+#### 멘토 질문하기
+- 메모 영역에 입력된 내용은 멘토 화면에 즉시 공유
+- 멘토가 피드백 작성 시 참고
+
+### 13.6 UI 구조
+
+```
+[플래너 메인 페이지]
+┌─────────────────────────────────────┐
+│  📅 2024년 1월 15일 (월)    [일|주|월] │
+├─────────────────────────────────────┤
+│  [할일 목록] [타임테이블]  ← 탭 전환   │
+├─────────────────────────────────────┤
+│                                     │
+│  ▼ 📘 국어                          │
+│  ┌─────────────────────────────┐   │
+│  │ [V] 독서 30분        🔒     │   │
+│  │ [△] 문법 복습              │   │
+│  └─────────────────────────────┘   │
+│                                     │
+│  ▼ 📗 영어                          │
+│  ┌─────────────────────────────┐   │
+│  │ [○] 단어 암기 50개          │   │
+│  └─────────────────────────────┘   │
+│                                     │
+│  ▼ 📙 수학                          │
+│  ┌─────────────────────────────┐   │
+│  │ [X] 기출문제 풀이     🔒    │   │
+│  └─────────────────────────────┘   │
+│                                     │
+│  [+ 할 일 추가]                      │
+│                                     │
+├─────────────────────────────────────┤
+│  💬 오늘의 메모/질문                 │
+│  ┌─────────────────────────────┐   │
+│  │ 수학 3번 문제 잘 모르겠어요...│   │
+│  └─────────────────────────────┘   │
+└─────────────────────────────────────┘
+```
+
+```
+[타임테이블 탭]
+┌─────────────────────────────────────┐
+│  📊 총 학습시간: 4시간 30분          │
+├─────────────────────────────────────┤
+│  06 ┃                               │
+│  07 ┃██████████  국어               │
+│  08 ┃          ████████████  수학   │
+│  09 ┃████████████████████████       │
+│  10 ┃                               │
+│  11 ┃████████████████  영어         │
+│  12 ┃████████                       │
+│  ...                                │
+├─────────────────────────────────────┤
+│  [+ 학습 시간 추가]                  │
+│                                     │
+│  과목: [국어 ▼]                     │
+│  시작: [14:00]  종료: [15:30]       │
+│  [저장]                             │
+└─────────────────────────────────────┘
+```
+
+### 13.7 API 변경/추가
+
+```
+# ========== 멘티 API ==========
+
+# 멘티 자가점검 (V, △, X, ○) - 달성률 영향 없음
+PATCH /api/mentee/tasks/:id/self-check
+Body: { selfCheck: "DONE" | "IN_PROGRESS" | "NOT_DONE" | "PENDING" }
+Response: { task, message: "자가점검이 저장되었습니다." }
+
+# ========== 멘토 API ==========
+
+# 멘토 승인 (달성률 반영)
+PATCH /api/mentor/tasks/:id/approve
+Body: { approved: true }
+Response: { task, message: "과제가 승인되었습니다." }
+
+# 멘토 승인 취소
+PATCH /api/mentor/tasks/:id/approve
+Body: { approved: false }
+Response: { task, message: "승인이 취소되었습니다." }
+
+# 멘티별 과제 목록 (자가점검 + 승인 상태 포함)
+GET /api/mentor/mentees/:id/tasks?date=2024-01-15
+Response: {
+  tasks: [
+    {
+      id, title, subject, isFixed,
+      selfCheck: "DONE",      // 멘티 자가점검
+      isApproved: false,      // 멘토 승인 여부
+      selfCheckedAt, approvedAt
+    }
+  ],
+  stats: {
+    total: 5,
+    approved: 2,             // 승인된 과제
+    selfCheckDone: 4,        // 멘티가 V 체크한 과제
+    completionRate: 40       // 승인 기준 달성률
+  }
+}
+
+# ========== 타임테이블 API ==========
+
+# 타임테이블 학습 기록
+POST /api/mentee/timetable
+Body: {
+  date: "2024-01-15",
+  subject: "KOREAN",
+  startTime: "07:00",
+  endTime: "08:30",
+  taskId?: "task-id"  // 연결할 과제 (선택)
+}
+
+GET /api/mentee/timetable?date=2024-01-15
+Response: {
+  logs: [...],
+  totalMinutes: 270,
+  bySubject: { KOREAN: 90, MATH: 120, ENGLISH: 60 }
+}
+
+DELETE /api/mentee/timetable/:id
+```
+
+### 13.8 마이그레이션 계획
+
+#### Phase 1: 스키마 변경 (2단계 상태 시스템)
+1. `SelfCheckStatus` enum 추가
+2. `Task.selfCheck` 필드 추가 (기본값: PENDING)
+3. `Task.selfCheckedAt` 필드 추가
+4. `Task.isApproved` 필드 추가 (기본값: false)
+5. `Task.approvedAt`, `Task.approvedBy` 필드 추가
+6. 기존 데이터 마이그레이션:
+   - `isCompleted=true` → `isApproved=true`, `selfCheck=DONE`
+   - `isCompleted=false` → `isApproved=false`, `selfCheck=PENDING`
+7. `isCompleted` 필드 deprecated (하위 호환 유지 후 제거)
+
+#### Phase 2: StudyTimeLog 확장
+1. `startTime`, `endTime` 필드 추가 (nullable)
+2. 기존 duration 기반 기록은 그대로 유지
+3. 새 타임테이블 기록은 startTime/endTime 사용
+
+#### Phase 3: API 변경
+1. `PATCH /api/mentee/tasks/:id/self-check` 추가 (멘티 자가점검)
+2. `PATCH /api/mentor/tasks/:id/approve` 추가 (멘토 승인)
+3. 기존 `PATCH /api/mentee/tasks/:id/complete` deprecated
+
+#### Phase 4: UI 구현
+1. 할일 목록 과목별 그룹화
+2. 멘티: 자가점검 UI (V, △, X, ○)
+3. 멘토: 승인 버튼 (✅)
+4. 달성률 계산 로직 변경 (승인 기준)
+5. 타임테이블 탭 추가
+6. 시간 블록 시각화
+
+### 13.9 구현 우선순위
+
+| 단계 | 기능 | 설명 |
+|------|------|------|
+| **Phase 1** | 2단계 상태 시스템 | 자가점검 + 멘토 승인 분리 |
+| **Phase 2** | 달성률 로직 변경 | 멘토 승인 기준으로 변경 |
+| **Phase 3** | 과목별 그룹화 | UI 개선 |
+| **Phase 4** | 타임테이블 | 시간대별 학습 기록 |
+| **Phase 5** | 시각화 | 타임라인 차트 |
+
+---
+
+## 14. 참고 자료
 
 - 설스터디 노션 페이지: https://malachite-fontina-5e0.notion.site/2cfa56db406080f68bd2f8624b344a63
 - 상담 신청 폼: https://forms.gle/FchKdDcm23JdGHpK9

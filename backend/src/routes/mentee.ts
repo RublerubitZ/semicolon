@@ -521,7 +521,11 @@ router.get('/feedbacks', async (req: AuthRequest, res: Response) => {
         feedbacks: { some: {} },
         ...(subject && { subject: subject as any }),
       },
-      include: {
+      select: {
+        id: true,
+        title: true,
+        subject: true,
+        date: true,
         feedbacks: {
           include: { mentor: { select: { name: true } } },
         },

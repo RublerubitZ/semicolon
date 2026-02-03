@@ -1,5 +1,6 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
+import { formatDate, formatDateTime } from '@/lib/dateUtils';
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -121,7 +122,7 @@ export default function FeedbackDetail() {
             {SUBJECT_LABELS[task.subject].label}
           </span>
           <span className="text-sm text-gray-900 dark:text-gray-300">
-            {new Date(task.date).toLocaleDateString('ko-KR')}
+            {formatDate(task.date)}
           </span>
           {task.isCompleted && (
             <span className="text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-100 px-2 py-1 rounded">완료</span>
@@ -151,7 +152,7 @@ export default function FeedbackDetail() {
           {task.submissions.map((submission) => (
             <div key={submission.id} className="mb-4">
               <p className="text-xs text-gray-900 dark:text-gray-300 mb-2">
-                {new Date(submission.createdAt).toLocaleString('ko-KR')}
+                {formatDateTime(submission.createdAt)}
               </p>
 
               {submission.imageUrls.length > 0 && (
@@ -184,7 +185,7 @@ export default function FeedbackDetail() {
                 <div className="flex items-center gap-2">
                   <span className="font-semibold dark:text-white">{feedback.mentor.name} 멘토</span>
                   <span className="text-sm text-gray-900 dark:text-gray-300">
-                    {new Date(feedback.feedbackDate).toLocaleDateString('ko-KR')}
+                    {formatDate(feedback.feedbackDate)}
                   </span>
                 </div>
               </div>
