@@ -1,4 +1,5 @@
 'use client';
+import { getApiUrl } from '@/lib/api';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -43,8 +44,8 @@ export default function FeedbackList() {
     try {
       const token = localStorage.getItem('token');
       const url = subject
-        ? `http://localhost:4000/api/mentee/feedbacks?subject=${subject}`
-        : 'http://localhost:4000/api/mentee/feedbacks';
+        ? `${getApiUrl()}/api/mentee/feedbacks?subject=${subject}`
+        : `${getApiUrl()}/api/mentee/feedbacks`;
 
       const res = await fetch(url, {
         headers: {
@@ -73,10 +74,10 @@ export default function FeedbackList() {
     <div className="p-4 pb-20">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
-        <button onClick={() => router.push('/mentee')} className="text-gray-600">
+        <button onClick={() => router.push('/mentee')} className="text-gray-900 dark:text-gray-100">
           ← 뒤로
         </button>
-        <h2 className="text-xl font-bold">피드백</h2>
+        <h2 className="text-xl font-bold dark:text-white">피드백</h2>
         <div className="w-12" />
       </div>
 
@@ -85,7 +86,7 @@ export default function FeedbackList() {
         <button
           onClick={() => setSelectedSubject('ALL')}
           className={`px-4 py-2 rounded-lg whitespace-nowrap ${
-            selectedSubject === 'ALL' ? 'bg-black text-white' : 'bg-gray-100 text-gray-600'
+            selectedSubject === 'ALL' ? 'bg-black dark:bg-white text-white dark:text-black' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
           }`}
         >
           전체
@@ -97,7 +98,7 @@ export default function FeedbackList() {
             className={`px-4 py-2 rounded-lg whitespace-nowrap ${
               selectedSubject === subject
                 ? SUBJECT_LABELS[subject].color
-                : 'bg-gray-100 text-gray-600'
+                : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
             }`}
           >
             {SUBJECT_LABELS[subject].label}
@@ -108,38 +109,38 @@ export default function FeedbackList() {
       {/* 피드백 목록 */}
       <div className="space-y-4">
         {isLoading ? (
-          <p className="text-gray-500">불러오는 중...</p>
+          <p className="text-gray-900 dark:text-gray-100">불러오는 중...</p>
         ) : tasks.length === 0 ? (
-          <p className="text-gray-500">아직 받은 피드백이 없습니다.</p>
+          <p className="text-gray-900 dark:text-gray-100">아직 받은 피드백이 없습니다.</p>
         ) : (
           tasks.map((task) =>
             task.feedbacks.map((feedback) => (
               <div
                 key={feedback.id}
                 onClick={() => router.push(`/mentee/feedbacks/${task.id}`)}
-                className="bg-white p-4 rounded-lg border cursor-pointer hover:border-gray-400"
+                className="bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700 cursor-pointer hover:border-gray-400 dark:hover:border-gray-500"
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <span className={`text-xs px-2 py-1 rounded ${SUBJECT_LABELS[task.subject].color}`}>
                       {SUBJECT_LABELS[task.subject].label}
                     </span>
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-gray-900 dark:text-gray-300">
                       {new Date(feedback.feedbackDate).toLocaleDateString('ko-KR')}
                     </span>
                   </div>
-                  <span className="text-xs text-gray-500">{feedback.mentor.name} 멘토</span>
+                  <span className="text-xs text-gray-900 dark:text-gray-300">{feedback.mentor.name} 멘토</span>
                 </div>
 
-                <h3 className="font-semibold mb-1">{task.title}</h3>
+                <h3 className="font-semibold mb-1 dark:text-white">{task.title}</h3>
 
                 {feedback.summary && (
-                  <p className="text-sm text-gray-700 mb-2">{feedback.summary}</p>
+                  <p className="text-sm text-gray-700 dark:text-gray-300 mb-2">{feedback.summary}</p>
                 )}
 
-                <p className="text-sm text-gray-600 line-clamp-2">{feedback.content}</p>
+                <p className="text-sm text-gray-900 dark:text-gray-100 line-clamp-2">{feedback.content}</p>
 
-                <div className="mt-3 text-xs text-blue-600">자세히 보기 →</div>
+                <div className="mt-3 text-xs text-blue-600 dark:text-blue-400">자세히 보기 →</div>
               </div>
             ))
           )

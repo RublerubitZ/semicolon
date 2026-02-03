@@ -1,4 +1,5 @@
 'use client';
+import { getApiUrl } from '@/lib/api';
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -62,7 +63,7 @@ export default function FeedbackDetail() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch(`http://localhost:4000/api/mentee/tasks/${taskId}`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -91,7 +92,7 @@ export default function FeedbackDetail() {
   if (isLoading) {
     return (
       <div className="p-4">
-        <p className="text-gray-500">불러오는 중...</p>
+        <p className="text-gray-900 dark:text-gray-100">불러오는 중...</p>
       </div>
     );
   }
@@ -106,38 +107,38 @@ export default function FeedbackDetail() {
     <div className="p-4 pb-20">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
-        <button onClick={() => router.push('/mentee/feedbacks')} className="text-gray-600">
+        <button onClick={() => router.push('/mentee/feedbacks')} className="text-gray-900 dark:text-gray-100">
           ← 뒤로
         </button>
-        <h2 className="text-xl font-bold">피드백 상세</h2>
+        <h2 className="text-xl font-bold dark:text-white">피드백 상세</h2>
         <div className="w-12" />
       </div>
 
       {/* 과제 정보 */}
-      <div className="bg-white p-4 rounded-lg border mb-4">
+      <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700 mb-4">
         <div className="flex items-center gap-2 mb-3">
           <span className={`text-xs px-2 py-1 rounded ${SUBJECT_LABELS[task.subject].color}`}>
             {SUBJECT_LABELS[task.subject].label}
           </span>
-          <span className="text-sm text-gray-600">
+          <span className="text-sm text-gray-900 dark:text-gray-300">
             {new Date(task.date).toLocaleDateString('ko-KR')}
           </span>
           {task.isCompleted && (
-            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">완료</span>
+            <span className="text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-100 px-2 py-1 rounded">완료</span>
           )}
         </div>
 
-        <h3 className="text-lg font-bold mb-2">{task.title}</h3>
-        {task.description && <p className="text-sm text-gray-600 mb-3">{task.description}</p>}
+        <h3 className="text-lg font-bold mb-2 dark:text-white">{task.title}</h3>
+        {task.description && <p className="text-sm text-gray-900 dark:text-gray-100 mb-3">{task.description}</p>}
 
         {task.worksheet && (
-          <div className="mt-3 p-3 bg-gray-50 rounded">
-            <p className="text-sm font-semibold mb-1">📄 {task.worksheet.title}</p>
+          <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-700 rounded">
+            <p className="text-sm font-semibold mb-1 dark:text-gray-100">📄 {task.worksheet.title}</p>
           </div>
         )}
 
         {totalStudyTime > 0 && (
-          <div className="mt-3 text-sm text-gray-600">
+          <div className="mt-3 text-sm text-gray-900 dark:text-gray-100">
             공부 시간: {Math.floor(totalStudyTime / 60)}시간 {totalStudyTime % 60}분
           </div>
         )}
@@ -145,11 +146,11 @@ export default function FeedbackDetail() {
 
       {/* 제출물 */}
       {task.submissions.length > 0 && (
-        <div className="bg-white p-4 rounded-lg border mb-4">
-          <h3 className="font-semibold mb-3">제출물</h3>
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700 mb-4">
+          <h3 className="font-semibold mb-3 dark:text-white">제출물</h3>
           {task.submissions.map((submission) => (
             <div key={submission.id} className="mb-4">
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs text-gray-900 dark:text-gray-300 mb-2">
                 {new Date(submission.createdAt).toLocaleString('ko-KR')}
               </p>
 
@@ -160,14 +161,14 @@ export default function FeedbackDetail() {
                       key={idx}
                       src={url}
                       alt={`제출물 ${idx + 1}`}
-                      className="w-full rounded border"
+                      className="w-full rounded border dark:border-gray-600"
                     />
                   ))}
                 </div>
               )}
 
               {submission.comment && (
-                <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded">{submission.comment}</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700 p-2 rounded">{submission.comment}</p>
               )}
             </div>
           ))}
@@ -178,29 +179,29 @@ export default function FeedbackDetail() {
       {task.feedbacks.length > 0 ? (
         <div className="space-y-4">
           {task.feedbacks.map((feedback) => (
-            <div key={feedback.id} className="bg-white p-4 rounded-lg border">
+            <div key={feedback.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold">{feedback.mentor.name} 멘토</span>
-                  <span className="text-sm text-gray-500">
+                  <span className="font-semibold dark:text-white">{feedback.mentor.name} 멘토</span>
+                  <span className="text-sm text-gray-900 dark:text-gray-300">
                     {new Date(feedback.feedbackDate).toLocaleDateString('ko-KR')}
                   </span>
                 </div>
               </div>
 
               {feedback.summary && (
-                <div className="mb-3 p-3 bg-yellow-50 rounded">
-                  <p className="text-sm font-semibold text-yellow-800">{feedback.summary}</p>
+                <div className="mb-3 p-3 bg-yellow-50 dark:bg-yellow-900/30 rounded">
+                  <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">{feedback.summary}</p>
                 </div>
               )}
 
-              <div className="text-sm text-gray-700 whitespace-pre-wrap">{feedback.content}</div>
+              <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{feedback.content}</div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="bg-white p-4 rounded-lg border">
-          <p className="text-gray-500 text-center">아직 피드백이 없습니다.</p>
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700">
+          <p className="text-gray-900 dark:text-gray-100 text-center">아직 피드백이 없습니다.</p>
         </div>
       )}
     </div>

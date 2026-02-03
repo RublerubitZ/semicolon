@@ -1,4 +1,5 @@
 'use client';
+import { getApiUrl } from '@/lib/api';
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -7,6 +8,15 @@ import { ko } from 'date-fns/locale';
 
 type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
 type ViewMode = 'daily' | 'weekly' | 'monthly';
+type SelfCheckStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'NOT_DONE';
+
+// 자가점검 상태 표시 설정
+const SELF_CHECK_DISPLAY: Record<SelfCheckStatus, { label: string; icon: string; color: string }> = {
+  PENDING: { label: '미시작', icon: '○', color: 'text-gray-400' },
+  IN_PROGRESS: { label: '진행중', icon: '△', color: 'text-yellow-500' },
+  DONE: { label: '완료', icon: '✓', color: 'text-green-500' },
+  NOT_DONE: { label: '미진행', icon: '✕', color: 'text-red-500' },
+};
 
 interface Task {
   id: string;
@@ -16,6 +26,13 @@ interface Task {
   date: string;
   isCompleted: boolean;
   isFixed: boolean;
+  // 자가점검 (멘티용)
+  selfCheck: SelfCheckStatus;
+  selfCheckedAt?: string;
+  // 멘토 승인 (달성률 반영)
+  isApproved: boolean;
+  approvedAt?: string;
+  approvedBy?: string;
   worksheet?: {
     id: string;
     title: string;
@@ -44,12 +61,20 @@ export default function MenteePlannerPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    title: '',
+    description: '',
+    subject: 'KOREAN' as Subject,
+    date: '',
+  });
 
   // 멘티 정보 가져오기
   const fetchMentee = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`http://localhost:4000/api/mentor/mentees/${menteeId}`, {
+      const res = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -72,22 +97,26 @@ export default function MenteePlannerPage() {
 
       if (viewMode === 'daily') {
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
-        url = `http://localhost:4000/api/mentor/mentees/${menteeId}/planner/daily?date=${dateStr}`;
+        url = `${getApiUrl()}/api/mentor/mentees/${menteeId}/planner/daily?date=${dateStr}`;
       } else if (viewMode === 'weekly') {
         const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 });
         const dateStr = format(weekStart, 'yyyy-MM-dd');
-        url = `http://localhost:4000/api/mentor/mentees/${menteeId}/planner/weekly?startDate=${dateStr}`;
+        url = `${getApiUrl()}/api/mentor/mentees/${menteeId}/planner/weekly?startDate=${dateStr}`;
       } else if (viewMode === 'monthly') {
         const year = selectedDate.getFullYear();
         const month = selectedDate.getMonth() + 1;
-        url = `http://localhost:4000/api/mentor/mentees/${menteeId}/planner/monthly?year=${year}&month=${month}`;
+        url = `${getApiUrl()}/api/mentor/mentees/${menteeId}/planner/monthly?year=${year}&month=${month}`;
       }
 
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (!res.ok) throw new Error('플래너를 불러오는데 실패했습니다.');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('API Error:', res.status, errorData);
+        throw new Error(errorData.error || '플래너를 불러오는데 실패했습니다.');
+      }
 
       const data = await res.json();
       setTasks(data.tasks || []);
@@ -97,6 +126,91 @@ export default function MenteePlannerPage() {
       alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // 수정 모달 열기
+  const openEditModal = (task: Task) => {
+    setEditingTask(task);
+    setEditFormData({
+      title: task.title,
+      description: task.description || '',
+      subject: task.subject,
+      date: format(new Date(task.date), 'yyyy-MM-dd'),
+    });
+    setShowEditModal(true);
+  };
+
+  // 수정 모달 닫기
+  const closeEditModal = () => {
+    setShowEditModal(false);
+    setEditingTask(null);
+    setEditFormData({
+      title: '',
+      description: '',
+      subject: 'KOREAN',
+      date: '',
+    });
+  };
+
+  // 과제 수정
+  const handleUpdateTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!editingTask) return;
+
+    try {
+      const token = localStorage.getItem('token');
+
+      const res = await fetch(`${getApiUrl()}/api/mentor/tasks/${editingTask.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(editFormData),
+      });
+
+      if (!res.ok) throw new Error('과제 수정에 실패했습니다.');
+
+      alert('과제가 수정되었습니다.');
+      closeEditModal();
+      fetchPlanner();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+    }
+  };
+
+  // 과제 삭제
+  const handleDeleteTask = async (task: Task) => {
+    // 제출 내역 확인 및 경고
+    const submissionCount = task.submissions.length;
+    const feedbackCount = task.feedbacks.length;
+
+    let confirmMessage = '정말 삭제하시겠습니까?';
+
+    if (submissionCount > 0 || feedbackCount > 0) {
+      confirmMessage = `이 과제에는 ${submissionCount}개의 제출 내역과 ${feedbackCount}개의 피드백이 있습니다.\n\n삭제 시 모든 관련 데이터가 함께 삭제됩니다.\n\n정말 삭제하시겠습니까?`;
+    }
+
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      const token = localStorage.getItem('token');
+
+      const res = await fetch(`${getApiUrl()}/api/mentor/tasks/${task.id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) throw new Error('과제 삭제에 실패했습니다.');
+
+      alert('과제가 삭제되었습니다.');
+      fetchPlanner();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
     }
   };
 
@@ -152,7 +266,7 @@ export default function MenteePlannerPage() {
       <div className="mb-6">
         <button
           onClick={() => router.back()}
-          className="text-sm text-gray-600 hover:text-gray-900 mb-2"
+          className="text-sm text-gray-900 hover:text-gray-900 mb-2"
         >
           ← 뒤로가기
         </button>
@@ -176,12 +290,12 @@ export default function MenteePlannerPage() {
               <h2 className="text-2xl font-bold">
                 {mentee.nickname || mentee.name}
                 {mentee.nickname && (
-                  <span className="text-lg font-normal text-gray-600 ml-2">
+                  <span className="text-lg font-normal text-gray-900 ml-2">
                     ({mentee.name})
                   </span>
                 )}
               </h2>
-              <p className="text-sm text-gray-600">{mentee.email}</p>
+              <p className="text-sm text-gray-900">{mentee.email}</p>
             </div>
           </div>
         )}
@@ -246,7 +360,7 @@ export default function MenteePlannerPage() {
             <p className="text-2xl font-bold">{stats.totalTasks}개</p>
           </div>
           <div className="bg-white p-4 rounded-lg border">
-            <p className="text-sm text-gray-600 mb-1">완료</p>
+            <p className="text-sm text-gray-600 mb-1">제출됨</p>
             <p className="text-2xl font-bold text-green-600">
               {stats.completedTasks}개
             </p>
@@ -273,13 +387,14 @@ export default function MenteePlannerPage() {
         </div>
 
         {isLoading ? (
-          <p className="text-center text-gray-500">로딩 중...</p>
+          <p className="text-center text-gray-900">로딩 중...</p>
         ) : tasks.length === 0 ? (
-          <p className="text-center text-gray-500">할 일이 없습니다.</p>
+          <p className="text-center text-gray-900">할 일이 없습니다.</p>
         ) : (
           <div className="space-y-3">
             {tasks.map((task) => {
               const studyTime = task.studyLogs.reduce((sum, log) => sum + log.duration, 0);
+              const selfCheckInfo = SELF_CHECK_DISPLAY[task.selfCheck || 'PENDING'];
 
               return (
                 <div
@@ -288,7 +403,7 @@ export default function MenteePlannerPage() {
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span
                           className={`text-xs px-2 py-1 rounded ${getSubjectColor(
                             task.subject
@@ -301,30 +416,72 @@ export default function MenteePlannerPage() {
                             고정 과제
                           </span>
                         )}
-                        {task.isCompleted && (
-                          <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-700">
-                            ✓ 완료
+                        {/* 멘티 자가점검 상태 */}
+                        <span className={`text-xs px-2 py-1 rounded bg-gray-50 ${selfCheckInfo.color}`}>
+                          {selfCheckInfo.icon} 자가점검: {selfCheckInfo.label}
+                        </span>
+                        {/* 과제 상태 (제출 기준) */}
+                        {task.submissions.length === 0 ? (
+                          <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-500">
+                            미제출
+                          </span>
+                        ) : task.isApproved || task.feedbacks.length > 0 ? (
+                          <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-700 font-medium">
+                            ✓ 피드백 완료
+                          </span>
+                        ) : (
+                          <span className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-700 font-medium">
+                            제출됨
                           </span>
                         )}
                       </div>
-                      <h4 className="font-semibold mb-1">{task.title}</h4>
+                      <h4 className={`font-semibold mb-1 ${task.submissions.length > 0 ? 'line-through text-gray-400' : ''}`}>
+                        {task.title}
+                      </h4>
                       {task.description && (
                         <p className="text-sm text-gray-600 mb-2">{task.description}</p>
                       )}
-                      <div className="flex gap-4 text-sm text-gray-600">
+                      <div className="flex gap-4 text-sm text-gray-500">
                         <span>제출: {task.submissions.length}개</span>
                         <span>피드백: {task.feedbacks.length}개</span>
                         <span>공부 시간: {Math.floor(studyTime / 60)}분</span>
                       </div>
                     </div>
-                    <button
-                      onClick={() =>
-                        router.push(`/mentor/feedbacks/new?taskId=${task.id}`)
-                      }
-                      className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50"
-                    >
-                      피드백 작성
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      {/* 피드백 작성 버튼 - 제출된 과제에만 표시 */}
+                      {task.submissions.length > 0 && task.feedbacks.length === 0 && (
+                        <button
+                          onClick={() =>
+                            router.push(`/mentor/feedbacks/new?taskId=${task.id}`)
+                          }
+                          className="px-3 py-1.5 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 font-medium"
+                        >
+                          피드백 작성
+                        </button>
+                      )}
+                      {task.feedbacks.length > 0 && (
+                        <button
+                          onClick={() =>
+                            router.push(`/mentor/feedbacks/new?taskId=${task.id}`)
+                          }
+                          className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50"
+                        >
+                          피드백 추가
+                        </button>
+                      )}
+                      <button
+                        onClick={() => openEditModal(task)}
+                        className="px-3 py-1.5 text-sm bg-gray-100 rounded hover:bg-gray-200"
+                      >
+                        수정
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTask(task)}
+                        className="px-3 py-1.5 text-sm bg-red-50 text-red-600 rounded hover:bg-red-100"
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -332,6 +489,96 @@ export default function MenteePlannerPage() {
           </div>
         )}
       </div>
+
+      {/* 수정 모달 */}
+      {showEditModal && editingTask && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold mb-4">과제 수정</h3>
+
+            <form onSubmit={handleUpdateTask} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  제목 <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editFormData.title}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, title: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border rounded-md"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">설명</label>
+                <textarea
+                  value={editFormData.description}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, description: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border rounded-md resize-none"
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  과목 <span className="text-red-600">*</span>
+                </label>
+                <select
+                  value={editFormData.subject}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      subject: e.target.value as Subject,
+                    })
+                  }
+                  className="w-full px-3 py-2 border rounded-md"
+                  required
+                >
+                  <option value="KOREAN">국어</option>
+                  <option value="ENGLISH">영어</option>
+                  <option value="MATH">수학</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  날짜 <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={editFormData.date}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, date: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border rounded-md"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
+                >
+                  수정하기
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

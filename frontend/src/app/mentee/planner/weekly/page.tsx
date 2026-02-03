@@ -1,14 +1,13 @@
 'use client';
+import { getApiUrl } from '@/lib/api';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
-
 interface Task {
   id: string;
   title: string;
-  subject: Subject;
+  subject: string;
   isCompleted: boolean;
   date: string;
 }
@@ -17,13 +16,11 @@ interface WeeklyStats {
   totalTasks: number;
   completedTasks: number;
   totalStudyTime: number;
-  subjectStats: {
-    [key in Subject]: {
-      total: number;
-      completed: number;
-      studyTime: number;
-    };
-  };
+  subjectStats: Record<string, {
+    total: number;
+    completed: number;
+    studyTime: number;
+  }>;
 }
 
 interface WeeklyData {
@@ -33,10 +30,18 @@ interface WeeklyData {
   endDate: string;
 }
 
-const SUBJECT_LABELS: Record<Subject, { label: string; color: string }> = {
+const DEFAULT_SUBJECT_LABELS: Record<string, { label: string; color: string }> = {
   KOREAN: { label: '국어', color: 'bg-blue-100 text-blue-800' },
   ENGLISH: { label: '영어', color: 'bg-green-100 text-green-800' },
   MATH: { label: '수학', color: 'bg-purple-100 text-purple-800' },
+};
+
+const getSubjectLabel = (subject: string) => {
+  return DEFAULT_SUBJECT_LABELS[subject]?.label || subject;
+};
+
+const getSubjectColor = (subject: string) => {
+  return DEFAULT_SUBJECT_LABELS[subject]?.color || 'bg-gray-100 text-gray-800';
 };
 
 export default function WeeklyPlanner() {
@@ -57,7 +62,7 @@ export default function WeeklyPlanner() {
       const token = localStorage.getItem('token');
       const dateStr = startDate.toISOString().split('T')[0];
 
-      const res = await fetch(`http://localhost:4000/api/mentee/planner/weekly?startDate=${dateStr}`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/planner/weekly?startDate=${dateStr}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -118,60 +123,60 @@ export default function WeeklyPlanner() {
     <div className="p-4 pb-20">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
-        <button onClick={() => router.push('/mentee')} className="text-gray-600">
+        <button onClick={() => router.push('/mentee')} className="text-gray-900 dark:text-gray-100">
           ← 뒤로
         </button>
-        <h2 className="text-xl font-bold">주간 플래너</h2>
+        <h2 className="text-xl font-bold dark:text-white">주간 플래너</h2>
         <div className="w-12" />
       </div>
 
       {/* 주 네비게이션 */}
       <div className="flex items-center justify-between mb-6">
-        <button onClick={goToPreviousWeek} className="p-2 hover:bg-gray-100 rounded">
+        <button onClick={goToPreviousWeek} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
           ←
         </button>
         <div className="text-center">
-          <p className="text-sm text-gray-600">
+          <p className="text-sm text-gray-900 dark:text-gray-100">
             {currentWeekStart.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })} -{' '}
             {weekDates[6].toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}
           </p>
         </div>
-        <button onClick={goToNextWeek} className="p-2 hover:bg-gray-100 rounded">
+        <button onClick={goToNextWeek} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
           →
         </button>
       </div>
 
       {/* 주간 통계 */}
       {weeklyData && (
-        <div className="bg-white p-4 rounded-lg border mb-6">
-          <h3 className="font-semibold mb-3">주간 통계</h3>
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700 mb-6">
+          <h3 className="font-semibold mb-3 dark:text-white">주간 통계</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-sm text-gray-600">완료율</p>
-              <p className="text-2xl font-bold">{completionRate}%</p>
+              <p className="text-sm text-gray-900 dark:text-gray-300">완료율</p>
+              <p className="text-2xl font-bold dark:text-white">{completionRate}%</p>
             </div>
             <div>
-              <p className="text-sm text-gray-600">학습 시간</p>
-              <p className="text-2xl font-bold">{Math.round(weeklyData.stats.totalStudyTime / 60)}h</p>
+              <p className="text-sm text-gray-900 dark:text-gray-300">학습 시간</p>
+              <p className="text-2xl font-bold dark:text-white">{Math.round(weeklyData.stats.totalStudyTime / 60)}h</p>
             </div>
           </div>
 
           <div className="mt-4 space-y-2">
-            {(Object.keys(weeklyData.stats.subjectStats) as Subject[]).map((subject) => {
+            {Object.keys(weeklyData.stats.subjectStats).map((subject) => {
               const stats = weeklyData.stats.subjectStats[subject];
               const rate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
 
               return (
                 <div key={subject} className="flex items-center justify-between">
-                  <span className={`text-xs px-2 py-1 rounded ${SUBJECT_LABELS[subject].color}`}>
-                    {SUBJECT_LABELS[subject].label}
+                  <span className={`text-xs px-2 py-1 rounded ${getSubjectColor(subject)}`}>
+                    {getSubjectLabel(subject)}
                   </span>
                   <div className="flex items-center gap-2 text-sm">
-                    <span>{rate}%</span>
-                    <span className="text-gray-500">
+                    <span className="dark:text-gray-100">{rate}%</span>
+                    <span className="text-gray-900 dark:text-gray-300">
                       ({stats.completed}/{stats.total})
                     </span>
-                    <span className="text-gray-500">{Math.round(stats.studyTime / 60)}h</span>
+                    <span className="text-gray-900 dark:text-gray-300">{Math.round(stats.studyTime / 60)}h</span>
                   </div>
                 </div>
               );
@@ -182,7 +187,7 @@ export default function WeeklyPlanner() {
 
       {/* 주간 캘린더 */}
       {isLoading ? (
-        <p className="text-gray-500">불러오는 중...</p>
+        <p className="text-gray-900 dark:text-gray-100">불러오는 중...</p>
       ) : (
         <div className="space-y-2">
           {weekDates.map((date) => {
@@ -197,24 +202,24 @@ export default function WeeklyPlanner() {
                   const dateStr = date.toISOString().split('T')[0];
                   router.push(`/mentee?date=${dateStr}`);
                 }}
-                className={`bg-white p-4 rounded-lg border cursor-pointer hover:border-gray-400 ${
-                  isToday ? 'border-blue-500' : ''
+                className={`bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700 cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 ${
+                  isToday ? 'border-blue-500 dark:border-blue-400' : ''
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <p className="font-semibold">
+                    <p className="font-semibold dark:text-white">
                       {date.toLocaleDateString('ko-KR', { weekday: 'short', month: 'long', day: 'numeric' })}
-                      {isToday && <span className="ml-2 text-xs text-blue-600">오늘</span>}
+                      {isToday && <span className="ml-2 text-xs text-blue-600 dark:text-blue-400">오늘</span>}
                     </p>
                   </div>
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-gray-900 dark:text-gray-100">
                     {tasks.length > 0 ? (
                       <span>
                         {completedCount}/{tasks.length}
                       </span>
                     ) : (
-                      <span className="text-gray-400">할 일 없음</span>
+                      <span className="text-gray-400 dark:text-gray-500">할 일 없음</span>
                     )}
                   </div>
                 </div>
@@ -225,14 +230,14 @@ export default function WeeklyPlanner() {
                       <span
                         key={task.id}
                         className={`text-xs px-2 py-1 rounded ${
-                          task.isCompleted ? 'bg-gray-200 text-gray-600 line-through' : SUBJECT_LABELS[task.subject].color
+                          task.isCompleted ? 'bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-gray-300 line-through' : getSubjectColor(task.subject)
                         }`}
                       >
                         {task.title}
                       </span>
                     ))}
                     {tasks.length > 3 && (
-                      <span className="text-xs text-gray-500">+{tasks.length - 3}</span>
+                      <span className="text-xs text-gray-900 dark:text-gray-300">+{tasks.length - 3}</span>
                     )}
                   </div>
                 )}

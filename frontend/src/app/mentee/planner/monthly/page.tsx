@@ -1,14 +1,13 @@
 'use client';
+import { getApiUrl } from '@/lib/api';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
-
 interface Task {
   id: string;
   title: string;
-  subject: Subject;
+  subject: string;
   isCompleted: boolean;
   date: string;
 }
@@ -17,13 +16,11 @@ interface MonthlyStats {
   totalTasks: number;
   completedTasks: number;
   totalStudyTime: number;
-  subjectStats: {
-    [key in Subject]: {
-      total: number;
-      completed: number;
-      studyTime: number;
-    };
-  };
+  subjectStats: Record<string, {
+    total: number;
+    completed: number;
+    studyTime: number;
+  }>;
 }
 
 interface MonthlyData {
@@ -33,10 +30,18 @@ interface MonthlyData {
   month: number;
 }
 
-const SUBJECT_LABELS: Record<Subject, { label: string; color: string }> = {
+const DEFAULT_SUBJECT_LABELS: Record<string, { label: string; color: string }> = {
   KOREAN: { label: '국어', color: 'bg-blue-100 text-blue-800' },
   ENGLISH: { label: '영어', color: 'bg-green-100 text-green-800' },
   MATH: { label: '수학', color: 'bg-purple-100 text-purple-800' },
+};
+
+const getSubjectLabel = (subject: string) => {
+  return DEFAULT_SUBJECT_LABELS[subject]?.label || subject;
+};
+
+const getSubjectColor = (subject: string) => {
+  return DEFAULT_SUBJECT_LABELS[subject]?.color || 'bg-gray-100 text-gray-800';
 };
 
 export default function MonthlyPlanner() {
@@ -53,7 +58,7 @@ export default function MonthlyPlanner() {
       const token = localStorage.getItem('token');
 
       const res = await fetch(
-        `http://localhost:4000/api/mentee/planner/monthly?year=${year}&month=${month}`,
+        `${getApiUrl()}/api/mentee/planner/monthly?year=${year}&month=${month}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -139,60 +144,60 @@ export default function MonthlyPlanner() {
     <div className="p-4 pb-20">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
-        <button onClick={() => router.push('/mentee')} className="text-gray-600">
+        <button onClick={() => router.push('/mentee')} className="text-gray-900 dark:text-gray-100">
           ← 뒤로
         </button>
-        <h2 className="text-xl font-bold">월간 플래너</h2>
+        <h2 className="text-xl font-bold dark:text-white">월간 플래너</h2>
         <div className="w-12" />
       </div>
 
       {/* 월 네비게이션 */}
       <div className="flex items-center justify-between mb-6">
-        <button onClick={goToPreviousMonth} className="p-2 hover:bg-gray-100 rounded">
+        <button onClick={goToPreviousMonth} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
           ←
         </button>
         <div className="text-center">
-          <p className="text-lg font-semibold">
+          <p className="text-lg font-semibold dark:text-white">
             {currentYear}년 {currentMonth}월
           </p>
         </div>
-        <button onClick={goToNextMonth} className="p-2 hover:bg-gray-100 rounded">
+        <button onClick={goToNextMonth} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
           →
         </button>
       </div>
 
       {/* 월간 통계 */}
       {monthlyData && (
-        <div className="bg-white p-4 rounded-lg border mb-6">
-          <h3 className="font-semibold mb-3">월간 통계</h3>
+        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700 mb-6">
+          <h3 className="font-semibold mb-3 dark:text-white">월간 통계</h3>
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <p className="text-sm text-gray-600">완료율</p>
-              <p className="text-xl font-bold">{completionRate}%</p>
+              <p className="text-sm text-gray-900 dark:text-gray-300">완료율</p>
+              <p className="text-xl font-bold dark:text-white">{completionRate}%</p>
             </div>
             <div>
-              <p className="text-sm text-gray-600">총 할 일</p>
-              <p className="text-xl font-bold">{monthlyData.stats.totalTasks}</p>
+              <p className="text-sm text-gray-900 dark:text-gray-300">총 할 일</p>
+              <p className="text-xl font-bold dark:text-white">{monthlyData.stats.totalTasks}</p>
             </div>
             <div>
-              <p className="text-sm text-gray-600">학습 시간</p>
-              <p className="text-xl font-bold">{Math.round(monthlyData.stats.totalStudyTime / 60)}h</p>
+              <p className="text-sm text-gray-900 dark:text-gray-300">학습 시간</p>
+              <p className="text-xl font-bold dark:text-white">{Math.round(monthlyData.stats.totalStudyTime / 60)}h</p>
             </div>
           </div>
 
           <div className="mt-4 space-y-2">
-            {(Object.keys(monthlyData.stats.subjectStats) as Subject[]).map((subject) => {
+            {Object.keys(monthlyData.stats.subjectStats).map((subject) => {
               const stats = monthlyData.stats.subjectStats[subject];
               const rate = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
 
               return (
                 <div key={subject} className="flex items-center justify-between">
-                  <span className={`text-xs px-2 py-1 rounded ${SUBJECT_LABELS[subject].color}`}>
-                    {SUBJECT_LABELS[subject].label}
+                  <span className={`text-xs px-2 py-1 rounded ${getSubjectColor(subject)}`}>
+                    {getSubjectLabel(subject)}
                   </span>
                   <div className="flex items-center gap-2 text-sm">
-                    <span>{rate}%</span>
-                    <span className="text-gray-500">
+                    <span className="dark:text-gray-100">{rate}%</span>
+                    <span className="text-gray-900 dark:text-gray-300">
                       ({stats.completed}/{stats.total})
                     </span>
                   </div>
@@ -205,13 +210,13 @@ export default function MonthlyPlanner() {
 
       {/* 월간 캘린더 */}
       {isLoading ? (
-        <p className="text-gray-500">불러오는 중...</p>
+        <p className="text-gray-900 dark:text-gray-100">불러오는 중...</p>
       ) : (
         <div>
           {/* 요일 헤더 */}
           <div className="grid grid-cols-7 gap-1 mb-2">
             {['일', '월', '화', '수', '목', '금', '토'].map((day) => (
-              <div key={day} className="text-center text-sm font-semibold text-gray-600 py-2">
+              <div key={day} className="text-center text-sm font-semibold text-gray-900 dark:text-gray-100 py-2">
                 {day}
               </div>
             ))}
@@ -235,17 +240,17 @@ export default function MonthlyPlanner() {
                     const dateStr = date.toISOString().split('T')[0];
                     router.push(`/mentee?date=${dateStr}`);
                   }}
-                  className={`aspect-square border rounded-lg p-1 cursor-pointer hover:border-gray-400 ${
-                    isToday ? 'border-blue-500 bg-blue-50' : 'bg-white'
-                  } ${rate === 100 && tasks.length > 0 ? 'bg-green-50' : ''}`}
+                  className={`aspect-square border dark:border-gray-700 rounded-lg p-1 cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 ${
+                    isToday ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/30' : 'bg-white dark:bg-gray-800'
+                  } ${rate === 100 && tasks.length > 0 ? 'bg-green-50 dark:bg-green-900/30' : ''}`}
                 >
-                  <div className="text-sm font-semibold">{date.getDate()}</div>
+                  <div className="text-sm font-semibold dark:text-white">{date.getDate()}</div>
                   {tasks.length > 0 && (
                     <div className="mt-1">
-                      <div className="text-xs text-gray-600">{tasks.length}개</div>
-                      <div className="w-full bg-gray-200 rounded-full h-1 mt-1">
+                      <div className="text-xs text-gray-900 dark:text-gray-300">{tasks.length}개</div>
+                      <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1 mt-1">
                         <div
-                          className="bg-blue-500 h-1 rounded-full"
+                          className="bg-blue-500 dark:bg-blue-400 h-1 rounded-full"
                           style={{ width: `${rate}%` }}
                         />
                       </div>

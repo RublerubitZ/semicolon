@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from "next/image";
+import { getApiUrl } from '@/lib/api';
+
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,7 +19,7 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const res = await fetch('http://localhost:4000/api/auth/login', {
+      const res = await fetch(`${getApiUrl()}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -45,52 +48,61 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md p-8 bg-white rounded-lg shadow">
-        <h1 className="text-2xl font-bold text-center mb-6">로그인</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+      <div className="w-full max-w-md p-5 sm:p-8 bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50">
+        <div className="flex items-center justify-center gap-2 mb-6">
+          <Image src="/logo.png" alt="로고" width={50} height={50} />
+          <h1 className="text-3xl font-bold dark:text-white">설스터디</h1>
+        </div>
+
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">이메일</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
-              placeholder="mentor@seolstudy.com"
+              className="w-full px-3 py-2 border-b border-gray-200 dark:border-gray-600 outline-none focus:border-gray-300 dark:focus:border-gray-500 bg-transparent dark:text-white"
+              placeholder="아이디"
               required
             />
+
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">비밀번호</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border rounded-md"
+              className="w-full px-3 py-2 border-b border-gray-200 dark:border-gray-600 outline-none focus:border-gray-300 dark:focus:border-gray-500 bg-transparent dark:text-white"
+              placeholder="비밀번호"
               required
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-2 bg-black text-white rounded-md hover:bg-gray-800 disabled:bg-gray-400"
+            className="w-full py-4 bg-[#B0D4FF] dark:bg-[#4A7BA7] text-[#00265A] dark:text-white rounded-md hover:bg-[#9EC5F8] dark:hover:bg-[#5A8BB7] disabled:bg-gray-400 dark:disabled:bg-gray-600"
           >
             {isLoading ? '로그인 중...' : '로그인'}
           </button>
         </form>
 
-        <div className="mt-6 pt-6 border-t text-sm text-gray-600">
-          <p className="font-medium mb-2">테스트 계정</p>
-          <p>멘토: mentor@seolstudy.com / mentor123!</p>
-          <p>멘티: mentee1@seolstudy.com / mentee123!</p>
+        <div className="mt-6 pt-6 border-t dark:border-gray-700 text-sm text-gray-900 dark:text-gray-100 text-center">
+          <div className="flex justify-center gap-2">
+            <span className="cursor-pointer hover:underline">회원가입</span>
+            <span>|</span>
+            <span className="cursor-pointer hover:underline">아이디 찾기</span>
+            <span>|</span>
+            <span className="cursor-pointer hover:underline">비밀번호 찾기</span>
+          </div>
         </div>
+
       </div>
     </div>
   );

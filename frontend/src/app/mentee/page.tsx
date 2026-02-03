@@ -1,7 +1,10 @@
 'use client';
+import { getApiUrl } from '@/lib/api';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+
+type SelfCheckStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'NOT_DONE';
 
 interface Task {
   id: string;
@@ -11,6 +14,13 @@ interface Task {
   isCompleted: boolean;
   isFixed: boolean;
   date: string;
+  // 자가점검 (멘티용)
+  selfCheck: SelfCheckStatus;
+  selfCheckedAt?: string;
+  // 멘토 승인 (달성률 반영)
+  isApproved: boolean;
+  approvedAt?: string;
+  approvedBy?: string;
   worksheet?: {
     id: string;
     title: string;
@@ -18,6 +28,14 @@ interface Task {
   submissions: any[];
   studyLogs: any[];
 }
+
+// 자가점검 상태 표시 설정
+const SELF_CHECK_OPTIONS: { value: SelfCheckStatus; label: string; icon: string; color: string }[] = [
+  { value: 'PENDING', label: '미시작', icon: '○', color: 'text-gray-400' },
+  { value: 'IN_PROGRESS', label: '진행중', icon: '△', color: 'text-yellow-500' },
+  { value: 'DONE', label: '완료', icon: '✓', color: 'text-green-500' },
+  { value: 'NOT_DONE', label: '미진행', icon: '✕', color: 'text-red-500' },
+];
 
 interface PlannerComment {
   id: string;
@@ -44,8 +62,28 @@ const getSubjectLabel = (subject: string) => {
 
 const getSubjectColor = (subject: string) => {
   const found = DEFAULT_SUBJECTS.find((s) => s.value === subject);
-  return found ? found.color : 'bg-gray-100 text-gray-800';
+  return found ? found.color : 'bg-gray-100 dark:bg-gray-700 text-gray-800';
 };
+
+interface DashboardData {
+  todayStats: {
+    total: number;
+    completed: number;
+    progressRate: number;
+  };
+  yesterdayFeedbacks: Array<{
+    id: string;
+    content: string;
+    summary?: string;
+    task: {
+      title: string;
+      subject: string;
+    };
+    mentor: {
+      name: string;
+    };
+  }>;
+}
 
 export default function MenteeDashboard() {
   const router = useRouter();
@@ -55,6 +93,7 @@ export default function MenteeDashboard() {
   const [commentText, setCommentText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [dashboard, setDashboard] = useState<DashboardData | null>(null);
 
   // 모달 상태
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
@@ -112,6 +151,14 @@ export default function MenteeDashboard() {
     });
   };
 
+  // 로컬 타임존 기준 날짜 포맷팅 (YYYY-MM-DD)
+  const formatDateForApi = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // 플래너 데이터 가져오기
   const fetchPlannerData = async (date: Date) => {
     setIsLoading(true);
@@ -119,9 +166,9 @@ export default function MenteeDashboard() {
 
     try {
       const token = localStorage.getItem('token');
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = formatDateForApi(date);
 
-      const res = await fetch(`http://localhost:4000/api/mentee/planner?date=${dateStr}`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/planner?date=${dateStr}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -141,22 +188,22 @@ export default function MenteeDashboard() {
     }
   };
 
-  // 할 일 완료 처리
-  const handleToggleComplete = async (taskId: string, currentStatus: boolean) => {
+  // 자가점검 상태 변경
+  const handleSelfCheck = async (taskId: string, newStatus: SelfCheckStatus) => {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch(`http://localhost:4000/api/mentee/tasks/${taskId}/complete`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}/self-check`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ isCompleted: !currentStatus }),
+        body: JSON.stringify({ selfCheck: newStatus }),
       });
 
       if (!res.ok) {
-        throw new Error('완료 처리에 실패했습니다.');
+        throw new Error('자가점검 저장에 실패했습니다.');
       }
 
       fetchPlannerData(currentDate);
@@ -169,9 +216,9 @@ export default function MenteeDashboard() {
   const handleSaveComment = async () => {
     try {
       const token = localStorage.getItem('token');
-      const dateStr = currentDate.toISOString().split('T')[0];
+      const dateStr = formatDateForApi(currentDate);
 
-      const res = await fetch('http://localhost:4000/api/mentee/comments', {
+      const res = await fetch(`${getApiUrl()}/api/mentee/comments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -211,7 +258,7 @@ export default function MenteeDashboard() {
     // 시작일부터 종료일까지 순회
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       if (selectedWeekdays.includes(d.getDay())) {
-        dates.push(new Date(d).toISOString().split('T')[0]);
+        dates.push(formatDateForApi(new Date(d)));
       }
     }
 
@@ -247,7 +294,7 @@ export default function MenteeDashboard() {
       const dates =
         repeatMode === 'repeat'
           ? calculateRepeatDates()
-          : [currentDate.toISOString().split('T')[0]];
+          : [formatDateForApi(currentDate)];
 
       if (dates.length === 0) {
         alert('선택한 요일에 해당하는 날짜가 없습니다.');
@@ -256,7 +303,7 @@ export default function MenteeDashboard() {
 
       // 각 날짜에 대해 할 일 생성
       for (const dateStr of dates) {
-        const res = await fetch('http://localhost:4000/api/mentee/tasks', {
+        const res = await fetch(`${getApiUrl()}/api/mentee/tasks`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -306,13 +353,15 @@ export default function MenteeDashboard() {
   // 할 일 수정 모달 열기
   const openEditModal = (task: Task) => {
     const isDefaultSubject = DEFAULT_SUBJECTS.some((s) => s.value === task.subject);
+    // ISO 날짜를 YYYY-MM-DD 형식으로 변환 (input[type="date"] 호환)
+    const dateStr = task.date.includes('T') ? task.date.split('T')[0] : task.date;
     setEditTask({
       id: task.id,
       title: task.title,
       description: task.description || '',
       subject: isDefaultSubject ? task.subject : 'CUSTOM',
       customSubject: isDefaultSubject ? '' : task.subject,
-      date: task.date,
+      date: dateStr,
     });
     setShowEditTaskModal(true);
   };
@@ -333,7 +382,7 @@ export default function MenteeDashboard() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch(`http://localhost:4000/api/mentee/tasks/${editTask.id}`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${editTask.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -368,7 +417,7 @@ export default function MenteeDashboard() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch(`http://localhost:4000/api/mentee/tasks/${taskId}`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -395,9 +444,9 @@ export default function MenteeDashboard() {
 
     try {
       const token = localStorage.getItem('token');
-      const dateStr = currentDate.toISOString().split('T')[0];
+      const dateStr = formatDateForApi(currentDate);
 
-      const res = await fetch(`http://localhost:4000/api/mentee/tasks/${taskId}/time`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}/time`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -432,7 +481,7 @@ export default function MenteeDashboard() {
         const formData = new FormData();
         formData.append('image', file);
 
-        const res = await fetch('http://localhost:4000/api/upload/image', {
+        const res = await fetch(`${getApiUrl()}/api/upload/image`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -476,7 +525,7 @@ export default function MenteeDashboard() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch(`http://localhost:4000/api/mentee/tasks/${selectedTaskId}/submit`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${selectedTaskId}/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -500,11 +549,28 @@ export default function MenteeDashboard() {
     }
   };
 
+  // 대시보드 데이터 가져오기
+  const fetchDashboard = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${getApiUrl()}/api/mentee/dashboard`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDashboard(data);
+      }
+    } catch (error) {
+      console.error('Dashboard fetch error:', error);
+    }
+  };
+
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
       setUser(JSON.parse(userStr));
     }
+    fetchDashboard();
   }, []);
 
   useEffect(() => {
@@ -514,29 +580,82 @@ export default function MenteeDashboard() {
   return (
     <div className="p-4 pb-20">
       {/* 헤더 */}
-      <div className="mb-6">
-        <p className="text-sm text-gray-600">안녕하세요</p>
-        <h2 className="text-2xl font-bold">
+      <div className="mb-4">
+        <p className="text-sm text-gray-900 dark:text-gray-300">안녕하세요</p>
+        <h2 className="text-2xl font-bold dark:text-white">
           {user?.nickname || user?.name || '멘티'}
-          {user?.nickname && user?.name && <span className="text-lg font-normal">({user.name})</span>}님
+          {user?.nickname && user?.name && <span className="text-lg font-normal dark:text-gray-300">({user.name})</span>}님
         </h2>
       </div>
+
+      {/* 오늘 학습 진행율 */}
+      {dashboard && (
+        <div className="mb-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm opacity-90">오늘 학습 진행율</span>
+            <span className="text-2xl font-bold">{dashboard.todayStats.progressRate}%</span>
+          </div>
+          <div className="w-full bg-blue-400 rounded-full h-2">
+            <div
+              className="bg-white h-2 rounded-full transition-all"
+              style={{ width: `${dashboard.todayStats.progressRate}%` }}
+            />
+          </div>
+          <p className="text-xs mt-2 opacity-80">
+            {dashboard.todayStats.completed}/{dashboard.todayStats.total} 완료
+          </p>
+        </div>
+      )}
+
+      {/* 어제 피드백 요약 */}
+      {dashboard && dashboard.yesterdayFeedbacks.length > 0 && (
+        <div className="mb-4 bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">💬</span>
+            <span className="font-semibold text-yellow-800">어제 받은 피드백</span>
+          </div>
+          <div className="space-y-2">
+            {dashboard.yesterdayFeedbacks.slice(0, 2).map((feedback) => (
+              <div key={feedback.id} className="bg-white p-3 rounded border border-yellow-100">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-xs px-2 py-0.5 rounded ${getSubjectColor(feedback.task.subject)}`}>
+                    {getSubjectLabel(feedback.task.subject)}
+                  </span>
+                  <span className="text-xs text-gray-500">{feedback.mentor.name} 멘토</span>
+                </div>
+                <p className="text-sm font-medium text-gray-800">{feedback.task.title}</p>
+                <p className="text-sm text-gray-600 line-clamp-2 mt-1">
+                  {feedback.summary || feedback.content}
+                </p>
+              </div>
+            ))}
+            {dashboard.yesterdayFeedbacks.length > 2 && (
+              <button
+                onClick={() => router.push('/mentee/feedbacks')}
+                className="text-sm text-yellow-700 hover:underline"
+              >
+                +{dashboard.yesterdayFeedbacks.length - 2}개 더 보기
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 날짜 */}
       <div className="mb-6">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">{formatDate(currentDate)}</h3>
+          <h3 className="text-lg font-semibold dark:text-white">{formatDate(currentDate)}</h3>
           <div className="flex gap-2">
-            <button className="px-3 py-1 text-sm bg-gray-100 rounded">일</button>
+            <button className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 rounded">일</button>
             <button
               onClick={() => router.push('/mentee/planner/weekly')}
-              className="px-3 py-1 text-sm text-gray-500 rounded hover:bg-gray-100"
+              className="px-3 py-1 text-sm text-gray-900 dark:text-gray-300 rounded hover:bg-gray-100 dark:bg-gray-700"
             >
               주
             </button>
             <button
               onClick={() => router.push('/mentee/planner/monthly')}
-              className="px-3 py-1 text-sm text-gray-500 rounded hover:bg-gray-100"
+              className="px-3 py-1 text-sm text-gray-900 dark:text-gray-300 rounded hover:bg-gray-100 dark:bg-gray-700"
             >
               월
             </button>
@@ -547,7 +666,7 @@ export default function MenteeDashboard() {
       {/* 코멘트 영역 */}
       <div className="mb-6">
         <textarea
-          className="w-full p-3 border rounded-lg resize-none"
+          className="w-full p-3 border dark:border-gray-600 rounded-lg resize-none dark:bg-gray-700 dark:text-white"
           rows={3}
           placeholder="오늘의 코멘트나 질문을 입력하세요..."
           value={commentText}
@@ -561,41 +680,91 @@ export default function MenteeDashboard() {
         </button>
       </div>
 
-      {/* 할 일 목록 */}
+      {/* 할 일 목록 - 과목별 그룹화 */}
       <div className="space-y-4">
-        <h3 className="font-semibold">오늘의 할 일</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold">오늘의 할 일</h3>
+          {plannerData && plannerData.tasks.length > 0 && (
+            <span className="text-sm text-gray-500">
+              {plannerData.tasks.filter(t => t.isApproved).length}/{plannerData.tasks.length} 승인됨
+            </span>
+          )}
+        </div>
 
         {isLoading ? (
-          <p className="text-gray-500">불러오는 중...</p>
+          <p className="text-gray-900 dark:text-gray-300">불러오는 중...</p>
         ) : error ? (
           <p className="text-red-600">{error}</p>
         ) : plannerData && plannerData.tasks.length > 0 ? (
-          plannerData.tasks.map((task) => (
-            <div key={task.id} className="bg-white p-4 rounded-lg border">
+          // 과목별로 그룹화
+          Object.entries(
+            plannerData.tasks.reduce((groups, task) => {
+              const subject = task.subject;
+              if (!groups[subject]) {
+                groups[subject] = [];
+              }
+              groups[subject].push(task);
+              return groups;
+            }, {} as Record<string, Task[]>)
+          ).map(([subject, tasks]) => (
+            <div key={subject} className="space-y-2">
+              {/* 과목 헤더 */}
+              <div className="flex items-center gap-2 sticky top-0 bg-gray-50 dark:bg-gray-900 py-2 -mx-4 px-4">
+                <span className={`text-sm px-3 py-1 rounded-full font-medium ${getSubjectColor(subject)}`}>
+                  {getSubjectLabel(subject)}
+                </span>
+                <span className="text-xs text-gray-500">
+                  {tasks.filter(t => t.isApproved).length}/{tasks.length}
+                </span>
+              </div>
+              {/* 해당 과목의 할 일들 */}
+              {tasks.map((task) => (
+            <div key={task.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg border">
               <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={task.isCompleted}
-                  onChange={() => handleToggleComplete(task.id, task.isCompleted)}
-                />
+                {/* 자가점검 드롭다운 */}
+                <select
+                  value={task.selfCheck || 'PENDING'}
+                  onChange={(e) => handleSelfCheck(task.id, e.target.value as SelfCheckStatus)}
+                  className={`mt-0.5 text-lg bg-transparent border-none cursor-pointer ${
+                    SELF_CHECK_OPTIONS.find(o => o.value === task.selfCheck)?.color || 'text-gray-400'
+                  }`}
+                  title="자가점검"
+                >
+                  {SELF_CHECK_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.icon} {option.label}
+                    </option>
+                  ))}
+                </select>
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className={`text-xs px-2 py-0.5 rounded ${getSubjectColor(task.subject)}`}>
                       {getSubjectLabel(task.subject)}
                     </span>
                     {task.isFixed && (
-                      <span className="text-xs text-gray-500">멘토 고정</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">멘토 지정</span>
+                    )}
+                    {/* 멘토 승인 표시 */}
+                    {task.isApproved ? (
+                      <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 font-medium">
+                        ✓ 승인됨
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500">
+                        승인 대기
+                      </span>
                     )}
                   </div>
                   <button
                     onClick={() => router.push(`/mentee/tasks/${task.id}`)}
-                    className="font-medium text-left hover:text-blue-600 hover:underline"
+                    className={`font-medium text-left hover:text-blue-600 hover:underline ${
+                      task.isApproved ? 'line-through text-gray-400' : ''
+                    }`}
                   >
                     {task.title}
                   </button>
                   {task.description && (
-                    <p className="text-sm text-gray-600 mt-1">{task.description}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{task.description}</p>
                   )}
                   {task.worksheet && (
                     <button
@@ -616,13 +785,13 @@ export default function MenteeDashboard() {
                 </button>
                 <button
                   onClick={() => handleRecordStudyTime(task.id)}
-                  className="text-xs text-gray-600 underline hover:text-black"
+                  className="text-xs text-gray-600 dark:text-gray-300 underline hover:text-black"
                 >
                   공부 시간 기록
                 </button>
                 <button
                   onClick={() => openSubmitModal(task.id)}
-                  className="text-xs text-gray-600 underline hover:text-black"
+                  className="text-xs text-gray-600 dark:text-gray-300 underline hover:text-black"
                 >
                   빠른 제출
                 </button>
@@ -644,15 +813,17 @@ export default function MenteeDashboard() {
                 )}
               </div>
             </div>
+          ))}
+            </div>
           ))
         ) : (
-          <p className="text-gray-500">오늘 할 일이 없습니다.</p>
+          <p className="text-gray-900 dark:text-gray-300">오늘 할 일이 없습니다.</p>
         )}
 
         {/* 할 일 추가 버튼 */}
         <button
           onClick={() => setShowAddTaskModal(true)}
-          className="w-full py-3 border-2 border-dashed rounded-lg text-gray-500 hover:border-gray-400 hover:text-gray-700"
+          className="w-full py-3 border-2 border-dashed rounded-lg text-gray-900 dark:text-gray-300 hover:border-gray-400 hover:text-gray-700"
         >
           + 할 일 추가
         </button>
@@ -661,7 +832,7 @@ export default function MenteeDashboard() {
       {/* 할 일 추가 모달 */}
       {showAddTaskModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-bold mb-4">할 일 추가</h3>
 
             <div className="space-y-4">
@@ -724,7 +895,7 @@ export default function MenteeDashboard() {
                     className={`flex-1 px-3 py-2 rounded-md text-sm ${
                       repeatMode === 'single'
                         ? 'bg-black text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
                     단일 날짜
@@ -735,7 +906,7 @@ export default function MenteeDashboard() {
                     className={`flex-1 px-3 py-2 rounded-md text-sm ${
                       repeatMode === 'repeat'
                         ? 'bg-black text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
                     반복 설정
@@ -743,14 +914,14 @@ export default function MenteeDashboard() {
                 </div>
 
                 {repeatMode === 'single' ? (
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm text-gray-900 dark:text-gray-300">
                     현재 선택된 날짜: {formatDate(currentDate)}
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">시작일</label>
+                        <label className="block text-xs text-gray-900 dark:text-gray-300 mb-1">시작일</label>
                         <input
                           type="date"
                           value={repeatSettings.startDate}
@@ -761,7 +932,7 @@ export default function MenteeDashboard() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-600 mb-1">종료일</label>
+                        <label className="block text-xs text-gray-900 dark:text-gray-300 mb-1">종료일</label>
                         <input
                           type="date"
                           value={repeatSettings.endDate}
@@ -774,7 +945,7 @@ export default function MenteeDashboard() {
                     </div>
 
                     <div>
-                      <label className="block text-xs text-gray-600 mb-2">반복 요일 선택</label>
+                      <label className="block text-xs text-gray-900 dark:text-gray-300 mb-2">반복 요일 선택</label>
                       <div className="grid grid-cols-7 gap-1">
                         {['일', '월', '화', '수', '목', '금', '토'].map((day, index) => (
                           <button
@@ -792,7 +963,7 @@ export default function MenteeDashboard() {
                             className={`py-2 text-xs rounded-md transition-colors ${
                               repeatSettings.weekdays[index as keyof typeof repeatSettings.weekdays]
                                 ? 'bg-black text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 hover:bg-gray-200'
                             }`}
                           >
                             {day}
@@ -835,7 +1006,7 @@ export default function MenteeDashboard() {
       {/* 할 일 수정 모달 */}
       {showEditTaskModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-bold mb-4">할 일 수정</h3>
 
             <div className="space-y-4">
@@ -922,7 +1093,7 @@ export default function MenteeDashboard() {
       {/* 과제 제출 모달 */}
       {showSubmitModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold mb-4">과제 제출</h3>
 
             <div className="space-y-4">
@@ -945,7 +1116,7 @@ export default function MenteeDashboard() {
                   disabled={isUploading}
                 />
                 {isUploading && (
-                  <p className="text-sm text-gray-600 mt-1">업로드 중...</p>
+                  <p className="text-sm text-gray-900 dark:text-gray-300 mt-1">업로드 중...</p>
                 )}
               </div>
 

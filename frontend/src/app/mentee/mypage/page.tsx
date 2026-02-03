@@ -1,4 +1,5 @@
 'use client';
+import { getApiUrl } from '@/lib/api';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -72,7 +73,7 @@ export default function MyPage() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch('http://localhost:4000/api/mentee/stats', {
+      const res = await fetch(`${getApiUrl()}/api/mentee/stats`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -103,7 +104,7 @@ export default function MyPage() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch('http://localhost:4000/api/auth/update-profile', {
+      const res = await fetch(`${getApiUrl()}/api/auth/update-profile`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -153,7 +154,7 @@ export default function MyPage() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch('http://localhost:4000/api/auth/change-password', {
+      const res = await fetch(`${getApiUrl()}/api/auth/change-password`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -213,7 +214,7 @@ export default function MyPage() {
   if (isLoading) {
     return (
       <div className="p-4">
-        <p className="text-center text-gray-500">로딩 중...</p>
+        <p className="text-center text-gray-900">로딩 중...</p>
       </div>
     );
   }
@@ -318,19 +319,19 @@ export default function MyPage() {
         <h3 className="text-sm font-bold text-gray-700 mb-3">계정 정보</h3>
         <div className="space-y-3">
           <div>
-            <p className="text-xs text-gray-500 mb-1">아이디 (변경 불가)</p>
+            <p className="text-xs text-gray-900 mb-1">아이디 (변경 불가)</p>
             <p className="text-sm font-medium text-gray-800">{user?.email}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 mb-1">이름 (변경 불가)</p>
+            <p className="text-xs text-gray-900 mb-1">이름 (변경 불가)</p>
             <p className="text-sm font-medium text-gray-800">{user?.name}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 mb-1">닉네임</p>
+            <p className="text-xs text-gray-900 mb-1">닉네임</p>
             <p className="text-sm font-medium text-gray-800">{user?.nickname || '미설정'}</p>
           </div>
           <div>
-            <p className="text-xs text-gray-500 mb-1">역할</p>
+            <p className="text-xs text-gray-900 mb-1">역할</p>
             <p className="text-sm font-medium text-gray-800">
               {user?.role === 'MENTEE' ? '멘티' : user?.role === 'MENTOR' ? '멘토' : '관리자'}
             </p>
@@ -368,7 +369,7 @@ export default function MyPage() {
                 </div>
 
                 {/* 상세 정보 */}
-                <div className="flex items-center justify-between text-sm text-gray-600">
+                <div className="flex items-center justify-between text-sm text-gray-900">
                   <span>완료: {subjectStats.completed}개</span>
                   <span>전체: {subjectStats.total}개</span>
                 </div>
@@ -383,19 +384,19 @@ export default function MyPage() {
         <div className="p-4">
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-white rounded-lg p-4 border text-center">
-              <p className="text-xs text-gray-600 mb-1">총 할 일</p>
+              <p className="text-xs text-gray-900 mb-1">총 할 일</p>
               <p className="text-2xl font-bold text-gray-800">
                 {stats.KOREAN.total + stats.ENGLISH.total + stats.MATH.total}
               </p>
             </div>
             <div className="bg-white rounded-lg p-4 border text-center">
-              <p className="text-xs text-gray-600 mb-1">완료</p>
+              <p className="text-xs text-gray-900 mb-1">완료</p>
               <p className="text-2xl font-bold text-green-600">
                 {stats.KOREAN.completed + stats.ENGLISH.completed + stats.MATH.completed}
               </p>
             </div>
             <div className="bg-white rounded-lg p-4 border text-center">
-              <p className="text-xs text-gray-600 mb-1">미완료</p>
+              <p className="text-xs text-gray-900 mb-1">미완료</p>
               <p className="text-2xl font-bold text-orange-600">
                 {(stats.KOREAN.total - stats.KOREAN.completed) +
                   (stats.ENGLISH.total - stats.ENGLISH.completed) +
@@ -416,7 +417,7 @@ export default function MyPage() {
         >
           📞 1:1 상담받아보기
         </a>
-        <p className="text-xs text-gray-500 text-center mt-2">
+        <p className="text-xs text-gray-900 text-center mt-2">
           설스터디 전문 멘토와 무료 상담을 받아보세요
         </p>
       </div>

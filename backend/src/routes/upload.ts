@@ -1,9 +1,13 @@
-import { Router, Response } from 'express';
-import multer from 'multer';
+import { Router, Response, NextFunction } from 'express';
+import multer, { MulterError } from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 
 const router = Router();
+
+// 파일 크기 제한 (MB)
+const MAX_FILE_SIZE_MB = 10;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 // Cloudinary 설정
 cloudinary.config({
@@ -16,14 +20,53 @@ cloudinary.config({
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB
+    fileSize: MAX_FILE_SIZE_BYTES,
+  },
+  fileFilter: (_req, file, cb) => {
+    // 허용되는 이미지 타입
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`지원하지 않는 파일 형식입니다. (${file.mimetype}) 지원 형식: JPG, PNG, GIF, WEBP`));
+    }
   },
 });
+
+// Multer 에러 핸들러
+const handleMulterError = (err: any, req: AuthRequest, res: Response, next: NextFunction) => {
+  if (err instanceof MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        error: `파일 크기가 너무 큽니다. 최대 ${MAX_FILE_SIZE_MB}MB까지 업로드 가능합니다.`,
+        code: 'FILE_TOO_LARGE',
+        maxSize: `${MAX_FILE_SIZE_MB}MB`,
+      });
+    }
+    return res.status(400).json({
+      error: `파일 업로드 오류: ${err.message}`,
+      code: err.code,
+    });
+  }
+  if (err) {
+    return res.status(400).json({
+      error: err.message || '파일 업로드에 실패했습니다.',
+    });
+  }
+  next();
+};
 
 router.use(authMiddleware);
 
 // 이미지 업로드
-router.post('/image', upload.single('image'), async (req: AuthRequest, res: Response) => {
+router.post('/image', (req: AuthRequest, res: Response, next: NextFunction) => {
+  upload.single('image')(req, res, (err) => {
+    if (err) {
+      return handleMulterError(err, req, res, next);
+    }
+    next();
+  });
+}, async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: '이미지 파일이 필요합니다.' });
@@ -55,14 +98,25 @@ router.post('/pdf', upload.single('pdf'), async (req: AuthRequest, res: Response
     }
 
     const base64Pdf = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    const timestamp = Date.now();
 
     const result = await cloudinary.uploader.upload(base64Pdf, {
       folder: 'seolstudy/worksheets',
       resource_type: 'raw',
+      public_id: `worksheet_${timestamp}.pdf`,
+      type: 'upload',
+    });
+
+    // Signed URL 생성 (1년 유효)
+    const signedUrl = cloudinary.url(result.public_id, {
+      resource_type: 'raw',
+      type: 'upload',
+      sign_url: true,
+      expires_at: Math.floor(Date.now() / 1000) + 31536000, // 1년
     });
 
     res.json({
-      url: result.secure_url,
+      url: signedUrl,
       publicId: result.public_id,
     });
   } catch (error) {

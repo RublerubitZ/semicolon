@@ -1,14 +1,13 @@
 'use client';
+import { getApiUrl } from '@/lib/api';
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
-type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
-
 interface Worksheet {
   id: string;
   title: string;
-  subject: Subject;
+  subject: string;
   content?: any;
   pdfUrl?: string;
   type: 'COLUMN' | 'PDF';
@@ -18,7 +17,7 @@ interface Feedback {
   id: string;
   content: string;
   summary?: string;
-  subject: Subject;
+  subject: string;
   feedbackDate: string;
   mentor: {
     name: string;
@@ -32,24 +31,49 @@ interface Submission {
   createdAt: string;
 }
 
+type SelfCheckStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'NOT_DONE';
+
 interface Task {
   id: string;
   title: string;
   description?: string;
-  subject: Subject;
+  subject: string;
   date: string;
   isCompleted: boolean;
   isFixed: boolean;
+  // 자가점검 (멘티용)
+  selfCheck: SelfCheckStatus;
+  selfCheckedAt?: string;
+  // 멘토 승인 (달성률 반영)
+  isApproved: boolean;
+  approvedAt?: string;
+  approvedBy?: string;
   worksheet?: Worksheet;
   feedbacks: Feedback[];
   submissions: Submission[];
   studyLogs: any[];
 }
 
-const SUBJECT_LABELS: Record<Subject, { label: string; color: string }> = {
+// 자가점검 상태 표시 설정
+const SELF_CHECK_OPTIONS: { value: SelfCheckStatus; label: string; icon: string; color: string }[] = [
+  { value: 'PENDING', label: '미시작', icon: '○', color: 'text-gray-400' },
+  { value: 'IN_PROGRESS', label: '진행중', icon: '△', color: 'text-yellow-500' },
+  { value: 'DONE', label: '완료', icon: '✓', color: 'text-green-500' },
+  { value: 'NOT_DONE', label: '미진행', icon: '✕', color: 'text-red-500' },
+];
+
+const DEFAULT_SUBJECTS: Record<string, { label: string; color: string }> = {
   KOREAN: { label: '국어', color: 'bg-blue-100 text-blue-800' },
   ENGLISH: { label: '영어', color: 'bg-green-100 text-green-800' },
   MATH: { label: '수학', color: 'bg-purple-100 text-purple-800' },
+};
+
+const getSubjectLabel = (subject: string) => {
+  return DEFAULT_SUBJECTS[subject]?.label || subject;
+};
+
+const getSubjectColor = (subject: string) => {
+  return DEFAULT_SUBJECTS[subject]?.color || 'bg-gray-100 text-gray-800';
 };
 
 export default function TaskDetailPage() {
@@ -77,7 +101,7 @@ export default function TaskDetailPage() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch(`http://localhost:4000/api/mentee/tasks/${taskId}`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -96,11 +120,80 @@ export default function TaskDetailPage() {
     }
   };
 
+  // 이미지 압축 함수
+  const compressImage = (file: File, maxWidth = 1920, quality = 0.8): Promise<File> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let { width, height } = img;
+
+          // 최대 너비 기준으로 리사이즈
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas context not available'));
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name, {
+                  type: 'image/jpeg',
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } else {
+                reject(new Error('Compression failed'));
+              }
+            },
+            'image/jpeg',
+            quality
+          );
+        };
+        img.onerror = () => reject(new Error('Image load failed'));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('File read failed'));
+      reader.readAsDataURL(file);
+    });
+  };
+
   // 이미지 파일 선택
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
-      setSelectedImages([...selectedImages, ...files]);
+
+      // 이미지 압축 처리
+      const compressedFiles: File[] = [];
+      for (const file of files) {
+        try {
+          // 2MB 이상인 경우만 압축
+          if (file.size > 2 * 1024 * 1024) {
+            const compressed = await compressImage(file);
+            compressedFiles.push(compressed);
+          } else {
+            compressedFiles.push(file);
+          }
+        } catch {
+          // 압축 실패시 원본 사용
+          compressedFiles.push(file);
+        }
+      }
+
+      setSelectedImages([...selectedImages, ...compressedFiles]);
     }
   };
 
@@ -121,7 +214,7 @@ export default function TaskDetailPage() {
         const formData = new FormData();
         formData.append('image', file);
 
-        const res = await fetch('http://localhost:4000/api/upload/image', {
+        const res = await fetch(`${getApiUrl()}/api/upload/image`, {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -159,7 +252,7 @@ export default function TaskDetailPage() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch(`http://localhost:4000/api/mentee/tasks/${taskId}/submit`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -196,6 +289,7 @@ export default function TaskDetailPage() {
     });
   };
 
+
   useEffect(() => {
     if (taskId) {
       fetchTaskDetail();
@@ -205,7 +299,7 @@ export default function TaskDetailPage() {
   if (isLoading) {
     return (
       <div className="p-4">
-        <p className="text-center text-gray-500">로딩 중...</p>
+        <p className="text-center text-gray-900">로딩 중...</p>
       </div>
     );
   }
@@ -238,28 +332,84 @@ export default function TaskDetailPage() {
 
       {/* 과제 정보 */}
       <div className="bg-white p-4 mb-2">
-        <div className="flex items-center gap-2 mb-2">
-          <span className={`text-xs px-2 py-1 rounded ${SUBJECT_LABELS[task.subject].color}`}>
-            {SUBJECT_LABELS[task.subject].label}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <span className={`text-xs px-2 py-1 rounded ${getSubjectColor(task.subject)}`}>
+            {getSubjectLabel(task.subject)}
           </span>
-          {task.isFixed && <span className="text-xs text-gray-500">멘토 고정</span>}
-          {task.isCompleted && (
-            <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">완료</span>
+          {task.isFixed && <span className="text-xs text-gray-500">멘토 지정</span>}
+          {/* 과제 상태 표시 */}
+          {task.submissions.length === 0 ? (
+            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded">
+              미제출
+            </span>
+          ) : task.isApproved || task.feedbacks.length > 0 ? (
+            <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded font-medium">
+              ✓ 피드백 완료
+            </span>
+          ) : (
+            <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded font-medium">
+              제출됨
+            </span>
           )}
         </div>
 
-        <h2 className="text-xl font-bold mb-2">{task.title}</h2>
+        <h2 className={`text-xl font-bold mb-2 ${task.submissions.length > 0 ? 'line-through text-gray-400' : ''}`}>
+          {task.title}
+        </h2>
 
         {task.description && <p className="text-gray-700 mb-2">{task.description}</p>}
 
-        <p className="text-sm text-gray-500">📅 {formatDate(task.date)}</p>
+        <p className="text-sm text-gray-600">📅 {formatDate(task.date)}</p>
 
         {task.studyLogs.length > 0 && (
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-600 mt-1">
             ⏱️ 공부 시간:{' '}
             {task.studyLogs.reduce((sum, log) => sum + log.duration, 0)}분
           </p>
         )}
+
+        {/* 자가점검 */}
+        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+          <label className="block text-sm font-medium text-gray-700 mb-2">자가점검</label>
+          <div className="flex gap-2 flex-wrap">
+            {SELF_CHECK_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={async () => {
+                  try {
+                    const token = localStorage.getItem('token');
+                    const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${task.id}/self-check`, {
+                      method: 'PATCH',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                      },
+                      body: JSON.stringify({ selfCheck: option.value }),
+                    });
+                    if (res.ok) {
+                      fetchTaskDetail();
+                    }
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+                className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                  task.selfCheck === option.value
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                <span className={task.selfCheck === option.value ? '' : option.color}>
+                  {option.icon}
+                </span>{' '}
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            ※ 자가점검은 멘토에게 진행 상황을 알리는 용도입니다. 달성률에는 영향을 주지 않습니다.
+          </p>
+        </div>
       </div>
 
       {/* 학습지 */}
@@ -269,12 +419,12 @@ export default function TaskDetailPage() {
 
           <div className="mb-3">
             <p className="font-semibold text-gray-800">{task.worksheet.title}</p>
-            <span className={`text-xs px-2 py-1 rounded inline-block mt-1 ${SUBJECT_LABELS[task.worksheet.subject].color}`}>
-              {SUBJECT_LABELS[task.worksheet.subject].label}
+            <span className={`text-xs px-2 py-1 rounded inline-block mt-1 ${getSubjectColor(task.worksheet.subject)}`}>
+              {getSubjectLabel(task.worksheet.subject)}
             </span>
           </div>
 
-          {/* PDF 다운로드 */}
+          {/* PDF 보기 */}
           {task.worksheet.type === 'PDF' && task.worksheet.pdfUrl && (
             <div className="mb-4">
               <a
@@ -283,8 +433,8 @@ export default function TaskDetailPage() {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
               >
-                <span>📥</span>
-                <span>PDF 다운로드</span>
+                <span>📄</span>
+                <span>PDF 보기</span>
               </a>
             </div>
           )}
@@ -343,7 +493,7 @@ export default function TaskDetailPage() {
                 <span className="text-sm font-semibold text-gray-900">
                   {feedback.mentor.name} 멘토
                 </span>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-gray-900">
                   {formatDate(feedback.feedbackDate)}
                 </span>
               </div>
@@ -367,7 +517,7 @@ export default function TaskDetailPage() {
           <h3 className="text-lg font-bold mb-3">📤 제출 내역</h3>
           {task.submissions.map((submission) => (
             <div key={submission.id} className="border rounded-lg p-3 mb-3 last:mb-0">
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs text-gray-900 mb-2">
                 제출일: {new Date(submission.createdAt).toLocaleString('ko-KR')}
               </p>
 
@@ -419,22 +569,59 @@ export default function TaskDetailPage() {
           {/* 이미지 선택 */}
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">이미지 업로드</label>
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleImageSelect}
-              className="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
+
+            {/* 모바일: 카메라/갤러리 선택 버튼 */}
+            <div className="md:hidden space-y-2 mb-3">
+              <label className="block w-full">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  onChange={handleImageSelect}
+                  className="hidden"
+                  id="camera-input"
+                />
+                <div className="w-full py-3 px-4 bg-blue-600 text-white text-center rounded-lg cursor-pointer hover:bg-blue-700 active:bg-blue-800">
+                  📷 카메라로 촬영
+                </div>
+              </label>
+
+              <label className="block w-full">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageSelect}
+                  className="hidden"
+                  id="gallery-input"
+                />
+                <div className="w-full py-3 px-4 bg-green-600 text-white text-center rounded-lg cursor-pointer hover:bg-green-700 active:bg-green-800">
+                  🖼️ 갤러리에서 선택
+                </div>
+              </label>
+            </div>
+
+            {/* PC: 기본 파일 선택 */}
+            <div className="hidden md:block">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageSelect}
+                className="w-full text-sm text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              />
+            </div>
+
             {selectedImages.length > 0 && (
-              <div className="mt-2">
-                <p className="text-sm text-gray-600 mb-2">
+              <div className="mt-3">
+                <p className="text-sm text-gray-900 mb-2">
                   선택된 이미지: {selectedImages.length}개
                 </p>
                 <button
                   onClick={handleImageUpload}
                   disabled={isUploading}
-                  className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:bg-gray-400"
+                  className="w-full md:w-auto px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:bg-gray-400"
                 >
                   {isUploading ? '업로드 중...' : '업로드'}
                 </button>

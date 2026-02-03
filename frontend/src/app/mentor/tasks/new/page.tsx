@@ -1,4 +1,5 @@
 'use client';
+import { getApiUrl } from '@/lib/api';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -55,7 +56,7 @@ export default function NewTaskPage() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch('http://localhost:4000/api/mentor/mentees', {
+      const res = await fetch(`${getApiUrl()}/api/mentor/mentees`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -79,8 +80,8 @@ export default function NewTaskPage() {
       const token = localStorage.getItem('token');
 
       const url = subject
-        ? `http://localhost:4000/api/mentor/worksheets?subject=${subject}`
-        : 'http://localhost:4000/api/mentor/worksheets';
+        ? `${getApiUrl()}/api/mentor/worksheets?subject=${subject}`
+        : `${getApiUrl()}/api/mentor/worksheets`;
 
       const res = await fetch(url, {
         headers: {
@@ -171,7 +172,7 @@ export default function NewTaskPage() {
 
       // 각 날짜에 대해 할 일 생성
       for (const dateStr of dates) {
-        const res = await fetch('http://localhost:4000/api/mentor/tasks', {
+        const res = await fetch(`${getApiUrl()}/api/mentor/tasks`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -206,7 +207,7 @@ export default function NewTaskPage() {
     <div className="max-w-3xl mx-auto">
       <div className="mb-8">
         <h2 className="text-2xl font-bold mb-2">할 일 등록</h2>
-        <p className="text-gray-600">멘티에게 새로운 할 일을 등록합니다</p>
+        <p className="text-gray-900">멘티에게 새로운 할 일을 등록합니다</p>
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-lg border p-6 space-y-6">
@@ -304,7 +305,7 @@ export default function NewTaskPage() {
 
           {repeatMode === 'single' ? (
             <div>
-              <label className="block text-xs text-gray-600 mb-1">날짜 선택</label>
+              <label className="block text-xs text-gray-900 mb-1">날짜 선택</label>
               <input
                 type="date"
                 value={formData.date}
@@ -317,7 +318,7 @@ export default function NewTaskPage() {
             <div className="space-y-3 bg-white rounded-md p-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">
+                  <label className="block text-xs text-gray-900 mb-1">
                     시작일 <span className="text-red-600">*</span>
                   </label>
                   <input
@@ -331,7 +332,7 @@ export default function NewTaskPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">
+                  <label className="block text-xs text-gray-900 mb-1">
                     종료일 <span className="text-red-600">*</span>
                   </label>
                   <input
@@ -347,7 +348,7 @@ export default function NewTaskPage() {
               </div>
 
               <div>
-                <label className="block text-xs text-gray-600 mb-2">
+                <label className="block text-xs text-gray-900 mb-2">
                   반복 요일 선택 <span className="text-red-600">*</span>
                 </label>
                 <div className="grid grid-cols-7 gap-1">

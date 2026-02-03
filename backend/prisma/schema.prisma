@@ -38,6 +38,14 @@ enum Role {
   ADMIN
 }
 
+// 멘티 자가점검 상태
+enum SelfCheckStatus {
+  PENDING     // 미시작 (○)
+  IN_PROGRESS // 진행 중 (△)
+  DONE        // 완료 (V)
+  NOT_DONE    // 미진행 (X)
+}
+
 // 멘토-멘티 관계
 model MentorMentee {
   id        String   @id @default(cuid())
@@ -63,7 +71,19 @@ model Task {
   worksheetId String?
   pdfUrl      String?
   isFixed     Boolean  @default(false)
+
+  // [DEPRECATED] 멘토 승인으로 대체 예정 - 하위 호환용 유지
   isCompleted Boolean  @default(false)
+
+  // [NEW] 멘티 자가점검 (V, △, X, ○) - 달성률 영향 없음
+  selfCheck       SelfCheckStatus @default(PENDING)
+  selfCheckedAt   DateTime?
+
+  // [NEW] 멘토 승인 - 달성률 반영
+  isApproved      Boolean   @default(false)
+  approvedAt      DateTime?
+  approvedBy      String?   // 승인한 멘토 ID
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -135,7 +155,12 @@ model StudyTimeLog {
   taskId    String?
   subject   String
   date      DateTime @db.Date
-  duration  Int      // 분 단위
+  duration  Int      // 분 단위 (기존 방식)
+
+  // [NEW] 타임테이블용 시작/종료 시간
+  startTime String?  // "06:00" 형식
+  endTime   String?  // "07:30" 형식
+
   createdAt DateTime @default(now())
 
   mentee User  @relation(fields: [menteeId], references: [id])

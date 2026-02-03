@@ -14,13 +14,20 @@ router.get('/planner/daily', async (req: AuthRequest, res: Response) => {
     const { date } = req.query;
     const menteeId = req.user!.userId;
 
+    // 날짜 범위로 조회 (시간대 문제 해결)
     const targetDate = date ? new Date(date as string) : new Date();
     targetDate.setHours(0, 0, 0, 0);
+
+    const nextDay = new Date(targetDate);
+    nextDay.setDate(nextDay.getDate() + 1);
 
     const tasks = await prisma.task.findMany({
       where: {
         menteeId,
-        date: targetDate,
+        date: {
+          gte: targetDate,
+          lt: nextDay,
+        },
       },
       include: {
         worksheet: true,
@@ -33,7 +40,10 @@ router.get('/planner/daily', async (req: AuthRequest, res: Response) => {
     const comment = await prisma.plannerComment.findFirst({
       where: {
         menteeId,
-        date: targetDate,
+        date: {
+          gte: targetDate,
+          lt: nextDay,
+        },
       },
     });
 
@@ -50,13 +60,20 @@ router.get('/planner', async (req: AuthRequest, res: Response) => {
     const { date } = req.query;
     const menteeId = req.user!.userId;
 
+    // 날짜 범위로 조회 (시간대 문제 해결)
     const targetDate = date ? new Date(date as string) : new Date();
     targetDate.setHours(0, 0, 0, 0);
+
+    const nextDay = new Date(targetDate);
+    nextDay.setDate(nextDay.getDate() + 1);
 
     const tasks = await prisma.task.findMany({
       where: {
         menteeId,
-        date: targetDate,
+        date: {
+          gte: targetDate,
+          lt: nextDay,
+        },
       },
       include: {
         worksheet: true,
@@ -69,7 +86,10 @@ router.get('/planner', async (req: AuthRequest, res: Response) => {
     const comment = await prisma.plannerComment.findFirst({
       where: {
         menteeId,
-        date: targetDate,
+        date: {
+          gte: targetDate,
+          lt: nextDay,
+        },
       },
     });
 
@@ -106,22 +126,28 @@ router.get('/planner/weekly', async (req: AuthRequest, res: Response) => {
       orderBy: { date: 'asc' },
     });
 
-    // 주간 통계 계산
-    const stats = {
+    // 주간 통계 계산 (과제 제출 기준)
+    const stats: {
+      totalTasks: number;
+      completedTasks: number;
+      totalStudyTime: number;
+      subjectStats: Record<string, { total: number; completed: number; studyTime: number }>;
+    } = {
       totalTasks: tasks.length,
-      completedTasks: tasks.filter((t) => t.isCompleted).length,
+      completedTasks: tasks.filter((t) => t.submissions && t.submissions.length > 0).length,
       totalStudyTime: 0,
-      subjectStats: {
-        KOREAN: { total: 0, completed: 0, studyTime: 0 },
-        ENGLISH: { total: 0, completed: 0, studyTime: 0 },
-        MATH: { total: 0, completed: 0, studyTime: 0 },
-      },
+      subjectStats: {},
     };
 
     tasks.forEach((task) => {
-      const subject = task.subject as 'KOREAN' | 'ENGLISH' | 'MATH';
+      const subject = task.subject;
+      // 과목별 동적 추가
+      if (!stats.subjectStats[subject]) {
+        stats.subjectStats[subject] = { total: 0, completed: 0, studyTime: 0 };
+      }
       stats.subjectStats[subject].total++;
-      if (task.isCompleted) {
+      // 과제 제출 기준으로 달성률 계산
+      if (task.submissions && task.submissions.length > 0) {
         stats.subjectStats[subject].completed++;
       }
 
@@ -175,25 +201,31 @@ router.get('/planner/monthly', async (req: AuthRequest, res: Response) => {
       tasksByDate[dateKey].push(task);
     });
 
-    // 월간 통계
-    const stats = {
+    // 월간 통계 (과제 제출 기준)
+    const stats: {
+      totalTasks: number;
+      completedTasks: number;
+      totalStudyTime: number;
+      subjectStats: Record<string, { total: number; completed: number; studyTime: number }>;
+    } = {
       totalTasks: tasks.length,
-      completedTasks: tasks.filter((t) => t.isCompleted).length,
+      completedTasks: tasks.filter((t) => t.submissions && t.submissions.length > 0).length,
       totalStudyTime: tasks.reduce(
         (sum, task) => sum + task.studyLogs.reduce((s, log) => s + log.duration, 0),
         0
       ),
-      subjectStats: {
-        KOREAN: { total: 0, completed: 0, studyTime: 0 },
-        ENGLISH: { total: 0, completed: 0, studyTime: 0 },
-        MATH: { total: 0, completed: 0, studyTime: 0 },
-      },
+      subjectStats: {},
     };
 
     tasks.forEach((task) => {
-      const subject = task.subject as 'KOREAN' | 'ENGLISH' | 'MATH';
+      const subject = task.subject;
+      // 과목별 동적 추가
+      if (!stats.subjectStats[subject]) {
+        stats.subjectStats[subject] = { total: 0, completed: 0, studyTime: 0 };
+      }
       stats.subjectStats[subject].total++;
-      if (task.isCompleted) {
+      // 과제 제출 기준으로 달성률 계산
+      if (task.submissions && task.submissions.length > 0) {
         stats.subjectStats[subject].completed++;
       }
 
@@ -310,7 +342,20 @@ router.delete('/tasks/:id', async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: '멘토가 등록한 할 일은 삭제할 수 없습니다.' });
     }
 
-    await prisma.task.delete({ where: { id } });
+    // Cascade delete: 관련 데이터를 모두 삭제
+    await prisma.$transaction(async (tx) => {
+      // 1. 과제 제출 내역 삭제
+      await tx.taskSubmission.deleteMany({ where: { taskId: id } });
+
+      // 2. 피드백 삭제
+      await tx.feedback.deleteMany({ where: { taskId: id } });
+
+      // 3. 공부 시간 기록 삭제
+      await tx.studyTimeLog.deleteMany({ where: { taskId: id } });
+
+      // 4. 할 일 삭제
+      await tx.task.delete({ where: { id } });
+    });
 
     res.json({ message: '할 일이 삭제되었습니다.' });
   } catch (error) {
@@ -319,7 +364,7 @@ router.delete('/tasks/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 할 일 완료 처리
+// 할 일 완료 처리 (DEPRECATED - 하위 호환용)
 router.patch('/tasks/:id/complete', async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
@@ -334,6 +379,46 @@ router.patch('/tasks/:id/complete', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Complete task error:', error);
     res.status(500).json({ error: '할 일 완료 처리에 실패했습니다.' });
+  }
+});
+
+// 멘티 자가점검 (V, △, X, ○) - 달성률 영향 없음
+router.patch('/tasks/:id/self-check', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const menteeId = req.user!.userId;
+    const { selfCheck } = req.body as { selfCheck: 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'NOT_DONE' };
+
+    // 유효한 상태값인지 확인
+    const validStatuses = ['PENDING', 'IN_PROGRESS', 'DONE', 'NOT_DONE'];
+    if (!validStatuses.includes(selfCheck)) {
+      return res.status(400).json({ error: '유효하지 않은 상태값입니다.' });
+    }
+
+    // 자신의 과제인지 확인
+    const existingTask = await prisma.task.findUnique({ where: { id } });
+    if (!existingTask) {
+      return res.status(404).json({ error: '할 일을 찾을 수 없습니다.' });
+    }
+    if (existingTask.menteeId !== menteeId) {
+      return res.status(403).json({ error: '자가점검 권한이 없습니다.' });
+    }
+
+    const task = await prisma.task.update({
+      where: { id },
+      data: {
+        selfCheck,
+        selfCheckedAt: new Date(),
+      },
+    });
+
+    res.json({
+      task,
+      message: '자가점검이 저장되었습니다.',
+    });
+  } catch (error) {
+    console.error('Self check error:', error);
+    res.status(500).json({ error: '자가점검 저장에 실패했습니다.' });
   }
 });
 
@@ -478,28 +563,30 @@ router.post('/comments', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// 통계 조회 (과목별 달성률)
+// 통계 조회 (과목별 달성률 - 과제 제출 기준)
 router.get('/stats', async (req: AuthRequest, res: Response) => {
   try {
     const menteeId = req.user!.userId;
 
-    const tasks = await prisma.task.groupBy({
-      by: ['subject', 'isCompleted'],
+    // 모든 과제 조회 후 통계 계산
+    const tasks = await prisma.task.findMany({
       where: { menteeId },
-      _count: true,
+      include: {
+        submissions: true,
+      },
     });
 
-    const stats = {
-      KOREAN: { total: 0, completed: 0 },
-      ENGLISH: { total: 0, completed: 0 },
-      MATH: { total: 0, completed: 0 },
-    };
+    const stats: Record<string, { total: number; completed: number }> = {};
 
     tasks.forEach((t) => {
-      const subject = t.subject as 'KOREAN' | 'ENGLISH' | 'MATH';
-      stats[subject].total += t._count;
-      if (t.isCompleted) {
-        stats[subject].completed += t._count;
+      const subject = t.subject;
+      if (!stats[subject]) {
+        stats[subject] = { total: 0, completed: 0 };
+      }
+      stats[subject].total++;
+      // 과제 제출 기준으로 달성률 계산
+      if (t.submissions && t.submissions.length > 0) {
+        stats[subject].completed++;
       }
     });
 
@@ -507,6 +594,148 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Stats error:', error);
     res.status(500).json({ error: '통계를 불러오는데 실패했습니다.' });
+  }
+});
+
+// 과제 목록 조회 (다가오는/진행중/완료)
+router.get('/assignments', async (req: AuthRequest, res: Response) => {
+  try {
+    const menteeId = req.user!.userId;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // 멘토가 지정한 과제만 조회 (isFixed: true)
+    const allTasks = await prisma.task.findMany({
+      where: {
+        menteeId,
+        isFixed: true,
+      },
+      include: {
+        worksheet: true,
+        submissions: true,
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    // 분류
+    // - upcoming: 마감일이 내일 이후 (오늘 제외)
+    // - inProgress: 마감일이 오늘인 미제출 과제
+    // - completed: 제출된 과제 + 마감일이 지난 미제출 과제 (미제출 표시)
+    const upcoming: any[] = [];
+    const inProgress: any[] = [];
+    const completed: any[] = [];
+
+    allTasks.forEach((task) => {
+      const taskDate = new Date(task.date);
+      taskDate.setHours(0, 0, 0, 0);
+
+      // 과제 제출 여부로 완료 판단
+      const isSubmitted = task.submissions && task.submissions.length > 0;
+
+      if (isSubmitted) {
+        // 제출된 과제
+        completed.push({ ...task, status: 'completed' });
+      } else if (taskDate < today) {
+        // 마감일이 지난 미제출 과제 -> 완료 탭으로 이동, 미제출 표시
+        completed.push({ ...task, status: 'missed' });
+      } else if (taskDate.getTime() === today.getTime()) {
+        // 오늘 마감인 과제
+        inProgress.push({ ...task, status: 'inProgress' });
+      } else {
+        // 마감일이 내일 이후
+        upcoming.push({ ...task, status: 'upcoming' });
+      }
+    });
+
+    // 완료된 과제는 최신순 정렬
+    completed.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    res.json({ upcoming, inProgress, completed });
+  } catch (error) {
+    console.error('Assignments error:', error);
+    res.status(500).json({ error: '과제 목록을 불러오는데 실패했습니다.' });
+  }
+});
+
+// 오늘 학습 진행율 + 어제 피드백 요약 조회
+router.get('/dashboard', async (req: AuthRequest, res: Response) => {
+  try {
+    const menteeId = req.user!.userId;
+
+    // 오늘 날짜 (날짜 범위로 조회)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // 어제 날짜
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    // 오늘의 과제 조회 (날짜 범위)
+    const todayTasks = await prisma.task.findMany({
+      where: {
+        menteeId,
+        date: {
+          gte: today,
+          lt: tomorrow,
+        },
+      },
+      include: {
+        submissions: true,
+      },
+    });
+
+    // 과제 제출 기준으로 달성률 계산
+    const submittedCount = todayTasks.filter((t) => t.submissions && t.submissions.length > 0).length;
+    const todayStats = {
+      total: todayTasks.length,
+      completed: submittedCount,
+      progressRate: todayTasks.length > 0
+        ? Math.round((submittedCount / todayTasks.length) * 100)
+        : 0,
+    };
+
+    // 어제 받은 피드백 조회
+    const yesterdayFeedbacks = await prisma.feedback.findMany({
+      where: {
+        task: {
+          menteeId,
+        },
+        feedbackDate: {
+          gte: yesterday,
+          lt: today,
+        },
+      },
+      include: {
+        task: {
+          select: {
+            title: true,
+            subject: true,
+          },
+        },
+        mentor: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        feedbackDate: 'desc',
+      },
+    });
+
+    res.json({
+      todayStats,
+      yesterdayFeedbacks,
+    });
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.status(500).json({ error: '대시보드 정보를 불러오는데 실패했습니다.' });
   }
 });
 

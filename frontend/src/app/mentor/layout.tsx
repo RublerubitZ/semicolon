@@ -31,17 +31,17 @@ export default function MentorLayout({
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* 멘토 전용 레이아웃 (PC 최적화) */}
-      <header className="bg-white border-b">
+      <header className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <h1 className="text-xl font-bold">설스터디 - 멘토</h1>
+          <h1 className="text-xl font-bold dark:text-white">설스터디 - 멘토</h1>
           <button
             onClick={() => {
               localStorage.clear();
               router.push('/login');
             }}
-            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+            className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 hover:text-gray-900 dark:hover:text-white"
           >
             로그아웃
           </button>
@@ -50,15 +50,15 @@ export default function MentorLayout({
 
       <div className="max-w-7xl mx-auto flex">
         {/* 사이드바 */}
-        <aside className="w-64 bg-white border-r min-h-screen p-4">
+        <aside className="w-64 bg-white dark:bg-gray-800 border-r dark:border-gray-700 min-h-screen p-4">
           <nav className="space-y-2">
-            <a href="/mentor" className="block px-4 py-2 rounded hover:bg-gray-100">
+            <a href="/mentor" className="block px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-300">
               멘티 관리
             </a>
-            <a href="/mentor/worksheets" className="block px-4 py-2 rounded hover:bg-gray-100">
+            <a href="/mentor/worksheets" className="block px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-300">
               학습지 관리
             </a>
-            <a href="/mentor/tasks/new" className="block px-4 py-2 rounded hover:bg-gray-100">
+            <a href="/mentor/tasks/new" className="block px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-300">
               할 일 등록
             </a>
           </nav>

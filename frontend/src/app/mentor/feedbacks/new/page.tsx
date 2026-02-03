@@ -1,4 +1,5 @@
 'use client';
+import { getApiUrl } from '@/lib/api';
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -49,7 +50,7 @@ function FeedbackForm() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch(`http://localhost:4000/api/mentee/tasks/${taskId}`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -72,6 +73,9 @@ function FeedbackForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // 이미 제출 중이면 무시 (더블클릭 방지)
+    if (isSubmitting) return;
+
     if (!formData.content || !formData.summary) {
       alert('모든 필드를 입력해주세요.');
       return;
@@ -86,7 +90,7 @@ function FeedbackForm() {
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch('http://localhost:4000/api/mentor/feedbacks', {
+      const res = await fetch(`${getApiUrl()}/api/mentor/feedbacks`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -129,7 +133,7 @@ function FeedbackForm() {
   if (!task) {
     return (
       <div className="flex justify-center items-center h-64">
-        <p className="text-gray-500">로딩 중...</p>
+        <p className="text-gray-900">로딩 중...</p>
       </div>
     );
   }
@@ -140,12 +144,12 @@ function FeedbackForm() {
       <div className="mb-6">
         <button
           onClick={() => router.back()}
-          className="text-sm text-gray-600 hover:text-gray-900 mb-2"
+          className="text-sm text-gray-900 hover:text-gray-900 mb-2"
         >
           ← 뒤로가기
         </button>
         <h2 className="text-2xl font-bold mb-2">피드백 작성</h2>
-        <p className="text-gray-600">학생의 학습 결과에 대한 피드백을 작성합니다</p>
+        <p className="text-gray-900">학생의 학습 결과에 대한 피드백을 작성합니다</p>
       </div>
 
       {/* 과제 정보 */}
@@ -159,9 +163,9 @@ function FeedbackForm() {
             </div>
             <h3 className="text-lg font-semibold mb-1">{task.title}</h3>
             {task.description && (
-              <p className="text-sm text-gray-600 mb-2">{task.description}</p>
+              <p className="text-sm text-gray-900 mb-2">{task.description}</p>
             )}
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-900">
               멘티: {task.mentee.nickname || task.mentee.name}
             </p>
           </div>
@@ -174,22 +178,44 @@ function FeedbackForm() {
             <div className="space-y-4">
               {task.submissions.map((submission) => (
                 <div key={submission.id} className="bg-gray-50 rounded-lg p-4">
-                  <p className="text-xs text-gray-500 mb-2">
-                    {new Date(submission.createdAt).toLocaleString('ko-KR')}
+                  <p className="text-xs text-gray-900 mb-2">
+                    제출일: {new Date(submission.createdAt).toLocaleString('ko-KR')}
                   </p>
                   {submission.comment && (
-                    <p className="text-sm mb-3">{submission.comment}</p>
+                    <div className="bg-white rounded p-3 mb-3">
+                      <p className="text-xs text-gray-900 font-medium mb-1">멘티 코멘트:</p>
+                      <p className="text-sm">{submission.comment}</p>
+                    </div>
                   )}
                   {submission.imageUrls.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {submission.imageUrls.map((url, idx) => (
-                        <img
-                          key={idx}
-                          src={url}
-                          alt={`제출 이미지 ${idx + 1}`}
-                          className="w-full h-32 object-cover rounded border"
-                        />
-                      ))}
+                    <div>
+                      <p className="text-xs text-gray-900 font-medium mb-2">
+                        제출 이미지 ({submission.imageUrls.length}개)
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {submission.imageUrls.map((url, idx) => (
+                          <a
+                            key={idx}
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block aspect-square bg-white rounded-lg overflow-hidden border-2 hover:border-blue-500 transition-colors"
+                          >
+                            <img
+                              src={url}
+                              alt={`제출 이미지 ${idx + 1}`}
+                              className="w-full h-full object-contain hover:scale-105 transition-transform"
+                              onError={(e) => {
+                                console.error('Image load error:', url);
+                                e.currentTarget.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect width="100" height="100" fill="%23ddd"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999"%3E이미지 로드 실패%3C/text%3E%3C/svg%3E';
+                              }}
+                            />
+                          </a>
+                        ))}
+                      </div>
+                      <p className="text-xs text-gray-900 mt-2">
+                        💡 이미지를 클릭하면 새 탭에서 크게 볼 수 있습니다
+                      </p>
                     </div>
                   )}
                 </div>
@@ -200,7 +226,15 @@ function FeedbackForm() {
 
         {task.submissions.length === 0 && (
           <div className="border-t pt-4">
-            <p className="text-sm text-gray-500">아직 제출 내용이 없습니다.</p>
+            <p className="text-sm text-gray-900 text-center py-4">
+              아직 제출 내용이 없습니다.
+            </p>
+          </div>
+        )}
+
+        {task.submissions.length === 0 && (
+          <div className="border-t pt-4">
+            <p className="text-sm text-gray-900">아직 제출 내용이 없습니다.</p>
           </div>
         )}
       </div>
@@ -220,7 +254,7 @@ function FeedbackForm() {
             placeholder="예: 전반적으로 우수한 결과입니다"
             required
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-gray-900 mt-1">
             멘티가 한눈에 볼 수 있는 짧은 요약을 작성하세요
           </p>
         </div>
@@ -238,7 +272,7 @@ function FeedbackForm() {
             placeholder="구체적인 피드백을 작성하세요.&#10;&#10;잘한 점:&#10;- &#10;&#10;개선할 점:&#10;- &#10;&#10;다음 학습 방향:&#10;- "
             required
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-gray-900 mt-1">
             잘한 점, 개선할 점, 다음 학습 방향 등을 구체적으로 작성하세요
           </p>
         </div>
@@ -267,7 +301,7 @@ function FeedbackForm() {
 
 export default function NewFeedbackPage() {
   return (
-    <Suspense fallback={<div className="flex justify-center items-center h-64"><p className="text-gray-500">로딩 중...</p></div>}>
+    <Suspense fallback={<div className="flex justify-center items-center h-64"><p className="text-gray-900">로딩 중...</p></div>}>
       <FeedbackForm />
     </Suspense>
   );
