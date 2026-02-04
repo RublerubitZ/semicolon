@@ -1,5 +1,6 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
+import { EditIcon, DeleteIcon } from '@/components/icons';
 
 import { useEffect, useState } from 'react';
 
@@ -460,18 +461,20 @@ export default function WorksheetsPage() {
                 </p>
 
                 {/* 수정/삭제 버튼 */}
-                <div className="flex gap-2 mt-4 pt-3 border-t">
+                <div className="flex gap-2 mt-4 pt-3 border-t justify-end">
                   <button
                     onClick={() => openEditModal(worksheet)}
-                    className="flex-1 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded"
+                    className="p-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
+                    title="수정"
                   >
-                    수정
+                    <EditIcon size={20} />
                   </button>
                   <button
                     onClick={() => handleDeleteWorksheet(worksheet.id)}
-                    className="flex-1 px-3 py-1.5 text-sm bg-red-50 text-red-600 hover:bg-red-100 rounded"
+                    className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                    title="삭제"
                   >
-                    삭제
+                    <DeleteIcon size={20} />
                   </button>
                 </div>
               </div>
@@ -560,9 +563,10 @@ export default function WorksheetsPage() {
                             <button
                               type="button"
                               onClick={() => removeTopic(index)}
-                              className="text-red-600 hover:text-red-800 text-sm"
+                              className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                              title="주제 삭제"
                             >
-                              삭제
+                              <DeleteIcon size={18} />
                             </button>
                           )}
                         </div>
@@ -715,9 +719,10 @@ export default function WorksheetsPage() {
                             <button
                               type="button"
                               onClick={() => removeTopic(index)}
-                              className="text-red-600 hover:text-red-800 text-sm"
+                              className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                              title="주제 삭제"
                             >
-                              삭제
+                              <DeleteIcon size={18} />
                             </button>
                           )}
                         </div>

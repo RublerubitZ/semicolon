@@ -1,5 +1,6 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
+import { EditIcon, DeleteIcon } from '@/components/icons';
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -68,6 +69,14 @@ export default function MenteePlannerPage() {
     description: '',
     subject: 'KOREAN' as Subject,
     date: '',
+  });
+
+  // 일일 전체 피드백 관련 상태
+  const [showDailyFeedbackModal, setShowDailyFeedbackModal] = useState(false);
+  const [dailyFeedback, setDailyFeedback] = useState<any>(null);
+  const [dailyFeedbackForm, setDailyFeedbackForm] = useState({
+    content: '',
+    summary: '',
   });
 
   // 멘티 정보 가져오기
@@ -153,6 +162,104 @@ export default function MenteePlannerPage() {
     });
   };
 
+  // 일일 전체 피드백 조회
+  const fetchDailyFeedback = async () => {
+    if (viewMode !== 'daily') return;
+
+    try {
+      const token = localStorage.getItem('token');
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+
+      const res = await fetch(
+        `${getApiUrl()}/api/mentor/mentees/${menteeId}/daily-feedbacks?date=${dateStr}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      if (!res.ok) throw new Error('일일 피드백을 불러오는데 실패했습니다.');
+
+      const data = await res.json();
+      setDailyFeedback(data);
+    } catch (err) {
+      console.error('Fetch daily feedback error:', err);
+      // 피드백이 없는 경우는 정상이므로 alert 하지 않음
+      setDailyFeedback(null);
+    }
+  };
+
+  // 일일 피드백 모달 열기
+  const openDailyFeedbackModal = () => {
+    if (dailyFeedback) {
+      // 기존 피드백 수정
+      setDailyFeedbackForm({
+        content: dailyFeedback.content,
+        summary: dailyFeedback.summary || '',
+      });
+    } else {
+      // 새 피드백 작성
+      setDailyFeedbackForm({
+        content: '',
+        summary: '',
+      });
+    }
+    setShowDailyFeedbackModal(true);
+  };
+
+  // 일일 피드백 모달 닫기
+  const closeDailyFeedbackModal = () => {
+    setShowDailyFeedbackModal(false);
+    setDailyFeedbackForm({
+      content: '',
+      summary: '',
+    });
+  };
+
+  // 일일 피드백 제출
+  const handleSubmitDailyFeedback = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!dailyFeedbackForm.content || !dailyFeedbackForm.summary) {
+      alert('모든 필드를 입력해주세요.');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const dateStr = format(selectedDate, 'yyyy-MM-dd');
+
+      const method = dailyFeedback ? 'PUT' : 'POST';
+      const url = dailyFeedback
+        ? `${getApiUrl()}/api/mentor/daily-feedbacks/${dailyFeedback.id}`
+        : `${getApiUrl()}/api/mentor/daily-feedbacks`;
+
+      const body = dailyFeedback
+        ? dailyFeedbackForm
+        : {
+            ...dailyFeedbackForm,
+            menteeId,
+            date: dateStr,
+          };
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) throw new Error('일일 피드백 저장에 실패했습니다.');
+
+      alert(dailyFeedback ? '일일 피드백이 수정되었습니다.' : '일일 피드백이 작성되었습니다.');
+      closeDailyFeedbackModal();
+      await fetchDailyFeedback(); // 새로고침
+    } catch (err) {
+      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+    }
+  };
+
   // 과제 수정
   const handleUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -220,6 +327,7 @@ export default function MenteePlannerPage() {
 
   useEffect(() => {
     fetchPlanner();
+    fetchDailyFeedback();
   }, [viewMode, selectedDate, menteeId]);
 
   const getSubjectLabel = (subject: Subject) => {
@@ -234,6 +342,34 @@ export default function MenteePlannerPage() {
       MATH: 'bg-orange-100 text-orange-700',
     };
     return colors[subject];
+  };
+
+  // 피드백 마감 시간 계산 (과제 날짜 다음날 11시)
+  const getFeedbackDeadline = (taskDate: string) => {
+    const deadline = new Date(taskDate);
+    deadline.setDate(deadline.getDate() + 1);
+    deadline.setHours(11, 0, 0, 0);
+    return deadline;
+  };
+
+  // 피드백 마감 시간 표시 텍스트
+  const getFeedbackDeadlineDisplay = (taskDate: string) => {
+    const deadline = getFeedbackDeadline(taskDate);
+    const now = new Date();
+    const isOverdue = now > deadline;
+
+    if (isOverdue) {
+      return {
+        text: '⚠️ 마감 지남',
+        className: 'text-red-600 font-medium',
+      };
+    }
+
+    const tomorrow = format(deadline, 'M월 d일 11:00', { locale: ko });
+    return {
+      text: `마감: ${tomorrow}`,
+      className: 'text-gray-600',
+    };
   };
 
   const changeDate = (direction: 'prev' | 'next') => {
@@ -446,6 +582,14 @@ export default function MenteePlannerPage() {
                         <span>피드백: {task.feedbacks.length}개</span>
                         <span>공부 시간: {Math.floor(studyTime / 60)}분</span>
                       </div>
+                      {/* 피드백 마감 시간 표시 - 제출됨 + 피드백 없음 */}
+                      {task.submissions.length > 0 && task.feedbacks.length === 0 && (
+                        <div className="mt-2">
+                          <span className={`text-xs ${getFeedbackDeadlineDisplay(task.date).className}`}>
+                            {getFeedbackDeadlineDisplay(task.date).text}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-col gap-2">
                       {/* 피드백 작성 버튼 - 제출된 과제에만 표시 */}
@@ -460,26 +604,38 @@ export default function MenteePlannerPage() {
                         </button>
                       )}
                       {task.feedbacks.length > 0 && (
-                        <button
-                          onClick={() =>
-                            router.push(`/mentor/feedbacks/new?taskId=${task.id}`)
-                          }
-                          className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50"
-                        >
-                          피드백 추가
-                        </button>
+                        <>
+                          <button
+                            onClick={() =>
+                              router.push(`/mentor/feedbacks/${task.feedbacks[0].id}/edit`)
+                            }
+                            className="px-3 py-1.5 text-sm bg-green-500 text-white rounded hover:bg-green-600 font-medium"
+                          >
+                            피드백 수정
+                          </button>
+                          <button
+                            onClick={() =>
+                              router.push(`/mentor/feedbacks/new?taskId=${task.id}`)
+                            }
+                            className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50"
+                          >
+                            피드백 추가
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => openEditModal(task)}
-                        className="px-3 py-1.5 text-sm bg-gray-100 rounded hover:bg-gray-200"
+                        className="p-2 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
+                        title="수정"
                       >
-                        수정
+                        <EditIcon size={18} />
                       </button>
                       <button
                         onClick={() => handleDeleteTask(task)}
-                        className="px-3 py-1.5 text-sm bg-red-50 text-red-600 rounded hover:bg-red-100"
+                        className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                        title="삭제"
                       >
-                        삭제
+                        <DeleteIcon size={18} />
                       </button>
                     </div>
                   </div>
@@ -489,6 +645,48 @@ export default function MenteePlannerPage() {
           </div>
         )}
       </div>
+
+      {/* 일일 전체 피드백 (일일 보기에만 표시) */}
+      {viewMode === 'daily' && (
+        <div className="mt-6">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-semibold">일일 전체 피드백</h3>
+            <button
+              onClick={openDailyFeedbackModal}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
+            >
+              {dailyFeedback ? '피드백 수정' : '피드백 작성'}
+            </button>
+          </div>
+
+          {dailyFeedback ? (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-2">
+                  작성일: {new Date(dailyFeedback.createdAt).toLocaleString('ko-KR')}
+                </p>
+                {dailyFeedback.summary && (
+                  <div className="mb-3">
+                    <p className="text-sm font-medium text-gray-700 mb-1">요약</p>
+                    <p className="text-base font-semibold">{dailyFeedback.summary}</p>
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">상세 피드백</p>
+                <p className="text-sm whitespace-pre-wrap">{dailyFeedback.content}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gray-50 border rounded-lg p-6 text-center">
+              <p className="text-gray-600 mb-2">아직 일일 피드백이 작성되지 않았습니다.</p>
+              <p className="text-sm text-gray-500">
+                오늘 학습에 대한 전체적인 피드백을 작성해주세요.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 수정 모달 */}
       {showEditModal && editingTask && (
@@ -573,6 +771,76 @@ export default function MenteePlannerPage() {
                   className="flex-1 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800"
                 >
                   수정하기
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 일일 피드백 모달 */}
+      {showDailyFeedbackModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-bold mb-4">
+              {dailyFeedback ? '일일 피드백 수정' : '일일 피드백 작성'}
+            </h3>
+            <p className="text-sm text-gray-600 mb-6">
+              {format(selectedDate, 'yyyy년 M월 d일 (eee)', { locale: ko })} 전체 학습에 대한 피드백
+            </p>
+
+            <form onSubmit={handleSubmitDailyFeedback} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  피드백 요약 <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={dailyFeedbackForm.summary}
+                  onChange={(e) =>
+                    setDailyFeedbackForm({ ...dailyFeedbackForm, summary: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border rounded-md"
+                  placeholder="예: 오늘 학습 내용을 잘 이해했습니다"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  멘티가 한눈에 볼 수 있는 짧은 요약
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  상세 피드백 <span className="text-red-600">*</span>
+                </label>
+                <textarea
+                  value={dailyFeedbackForm.content}
+                  onChange={(e) =>
+                    setDailyFeedbackForm({ ...dailyFeedbackForm, content: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border rounded-md resize-none"
+                  rows={10}
+                  placeholder="오늘 하루 전체 학습에 대한 피드백을 작성하세요.&#10;&#10;잘한 점:&#10;- &#10;&#10;개선할 점:&#10;- &#10;&#10;내일 학습 방향:&#10;- "
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  과제별 피드백과 별개로, 하루 전체에 대한 종합 피드백을 작성하세요
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeDailyFeedbackModal}
+                  className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  {dailyFeedback ? '수정하기' : '작성하기'}
                 </button>
               </div>
             </form>

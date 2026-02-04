@@ -1,13 +1,16 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { prisma } from '../lib/prisma';
 
 const router = Router();
-const prisma = new PrismaClient();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'seolstudy-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET environment variable is required');
+}
 
 // 로그인
 router.post('/login', async (req: Request, res: Response) => {
@@ -27,6 +30,7 @@ router.post('/login', async (req: Request, res: Response) => {
         name: true,
         nickname: true,
         role: true,
+        grade: true,
         profileImage: true,
       },
     });
@@ -54,6 +58,7 @@ router.post('/login', async (req: Request, res: Response) => {
         name: user.name,
         nickname: user.nickname,
         role: user.role,
+        grade: user.grade,
         profileImage: user.profileImage,
       },
     });
@@ -82,6 +87,7 @@ router.get('/me', async (req: Request, res: Response) => {
         name: true,
         nickname: true,
         role: true,
+        grade: true,
         profileImage: true,
       },
     });
@@ -97,15 +103,16 @@ router.get('/me', async (req: Request, res: Response) => {
   }
 });
 
-// 프로필 업데이트 (닉네임, 프로필 사진)
+// 프로필 업데이트 (닉네임, 프로필 사진, 학년)
 router.patch('/update-profile', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { nickname, profileImage } = req.body;
+    const { nickname, profileImage, grade } = req.body;
 
     const updateData: any = {};
     if (nickname) updateData.nickname = nickname;
     if (profileImage !== undefined) updateData.profileImage = profileImage;
+    if (grade !== undefined) updateData.grade = grade;
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -116,6 +123,7 @@ router.patch('/update-profile', authMiddleware, async (req: AuthRequest, res: Re
         name: true,
         nickname: true,
         role: true,
+        grade: true,
         profileImage: true,
       },
     });

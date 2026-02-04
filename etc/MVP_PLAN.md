@@ -470,41 +470,54 @@ model UserNotificationSetting {
 
 ### Day 1: 기본 인프라 + 인증
 - [x] 프로젝트 초기 설정 (Next.js + Express + Prisma)
-- [ ] DB 스키마 작성 및 마이그레이션
-- [ ] 테스트 계정 시드 데이터
-- [ ] 로그인 API + 페이지
-- [ ] 역할별 라우팅 미들웨어
+- [x] DB 스키마 작성 및 마이그레이션
+- [x] 테스트 계정 시드 데이터
+- [x] 로그인 API + 페이지
+- [x] 역할별 라우팅 미들웨어
 
 ### Day 2: 멘티 플래너 (일일/주간/월간)
-- [ ] 멘티 레이아웃 (모바일 최적화)
-- [ ] 일일 플래너 UI
-- [ ] 할 일 목록 API 연동
-- [ ] 할 일 완료/시간 기록
-- [ ] 코멘트/질문 입력
-- [ ] 주간 플래너 뷰
-- [ ] 월간 플래너 뷰
-- [ ] 플래너 통계 API 연동
+- [x] 멘티 레이아웃 (모바일 최적화)
+- [x] 일일 플래너 UI
+- [x] 할 일 목록 API 연동
+- [x] 할 일 완료/시간 기록
+- [x] 코멘트/질문 입력
+- [x] 주간 플래너 뷰
+- [x] 월간 플래너 뷰
+- [x] 플래너 통계 API 연동
 
 ### Day 3: 과제 상세 + 멘토 화면
-- [ ] 과제 상세 페이지
-- [ ] 학습지 뷰어 (칼럼/PDF)
-- [ ] 이미지 업로드 (Cloudinary)
-- [ ] 멘토 레이아웃 (PC)
-- [ ] 멘티 목록
-- [ ] 할 일 등록 폼
+- [x] 과제 상세 페이지
+- [x] 학습지 뷰어 (칼럼/PDF)
+- [x] 이미지 업로드 (Cloudinary)
+- [x] 멘토 레이아웃 (PC)
+- [x] 멘티 목록
+- [x] 할 일 등록 폼
 
 ### Day 4: 피드백 + 기능 완성
-- [ ] 멘토 피드백 작성
-- [ ] 멘티 피드백 확인
-- [ ] 과목별 필터링
-- [ ] 피드백 요약 표시
+- [x] 멘토 피드백 작성
+- [x] 멘티 피드백 확인
+- [x] 과목별 필터링
+- [x] 피드백 요약 표시
 
 ### Day 5: 추가 기능 + 배포
-- [ ] **마이페이지** (프로필, 과목별 달성률, 상담 버튼)
-- [ ] 월간 캘린더
-- [ ] 버그 수정 + QA
-- [ ] Vercel + Railway 배포
+- [x] **마이페이지** (프로필, 과목별 달성률, 상담 버튼)
+- [x] 월간 캘린더
+- [x] 버그 수정 + QA
+- [x] Vercel + Railway 배포
 - [ ] (선택) 알림 시스템
+
+### 추가 완료된 기능 (2026-02-03)
+- [x] **아이콘 시스템**: react-icons 설치 및 Edit/Delete 아이콘 적용
+  - [x] `/frontend/src/components/icons.ts` 생성
+  - [x] 멘티 플래너 수정/삭제 아이콘 적용
+  - [x] 멘토 학습지/과제 수정/삭제 아이콘 적용
+- [x] **과제 제출 검증 로직 개선**
+  - [x] 멘토 생성 과제(isFixed=true): 이미지 업로드 필수
+  - [x] 멘티 생성 과제(isFixed=false): 이미지 또는 코멘트 선택
+  - [x] 동적 UI 라벨 표시
+- [x] **상태 관리 버그 수정**
+  - [x] 과제 제출 모달 isUploading 상태 초기화
+  - [x] 버튼 활성화 로직 개선
 
 ---
 
@@ -810,7 +823,8 @@ const completionRate = (approvedTasks / totalTasks) * 100;
   │                               │
   │                               ├── 과제 검토
   │                               │
-  │◀─────────────────────────────── 승인 (✅) → 달성률 반영
+  |                               |- 과제 제출 및 달성률 반영
+  │◀─────────────────────────────── 승인 (✅)
   │                               │
   └── 달성률 확인                  │
 ```
@@ -1028,7 +1042,202 @@ DELETE /api/mentee/timetable/:id
 
 ---
 
-## 14. 참고 자료
+## 14. 피드백 시스템 및 시간 기록 개선 (2026-02-03 추가)
+
+### 14.1 요구사항 요약
+
+1. **피드백 시스템 개선**
+   - 전날 과제 피드백 마감 시간 표시 (다음날 11시)
+   - 학생 코멘트에 대한 멘토 답변 (피드백 수정)
+   - 월 단위 리포트
+
+2. **일일 전체 피드백**
+   - 하루 전체 학습에 대한 종합 피드백
+   - 과제별 피드백과 별개
+
+3. **공부 시간 기록 개선**
+   - 시작/종료 시간 직접 입력
+   - 일일 타임라인 차트 (GANTT 스타일)
+
+### 14.2 Phase 1: 피드백 시스템 개선
+
+#### 1.1 피드백 마감 시간 표시
+- [ ] **변경 파일**: `/frontend/src/app/mentor/mentees/[id]/page.tsx`
+  - 각 과제 카드에 마감 시간 표시 추가
+  - 계산 로직: Task의 date + 1일 + 11시
+  - UI: 정상 "마감: 내일 11:00" / 지연 "⚠️ 마감 지남" (빨간색)
+
+- [ ] **변경 파일**: `/frontend/src/app/mentor/feedbacks/new/page.tsx`
+  - 피드백 작성 폼 상단에 마감 시간 표시
+  - 지연된 경우 경고 메시지
+
+#### 1.2 피드백 수정 기능 (학생 코멘트 답변)
+- [ ] **새 파일**: `/frontend/src/app/mentor/feedbacks/[id]/edit/page.tsx`
+  - 기존 피드백 내용 불러오기
+  - 학생의 과제 제출 코멘트 표시 (TaskSubmission.comment)
+  - 피드백 내용 수정 (답변 추가)
+  - PUT `/api/mentor/feedbacks/:id`로 업데이트
+
+**필요한 컴포넌트**:
+- 학생 코멘트 표시 섹션
+- 피드백 수정 폼
+- 저장 버튼
+
+**UI 플로우**:
+1. 멘티 과제 상세 또는 피드백 목록에서 "수정" 버튼
+2. 수정 페이지 이동
+3. 학생 코멘트 확인 → 피드백에 답변 추가
+4. 저장
+
+#### 1.3 월 단위 리포트
+- [ ] **백엔드**: `/backend/src/routes/mentee.ts`
+  - GET `/api/mentee/reports/monthly?year=2026&month=2`
+  - 해당 월의 과제 통계 (total, completed, completionRate)
+  - 과목별 통계 (studyTime, feedbackCount)
+  - 일별 달성률
+  - 전체 요약 반환
+
+- [ ] **프론트엔드**: `/frontend/src/app/mentee/reports/monthly/page.tsx`
+  - 년/월 선택기
+  - 전체 요약 카드 (완료율, 공부시간, 피드백 수)
+  - 과목별 통계 차트
+  - 일별 달성률 그래프
+  - (선택) PDF 다운로드 버튼
+
+### 14.3 Phase 2: 일일 전체 피드백
+
+#### 2.1 DailyFeedback 모델 추가
+- [ ] **Prisma Schema 변경**:
+```prisma
+model DailyFeedback {
+  id           String   @id @default(cuid())
+  menteeId     String
+  mentorId     String
+  date         DateTime @db.Date
+  content      String   // 일일 전체 피드백
+  summary      String?  // 한 줄 요약
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  mentee User @relation("DailyFeedbacksMentee", fields: [menteeId], references: [id])
+  mentor User @relation("DailyFeedbacksMentor", fields: [mentorId], references: [id])
+
+  @@unique([menteeId, date]) // 멘티당 날짜별로 하나만
+  @@index([menteeId, date])
+}
+```
+
+- [ ] **User 모델에 relation 추가**:
+```prisma
+model User {
+  // 기존 필드...
+  dailyFeedbacksGiven    DailyFeedback[] @relation("DailyFeedbacksMentor")
+  dailyFeedbacksReceived DailyFeedback[] @relation("DailyFeedbacksMentee")
+}
+```
+
+- [ ] **마이그레이션**: `npx prisma migrate dev --name add_daily_feedback`
+
+#### 2.2 API 엔드포인트
+- [ ] **멘토 - 일일 피드백 작성/수정**
+  - POST `/api/mentor/daily-feedbacks`
+  - PUT `/api/mentor/daily-feedbacks/:id`
+  - Body: `{ menteeId, date, content, summary? }`
+
+- [ ] **멘티 - 일일 피드백 조회**
+  - GET `/api/mentee/daily-feedbacks?date=2026-02-03`
+  - GET `/api/mentee/daily-feedbacks/monthly?year=2026&month=2`
+
+#### 2.3 UI 구현
+- [ ] **멘토 페이지**: `/frontend/src/app/mentor/mentees/[id]/page.tsx`
+  - 일일 플래너 하단에 "일일 전체 피드백 작성" 버튼 추가
+  - 모달 또는 별도 페이지로 작성
+
+- [ ] **멘티 페이지**: `/frontend/src/app/mentee/page.tsx`
+  - 상단에 일일 피드백 카드 표시 (있을 경우)
+  - 노란색 배경, 멘토 이름, 요약/내용
+
+### 14.4 Phase 3: 공부 시간 기록 개선
+
+#### 3.1 시작/종료 시간 입력 UI
+- [ ] **기존 코드 수정**: `/frontend/src/app/mentee/page.tsx`
+  - 기존: `prompt()`로 duration만 입력
+  - 변경: 모달로 startTime, endTime 입력
+  - 상태 추가: `showTimeModal`, `timeRecord { taskId, startTime, endTime }`
+  - duration 자동 계산 로직 추가
+
+**모달 UI**:
+- 시작 시간 입력 (`<input type="time">`)
+- 종료 시간 입력 (`<input type="time">`)
+- 자동 계산된 duration 표시 ("1시간 30분")
+- 저장 버튼
+
+#### 3.2 백엔드 API 수정
+- [ ] **기존 API 확장**: POST `/api/mentee/tasks/:id/time`
+  - Body에 `startTime`, `endTime` 추가
+  - StudyTimeLog 생성 시 startTime, endTime 저장
+  - 기존 duration 필드는 유지 (하위 호환)
+
+**Note**: StudyTimeLog 모델에 이미 startTime, endTime 필드 존재 (현재 미사용)
+
+#### 3.3 일일 타임라인 차트
+- [ ] **새 컴포넌트**: `/frontend/src/components/TimelineChart.tsx`
+  - GANTT 스타일 차트
+  - 가로축: 00:00 ~ 24:00 (24시간)
+  - 세로축: 각 공부 기록
+  - 막대: 시작/종료 시간에 따라 길이 표시
+  - 색상: 과목별로 다른 색
+  - 호버: 과제 제목, 공부 시간 표시
+
+**라이브러리 옵션**:
+1. Recharts (추천)
+2. Chart.js
+3. 순수 CSS (Tailwind + Flexbox)
+
+**통합 위치**:
+- `/frontend/src/app/mentee/page.tsx` (일일 플래너 하단)
+- `/frontend/src/app/mentee/tasks/[id]/page.tsx` (과제 상세)
+
+### 14.5 Phase 4: 추가 개선사항
+
+- [ ] **피드백 목록 UI 개선**: `/frontend/src/app/mentee/feedbacks/page.tsx`
+  - 일일 전체 피드백과 과제별 피드백 구분 표시
+  - 필터에 "전체 피드백" 탭 추가
+
+- [ ] **(선택) 월 리포트 PDF 다운로드**
+  - 라이브러리: `jsPDF` 또는 `react-pdf`
+  - 월간 리포트를 PDF로 변환
+  - "다운로드" 버튼 추가
+
+### 14.6 구현 순서
+
+1. [ ] **Phase 1.1**: 피드백 마감 시간 표시 (프론트엔드만)
+2. [ ] **Phase 3.1-3.2**: 시작/종료 시간 입력 (백엔드 + 프론트엔드)
+3. [ ] **Phase 3.3**: 타임라인 차트 (프론트엔드)
+4. [ ] **Phase 2**: 일일 전체 피드백 (DB 마이그레이션 + API + UI)
+5. [ ] **Phase 1.2**: 피드백 수정 기능 (프론트엔드)
+6. [ ] **Phase 1.3**: 월 리포트 (API + UI)
+
+### 14.7 테스트 계획
+
+**기능 테스트**:
+1. 피드백 마감 시간 표시 확인
+2. 시작/종료 시간 입력 → duration 자동 계산 확인
+3. 타임라인 차트 렌더링 확인
+4. 일일 전체 피드백 작성/조회 확인
+5. 피드백 수정 기능 확인
+6. 월 리포트 조회 및 통계 정확성 확인
+
+**엣지 케이스**:
+- 시작 시간 > 종료 시간 (에러 처리)
+- 24시간 넘는 공부 기록 (자정 넘어가는 경우)
+- 같은 시간대 여러 과제 (타임라인 겹침)
+- 피드백 없는 날의 리포트
+- 월 초/월 말 경계 테스트
+
+---
+
+## 15. 참고 자료
 
 - 설스터디 노션 페이지: https://malachite-fontina-5e0.notion.site/2cfa56db406080f68bd2f8624b344a63
 - 상담 신청 폼: https://forms.gle/FchKdDcm23JdGHpK9

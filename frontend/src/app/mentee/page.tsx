@@ -1,5 +1,8 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
+import { EditIcon, DeleteIcon } from '@/components/icons';
+import TimelineChart from '@/components/TimelineChart';
+import NotificationBell from '@/components/NotificationBell';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -90,17 +93,24 @@ export default function MenteeDashboard() {
   const [user, setUser] = useState<any>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [plannerData, setPlannerData] = useState<PlannerData | null>(null);
-  const [commentText, setCommentText] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
+  const [dailyFeedback, setDailyFeedback] = useState<any>(null);
 
   // 모달 상태
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showEditTaskModal, setShowEditTaskModal] = useState(false);
   const [showStudyTimeModal, setShowStudyTimeModal] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string>('');
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+  // 공부 시간 기록 상태
+  const [timeRecord, setTimeRecord] = useState({
+    taskId: '',
+    startTime: '',
+    endTime: '',
+  });
 
   // 할 일 추가 폼 상태
   const [newTask, setNewTask] = useState({
@@ -180,7 +190,6 @@ export default function MenteeDashboard() {
 
       const data = await res.json();
       setPlannerData(data);
-      setCommentText(data.comment?.content || '');
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
@@ -207,34 +216,6 @@ export default function MenteeDashboard() {
       }
 
       fetchPlannerData(currentDate);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
-    }
-  };
-
-  // 코멘트 저장
-  const handleSaveComment = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const dateStr = formatDateForApi(currentDate);
-
-      const res = await fetch(`${getApiUrl()}/api/mentee/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          date: dateStr,
-          content: commentText,
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error('코멘트 저장에 실패했습니다.');
-      }
-
-      alert('코멘트가 저장되었습니다.');
     } catch (err) {
       alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
     }
@@ -435,12 +416,46 @@ export default function MenteeDashboard() {
     }
   };
 
-  // 공부 시간 기록 (간단 버전)
-  const handleRecordStudyTime = async (taskId: string) => {
-    const duration = prompt('공부 시간을 입력하세요 (분):');
-    if (!duration || isNaN(Number(duration))) {
+  // 시간을 분으로 변환 ("09:00" -> 540)
+  const parseTime = (timeStr: string): number => {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+
+  // 분을 시간 문자열로 변환 (90 -> "1시간 30분")
+  const formatDuration = (minutes: number): string => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours === 0) return `${mins}분`;
+    if (mins === 0) return `${hours}시간`;
+    return `${hours}시간 ${mins}분`;
+  };
+
+  // 공부 시간 기록 모달 열기
+  const handleRecordStudyTime = (taskId: string) => {
+    setTimeRecord({ taskId, startTime: '', endTime: '' });
+    setShowStudyTimeModal(true);
+  };
+
+  // 공부 시간 기록 제출
+  const handleSubmitStudyTime = async () => {
+    const { taskId, startTime, endTime } = timeRecord;
+
+    // 유효성 검사
+    if (!startTime || !endTime) {
+      alert('시작 시간과 종료 시간을 모두 입력해주세요.');
       return;
     }
+
+    const startMinutes = parseTime(startTime);
+    const endMinutes = parseTime(endTime);
+
+    if (startMinutes >= endMinutes) {
+      alert('종료 시간은 시작 시간보다 늦어야 합니다.');
+      return;
+    }
+
+    const duration = endMinutes - startMinutes;
 
     try {
       const token = localStorage.getItem('token');
@@ -453,7 +468,9 @@ export default function MenteeDashboard() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          duration: Number(duration),
+          duration,
+          startTime,
+          endTime,
           date: dateStr,
         }),
       });
@@ -463,6 +480,8 @@ export default function MenteeDashboard() {
       }
 
       alert('공부 시간이 기록되었습니다.');
+      setShowStudyTimeModal(false);
+      setTimeRecord({ taskId: '', startTime: '', endTime: '' });
       fetchPlannerData(currentDate);
     } catch (err) {
       alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
@@ -507,25 +526,50 @@ export default function MenteeDashboard() {
   };
 
   // 과제 제출 모달 열기
-  const openSubmitModal = (taskId: string) => {
-    setSelectedTaskId(taskId);
+  const openSubmitModal = (task: Task) => {
+    setSelectedTask(task);
     setShowSubmitModal(true);
     setSubmitComment('');
     setSelectedImages([]);
     setUploadedImageUrls([]);
+    setIsUploading(false); // 업로드 상태 초기화
   };
 
   // 과제 제출
   const handleSubmitTask = async () => {
-    if (uploadedImageUrls.length === 0) {
-      alert('최소 1개의 이미지를 업로드해주세요.');
+    if (!selectedTask) {
+      console.log('선택된 과제가 없습니다.');
       return;
     }
+
+    console.log('과제 제출 시도:', {
+      isFixed: selectedTask.isFixed,
+      hasImages: uploadedImageUrls.length > 0,
+      imageCount: uploadedImageUrls.length,
+      hasComment: !!submitComment.trim(),
+      commentLength: submitComment.length,
+    });
+
+    // 멘토가 생성한 과제(isFixed=true): 이미지 필수
+    if (selectedTask.isFixed) {
+      if (uploadedImageUrls.length === 0) {
+        alert('멘토가 생성한 과제는 이미지 업로드가 필수입니다.');
+        return;
+      }
+    } else {
+      // 멘티가 자체 생성한 과제(isFixed=false): 이미지 또는 코멘트 중 하나는 필수
+      if (uploadedImageUrls.length === 0 && !submitComment.trim()) {
+        alert('이미지를 업로드하거나 코멘트를 작성해주세요.');
+        return;
+      }
+    }
+
+    console.log('검증 통과, 제출 시작');
 
     try {
       const token = localStorage.getItem('token');
 
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${selectedTaskId}/submit`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${selectedTask.id}/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -538,13 +582,20 @@ export default function MenteeDashboard() {
       });
 
       if (!res.ok) {
-        throw new Error('과제 제출에 실패했습니다.');
+        const errorData = await res.json().catch(() => ({}));
+        console.error('제출 실패:', res.status, errorData);
+        throw new Error(errorData.error || '과제 제출에 실패했습니다.');
       }
 
       alert('과제가 제출되었습니다.');
       setShowSubmitModal(false);
+      setSubmitComment('');
+      setSelectedImages([]);
+      setUploadedImageUrls([]);
+      setIsUploading(false);
       fetchPlannerData(currentDate);
     } catch (err) {
+      console.error('과제 제출 에러:', err);
       alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
     }
   };
@@ -565,6 +616,25 @@ export default function MenteeDashboard() {
     }
   };
 
+  const fetchDailyFeedback = async (date: Date) => {
+    try {
+      const token = localStorage.getItem('token');
+      const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+      const res = await fetch(`${getApiUrl()}/api/mentee/daily-feedbacks?date=${dateStr}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDailyFeedback(data);
+      } else {
+        setDailyFeedback(null);
+      }
+    } catch (error) {
+      console.error('Daily feedback fetch error:', error);
+      setDailyFeedback(null);
+    }
+  };
+
   useEffect(() => {
     const userStr = localStorage.getItem('user');
     if (userStr) {
@@ -575,34 +645,62 @@ export default function MenteeDashboard() {
 
   useEffect(() => {
     fetchPlannerData(currentDate);
+    fetchDailyFeedback(currentDate);
   }, [currentDate]);
 
   return (
-    <div className="p-4 pb-20">
+    <div className="px-4 sm:px-6 md:px-8 py-4 pb-20">
       {/* 헤더 */}
-      <div className="mb-4">
-        <p className="text-sm text-gray-900 dark:text-gray-300">안녕하세요</p>
-        <h2 className="text-2xl font-bold dark:text-white">
-          {user?.nickname || user?.name || '멘티'}
-          {user?.nickname && user?.name && <span className="text-lg font-normal dark:text-gray-300">({user.name})</span>}님
-        </h2>
+      <div className="mb-4 sm:mb-6 flex items-start justify-between">
+        <div>
+          <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-300">안녕하세요</p>
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold dark:text-white">
+            {user?.nickname || user?.name || '멘티'}
+            {user?.nickname && user?.name && <span className="text-base sm:text-lg font-normal dark:text-gray-300">({user.name})</span>}님
+          </h2>
+        </div>
+        <NotificationBell />
       </div>
 
       {/* 오늘 학습 진행율 */}
       {dashboard && (
-        <div className="mb-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 rounded-lg">
+        <div className="mb-4 sm:mb-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 sm:p-5 md:p-6 rounded-lg">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm opacity-90">오늘 학습 진행율</span>
-            <span className="text-2xl font-bold">{dashboard.todayStats.progressRate}%</span>
+            <span className="text-xs sm:text-sm opacity-90">오늘 학습 진행율</span>
+            <span className="text-xl sm:text-2xl md:text-3xl font-bold">{dashboard.todayStats.progressRate}%</span>
           </div>
-          <div className="w-full bg-blue-400 rounded-full h-2">
+          <div className="w-full bg-blue-400 rounded-full h-2 sm:h-2.5">
             <div
-              className="bg-white h-2 rounded-full transition-all"
+              className="bg-white h-2 sm:h-2.5 rounded-full transition-all"
               style={{ width: `${dashboard.todayStats.progressRate}%` }}
             />
           </div>
-          <p className="text-xs mt-2 opacity-80">
+          <p className="text-xs sm:text-sm mt-2 opacity-80">
             {dashboard.todayStats.completed}/{dashboard.todayStats.total} 완료
+          </p>
+        </div>
+      )}
+
+      {/* 오늘의 일일 전체 피드백 */}
+      {dailyFeedback && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 p-4 rounded-lg">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">📝</span>
+            <span className="font-semibold text-blue-800">오늘의 전체 피드백</span>
+            <span className="text-xs text-blue-600">
+              {dailyFeedback.mentor?.nickname || dailyFeedback.mentor?.name} 멘토
+            </span>
+          </div>
+          {dailyFeedback.summary && (
+            <div className="bg-white p-3 rounded border border-blue-100 mb-2">
+              <p className="text-sm font-medium text-blue-900">{dailyFeedback.summary}</p>
+            </div>
+          )}
+          <div className="bg-white p-3 rounded border border-blue-100">
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{dailyFeedback.content}</p>
+          </div>
+          <p className="text-xs text-blue-600 mt-2">
+            작성일: {new Date(dailyFeedback.createdAt).toLocaleString('ko-KR')}
           </p>
         </div>
       )}
@@ -642,20 +740,20 @@ export default function MenteeDashboard() {
       )}
 
       {/* 날짜 */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold dark:text-white">{formatDate(currentDate)}</h3>
+      <div className="mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+          <h3 className="text-base sm:text-lg md:text-xl font-semibold dark:text-white">{formatDate(currentDate)}</h3>
           <div className="flex gap-2">
-            <button className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-700 rounded">일</button>
+            <button className="px-3 py-1.5 text-xs sm:text-sm bg-gray-100 dark:bg-gray-700 rounded">일</button>
             <button
               onClick={() => router.push('/mentee/planner/weekly')}
-              className="px-3 py-1 text-sm text-gray-900 dark:text-gray-300 rounded hover:bg-gray-100 dark:bg-gray-700"
+              className="px-3 py-1.5 text-xs sm:text-sm text-gray-900 dark:text-gray-300 rounded hover:bg-gray-100 dark:bg-gray-700"
             >
               주
             </button>
             <button
               onClick={() => router.push('/mentee/planner/monthly')}
-              className="px-3 py-1 text-sm text-gray-900 dark:text-gray-300 rounded hover:bg-gray-100 dark:bg-gray-700"
+              className="px-3 py-1.5 text-xs sm:text-sm text-gray-900 dark:text-gray-300 rounded hover:bg-gray-100 dark:bg-gray-700"
             >
               월
             </button>
@@ -663,29 +761,12 @@ export default function MenteeDashboard() {
         </div>
       </div>
 
-      {/* 코멘트 영역 */}
-      <div className="mb-6">
-        <textarea
-          className="w-full p-3 border dark:border-gray-600 rounded-lg resize-none dark:bg-gray-700 dark:text-white"
-          rows={3}
-          placeholder="오늘의 코멘트나 질문을 입력하세요..."
-          value={commentText}
-          onChange={(e) => setCommentText(e.target.value)}
-        />
-        <button
-          onClick={handleSaveComment}
-          className="mt-2 px-4 py-2 text-sm bg-black text-white rounded hover:bg-gray-800"
-        >
-          코멘트 저장
-        </button>
-      </div>
-
       {/* 할 일 목록 - 과목별 그룹화 */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-semibold">오늘의 할 일</h3>
+      <div className="space-y-3 sm:space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+          <h3 className="text-base sm:text-lg font-semibold">오늘의 할 일</h3>
           {plannerData && plannerData.tasks.length > 0 && (
-            <span className="text-sm text-gray-500">
+            <span className="text-xs sm:text-sm text-gray-500">
               {plannerData.tasks.filter(t => t.isApproved).length}/{plannerData.tasks.length} 승인됨
             </span>
           )}
@@ -817,7 +898,21 @@ export default function MenteeDashboard() {
                   onClick={() => handleRecordStudyTime(task.id)}
                   className="text-xs text-gray-600 dark:text-gray-300 underline hover:text-black"
                 >
-                  공부 시간 기록
+                  {(() => {
+                    // 오늘 날짜의 studyLog 찾기
+                    const todayDateStr = formatDateForApi(currentDate);
+                    const todayLogs = task.studyLogs.filter((log: any) => {
+                      const logDate = new Date(log.date).toISOString().split('T')[0];
+                      return logDate === todayDateStr && log.startTime && log.endTime;
+                    });
+
+                    if (todayLogs.length > 0) {
+                      // 가장 최근 로그 표시
+                      const latestLog = todayLogs[todayLogs.length - 1];
+                      return `⏱️ ${latestLog.startTime} - ${latestLog.endTime}`;
+                    }
+                    return '공부 시간 기록';
+                  })()}
                 </button>
                 <button
                   onClick={() => {
@@ -829,7 +924,7 @@ export default function MenteeDashboard() {
                       alert('아직 시작되지 않은 과제는 제출할 수 없습니다.');
                       return;
                     }
-                    openSubmitModal(task.id);
+                    openSubmitModal(task);
                   }}
                   className="text-xs text-gray-600 dark:text-gray-300 underline hover:text-black"
                 >
@@ -839,15 +934,17 @@ export default function MenteeDashboard() {
                   <>
                     <button
                       onClick={() => openEditModal(task)}
-                      className="text-xs text-green-600 underline hover:text-green-800"
+                      className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
+                      title="수정"
                     >
-                      수정
+                      <EditIcon size={18} />
                     </button>
                     <button
                       onClick={() => handleDeleteTask(task.id)}
-                      className="text-xs text-red-600 underline hover:text-red-800"
+                      className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                      title="삭제"
                     >
-                      삭제
+                      <DeleteIcon size={18} />
                     </button>
                   </>
                 )}
@@ -863,11 +960,40 @@ export default function MenteeDashboard() {
         {/* 할 일 추가 버튼 */}
         <button
           onClick={() => setShowAddTaskModal(true)}
-          className="w-full py-3 border-2 border-dashed rounded-lg text-gray-900 dark:text-gray-300 hover:border-gray-400 hover:text-gray-700"
+          className="w-full py-2.5 sm:py-3 md:py-4 border-2 border-dashed rounded-lg text-sm sm:text-base text-gray-900 dark:text-gray-300 hover:border-gray-400 hover:text-gray-700 transition-colors"
         >
           + 할 일 추가
         </button>
       </div>
+
+      {/* 일일 타임라인 차트 */}
+      {plannerData && (() => {
+        // 오늘 날짜의 studyLogs 수집 (startTime과 endTime이 있는 것만)
+        const todayStudyLogs = plannerData.tasks
+          .flatMap((task: Task) =>
+            task.studyLogs
+              .filter((log: any) => log.startTime && log.endTime)
+              .map((log: any) => ({
+                id: log.id,
+                subject: task.subject,
+                startTime: log.startTime,
+                endTime: log.endTime,
+                task: {
+                  id: task.id,
+                  title: task.title,
+                },
+              }))
+          );
+
+        // studyLogs가 있을 때만 차트 표시
+        if (todayStudyLogs.length === 0) return null;
+
+        return (
+          <div className="mt-6">
+            <TimelineChart studyLogs={todayStudyLogs} />
+          </div>
+        );
+      })()}
 
       {/* 할 일 추가 모달 */}
       {showAddTaskModal && (
@@ -1131,15 +1257,25 @@ export default function MenteeDashboard() {
       )}
 
       {/* 과제 제출 모달 */}
-      {showSubmitModal && (
+      {showSubmitModal && selectedTask && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold mb-4">과제 제출</h3>
+            <h3 className="text-lg font-bold mb-2">과제 제출</h3>
+            {selectedTask.isFixed ? (
+              <p className="text-sm text-gray-600 mb-4">
+                멘토 지정 과제 - 이미지 업로드 필수
+              </p>
+            ) : (
+              <p className="text-sm text-gray-600 mb-4">
+                내가 만든 과제 - 이미지 또는 코멘트 중 하나는 필수
+              </p>
+            )}
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">
                   이미지 업로드 {uploadedImageUrls.length > 0 && `(${uploadedImageUrls.length}개)`}
+                  {selectedTask.isFixed && <span className="text-red-500"> *</span>}
                 </label>
                 <input
                   type="file"
@@ -1183,7 +1319,12 @@ export default function MenteeDashboard() {
               )}
 
               <div>
-                <label className="block text-sm font-medium mb-1">코멘트 (선택)</label>
+                <label className="block text-sm font-medium mb-1">
+                  코멘트
+                  {!selectedTask.isFixed && uploadedImageUrls.length === 0 && (
+                    <span className="text-red-500"> * (이미지가 없으면 필수)</span>
+                  )}
+                </label>
                 <textarea
                   value={submitComment}
                   onChange={(e) => setSubmitComment(e.target.value)}
@@ -1201,6 +1342,7 @@ export default function MenteeDashboard() {
                   setSubmitComment('');
                   setSelectedImages([]);
                   setUploadedImageUrls([]);
+                  setIsUploading(false);
                 }}
                 className="flex-1 px-4 py-2 border rounded-md hover:bg-gray-50"
               >
@@ -1208,10 +1350,86 @@ export default function MenteeDashboard() {
               </button>
               <button
                 onClick={handleSubmitTask}
-                disabled={uploadedImageUrls.length === 0 || isUploading}
+                disabled={isUploading}
                 className="flex-1 px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 disabled:bg-gray-400"
               >
                 제출
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 공부 시간 기록 모달 */}
+      {showStudyTimeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">공부 시간 기록</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  시작 시간 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="time"
+                  value={timeRecord.startTime}
+                  onChange={(e) =>
+                    setTimeRecord({ ...timeRecord, startTime: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border rounded-md"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  종료 시간 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="time"
+                  value={timeRecord.endTime}
+                  onChange={(e) =>
+                    setTimeRecord({ ...timeRecord, endTime: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border rounded-md"
+                  required
+                />
+              </div>
+
+              {/* 자동 계산된 시간 표시 */}
+              {timeRecord.startTime && timeRecord.endTime && (
+                <div className="bg-blue-50 dark:bg-blue-900 p-3 rounded-md">
+                  <p className="text-sm text-blue-700 dark:text-blue-200">
+                    총 공부 시간:{' '}
+                    {(() => {
+                      const start = parseTime(timeRecord.startTime);
+                      const end = parseTime(timeRecord.endTime);
+                      if (start >= end) {
+                        return '종료 시간이 시작 시간보다 늦어야 합니다';
+                      }
+                      return formatDuration(end - start);
+                    })()}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex gap-2">
+              <button
+                onClick={() => {
+                  setShowStudyTimeModal(false);
+                  setTimeRecord({ taskId: '', startTime: '', endTime: '' });
+                }}
+                className="flex-1 px-4 py-2 border rounded-md hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSubmitStudyTime}
+                className="flex-1 px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800"
+              >
+                기록하기
               </button>
             </div>
           </div>

@@ -2,12 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
+dotenv.config();
+
 import authRoutes from './routes/auth';
 import menteeRoutes from './routes/mentee';
 import mentorRoutes from './routes/mentor';
 import uploadRoutes from './routes/upload';
-
-dotenv.config();
+import notificationRoutes from './routes/notification';
+import { startScheduler } from './lib/scheduler';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -27,6 +29,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/mentee', menteeRoutes);
 app.use('/api/mentor', mentorRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -36,4 +39,7 @@ app.get('/api/health', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`서버가 포트 ${PORT}에서 실행 중입니다.`);
   console.log(`모든 네트워크 인터페이스에서 접근 가능합니다.`);
+
+  // 스케줄러 시작
+  startScheduler();
 });

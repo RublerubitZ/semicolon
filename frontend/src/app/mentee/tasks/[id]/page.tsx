@@ -31,6 +31,19 @@ interface Submission {
   createdAt: string;
 }
 
+interface LearningGoalItem {
+  id: string;
+  title: string;
+  order: number;
+  isCompleted: boolean;
+  completedAt?: string;
+}
+
+interface LearningGoal {
+  id: string;
+  items: LearningGoalItem[];
+}
+
 type SelfCheckStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'NOT_DONE';
 
 interface Task {
@@ -52,6 +65,7 @@ interface Task {
   feedbacks: Feedback[];
   submissions: Submission[];
   studyLogs: any[];
+  learningGoal?: LearningGoal;
 }
 
 // 자가점검 상태 표시 설정
@@ -246,10 +260,31 @@ export default function TaskDetailPage() {
 
   // 과제 제출
   const handleSubmitTask = async () => {
-    if (uploadedImageUrls.length === 0) {
-      alert('최소 1개의 이미지를 업로드해주세요.');
-      return;
+    if (!task) return;
+
+    console.log('과제 제출 시도 (상세페이지):', {
+      isFixed: task.isFixed,
+      hasImages: uploadedImageUrls.length > 0,
+      imageCount: uploadedImageUrls.length,
+      hasComment: !!submitComment.trim(),
+      commentLength: submitComment.length,
+    });
+
+    // 멘토가 생성한 과제(isFixed=true): 이미지 필수
+    if (task.isFixed) {
+      if (uploadedImageUrls.length === 0) {
+        alert('멘토가 생성한 과제는 이미지 업로드가 필수입니다.');
+        return;
+      }
+    } else {
+      // 멘티가 자체 생성한 과제(isFixed=false): 이미지 또는 코멘트 중 하나는 필수
+      if (uploadedImageUrls.length === 0 && !submitComment.trim()) {
+        alert('이미지를 업로드하거나 코멘트를 작성해주세요.');
+        return;
+      }
     }
+
+    console.log('검증 통과, 제출 시작 (상세페이지)');
 
     setIsSubmitting(true);
 
@@ -270,6 +305,7 @@ export default function TaskDetailPage() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
+        console.error('제출 실패 (상세페이지):', res.status, errorData);
         if (res.status === 403) {
           throw new Error(errorData.error || '아직 시작되지 않은 과제는 제출할 수 없습니다.');
         }
@@ -280,8 +316,10 @@ export default function TaskDetailPage() {
       setShowSubmitSection(false);
       setSubmitComment('');
       setUploadedImageUrls([]);
+      setIsUploading(false);
       fetchTaskDetail();
     } catch (err) {
+      console.error('과제 제출 에러 (상세페이지):', err);
       alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
@@ -330,16 +368,17 @@ export default function TaskDetailPage() {
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* 헤더 */}
       <div className="bg-white border-b sticky top-0 z-10">
-        <div className="p-4 flex items-center gap-3">
-          <button onClick={() => router.back()} className="text-2xl">
+        <div className="px-4 sm:px-6 md:px-8 py-3 sm:py-4 flex items-center gap-2 sm:gap-3">
+          <button onClick={() => router.back()} className="text-xl sm:text-2xl">
             ←
           </button>
-          <h1 className="text-lg font-bold">과제 상세</h1>
+          <h1 className="text-base sm:text-lg md:text-xl font-bold">과제 상세</h1>
         </div>
       </div>
 
       {/* 과제 정보 */}
-      <div className="bg-white p-4 mb-2">
+      <div className="bg-white mb-2">
+        <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5">
         <div className="flex items-center gap-2 mb-2 flex-wrap">
           <span className={`text-xs px-2 py-1 rounded ${getSubjectColor(task.subject)}`}>
             {getSubjectLabel(task.subject)}
@@ -361,25 +400,25 @@ export default function TaskDetailPage() {
           )}
         </div>
 
-        <h2 className={`text-xl font-bold mb-2 ${task.submissions.length > 0 ? 'line-through text-gray-400' : ''}`}>
+        <h2 className={`text-lg sm:text-xl md:text-2xl font-bold mb-2 ${task.submissions.length > 0 ? 'line-through text-gray-400' : ''}`}>
           {task.title}
         </h2>
 
-        {task.description && <p className="text-gray-700 mb-2">{task.description}</p>}
+        {task.description && <p className="text-sm sm:text-base text-gray-700 mb-2">{task.description}</p>}
 
-        <p className="text-sm text-gray-600">📅 {formatDate(task.date)}</p>
+        <p className="text-xs sm:text-sm text-gray-600">📅 {formatDate(task.date)}</p>
 
         {task.studyLogs.length > 0 && (
-          <p className="text-sm text-gray-600 mt-1">
+          <p className="text-xs sm:text-sm text-gray-600 mt-1">
             ⏱️ 공부 시간:{' '}
             {task.studyLogs.reduce((sum, log) => sum + log.duration, 0)}분
           </p>
         )}
 
         {/* 자가점검 */}
-        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-          <label className="block text-sm font-medium text-gray-700 mb-2">자가점검</label>
-          <div className="flex gap-2 flex-wrap">
+        <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gray-50 rounded-lg">
+          <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">자가점검</label>
+          <div className="grid grid-cols-2 sm:flex gap-2 flex-wrap">
             {SELF_CHECK_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -401,7 +440,7 @@ export default function TaskDetailPage() {
                     console.error(err);
                   }
                 }}
-                className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border text-xs sm:text-sm font-medium transition-colors ${
                   task.selfCheck === option.value
                     ? 'bg-black text-white border-black'
                     : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
@@ -418,11 +457,41 @@ export default function TaskDetailPage() {
             ※ 자가점검은 멘토에게 진행 상황을 알리는 용도입니다. 달성률에는 영향을 주지 않습니다.
           </p>
         </div>
+
+        {/* 학습 목표 (확인용) */}
+        {task.learningGoal && task.learningGoal.items.length > 0 && (
+          <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
+              <span>🎯</span>
+              <span>학습 목표</span>
+            </h4>
+
+            <ul className="space-y-2">
+              {task.learningGoal.items
+                .sort((a, b) => a.order - b.order)
+                .map((item, index) => (
+                  <li
+                    key={item.id}
+                    className="flex items-start gap-2 text-sm text-gray-900 bg-white p-3 rounded-lg"
+                  >
+                    <span className="text-blue-600 font-medium">{index + 1}.</span>
+                    <span className="flex-1">{item.title}</span>
+                  </li>
+                ))}
+            </ul>
+
+            <p className="text-xs text-blue-700 mt-3">
+              ※ 학습 목표는 과제 완료를 위한 세부 단계입니다.
+            </p>
+          </div>
+        )}
+        </div>
       </div>
 
       {/* 학습지 */}
       {task.worksheet && (
-        <div className="bg-white p-4 mb-2">
+        <div className="bg-white mb-2">
+          <div className="p-4">
           <h3 className="text-lg font-bold mb-3">📄 학습지</h3>
 
           <div className="mb-3">
@@ -488,12 +557,14 @@ export default function TaskDetailPage() {
               </div>
             </div>
           )}
+          </div>
         </div>
       )}
 
       {/* 피드백 */}
       {task.feedbacks.length > 0 && (
-        <div className="bg-white p-4 mb-2">
+        <div className="bg-white mb-2">
+          <div className="p-4">
           <h3 className="text-lg font-bold mb-3">💬 피드백</h3>
           {task.feedbacks.map((feedback) => (
             <div key={feedback.id} className="border rounded-lg p-3 mb-3 last:mb-0">
@@ -516,12 +587,14 @@ export default function TaskDetailPage() {
               <p className="text-gray-700 whitespace-pre-wrap">{feedback.content}</p>
             </div>
           ))}
+          </div>
         </div>
       )}
 
       {/* 제출 내역 */}
       {task.submissions.length > 0 && (
-        <div className="bg-white p-4 mb-2">
+        <div className="bg-white mb-2">
+          <div className="p-4">
           <h3 className="text-lg font-bold mb-3">📤 제출 내역</h3>
           {task.submissions.map((submission) => (
             <div key={submission.id} className="border rounded-lg p-3 mb-3 last:mb-0">
@@ -554,6 +627,7 @@ export default function TaskDetailPage() {
               </div>
             </div>
           ))}
+          </div>
         </div>
       )}
 
@@ -561,7 +635,12 @@ export default function TaskDetailPage() {
       {!showSubmitSection && (
         <div className="p-4">
           <button
-            onClick={() => setShowSubmitSection(true)}
+            onClick={() => {
+              setShowSubmitSection(true);
+              setSubmitComment('');
+              setUploadedImageUrls([]);
+              setIsUploading(false);
+            }}
             className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
           >
             과제 제출하기
@@ -570,56 +649,35 @@ export default function TaskDetailPage() {
       )}
 
       {/* 과제 제출 섹션 */}
-      {showSubmitSection && (
-        <div className="bg-white p-4">
-          <h3 className="text-lg font-bold mb-3">과제 제출</h3>
+      {showSubmitSection && task && (
+        <div className="bg-white">
+          <div className="p-4">
+          <h3 className="text-lg font-bold mb-2">과제 제출</h3>
+          {task.isFixed ? (
+            <p className="text-sm text-gray-600 mb-4">
+              멘토 지정 과제 - 이미지 업로드 필수
+            </p>
+          ) : (
+            <p className="text-sm text-gray-600 mb-4">
+              내가 만든 과제 - 이미지 또는 코멘트 중 하나는 필수
+            </p>
+          )}
 
           {/* 이미지 선택 */}
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">이미지 업로드</label>
+            <label className="block text-sm font-medium mb-2">
+              이미지 업로드
+              {task.isFixed && <span className="text-red-500"> *</span>}
+            </label>
 
-            {/* 모바일: 카메라/갤러리 선택 버튼 */}
-            <div className="md:hidden space-y-2 mb-3">
-              <label className="block w-full">
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  onChange={handleImageSelect}
-                  className="hidden"
-                  id="camera-input"
-                />
-                <div className="w-full py-3 px-4 bg-blue-600 text-white text-center rounded-lg cursor-pointer hover:bg-blue-700 active:bg-blue-800">
-                  📷 카메라로 촬영
-                </div>
-              </label>
-
-              <label className="block w-full">
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageSelect}
-                  className="hidden"
-                  id="gallery-input"
-                />
-                <div className="w-full py-3 px-4 bg-green-600 text-white text-center rounded-lg cursor-pointer hover:bg-green-700 active:bg-green-800">
-                  🖼️ 갤러리에서 선택
-                </div>
-              </label>
-            </div>
-
-            {/* PC: 기본 파일 선택 */}
-            <div className="hidden md:block">
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleImageSelect}
-                className="w-full text-sm text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-              />
-            </div>
+            {/* 파일 선택 (모바일에서 자동으로 카메라/갤러리 선택됨) */}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageSelect}
+              className="w-full text-sm text-gray-900 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
 
             {selectedImages.length > 0 && (
               <div className="mt-3">
@@ -659,7 +717,12 @@ export default function TaskDetailPage() {
 
           {/* 코멘트 */}
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">코멘트 (선택)</label>
+            <label className="block text-sm font-medium mb-2">
+              코멘트
+              {!task.isFixed && uploadedImageUrls.length === 0 && (
+                <span className="text-red-500"> * (이미지가 없으면 필수)</span>
+              )}
+            </label>
             <textarea
               value={submitComment}
               onChange={(e) => setSubmitComment(e.target.value)}
@@ -677,6 +740,7 @@ export default function TaskDetailPage() {
                 setSubmitComment('');
                 setSelectedImages([]);
                 setUploadedImageUrls([]);
+                setIsUploading(false);
               }}
               className="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300"
             >
@@ -684,11 +748,12 @@ export default function TaskDetailPage() {
             </button>
             <button
               onClick={handleSubmitTask}
-              disabled={isSubmitting || uploadedImageUrls.length === 0}
+              disabled={isSubmitting || isUploading}
               className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400"
             >
               {isSubmitting ? '제출 중...' : '제출'}
             </button>
+          </div>
           </div>
         </div>
       )}

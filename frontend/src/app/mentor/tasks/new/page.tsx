@@ -51,6 +51,17 @@ export default function NewTaskPage() {
     },
   });
 
+  // 학습 목표 상태
+  const [learningGoals, setLearningGoals] = useState<string[]>([]);
+
+  const addGoal = () => setLearningGoals([...learningGoals, '']);
+  const removeGoal = (index: number) => setLearningGoals(learningGoals.filter((_, i) => i !== index));
+  const updateGoal = (index: number, value: string) => {
+    const updated = [...learningGoals];
+    updated[index] = value;
+    setLearningGoals(updated);
+  };
+
   // 멘티 목록 가져오기
   const fetchMentees = async () => {
     try {
@@ -182,6 +193,7 @@ export default function NewTaskPage() {
             ...formData,
             date: dateStr,
             worksheetId: formData.worksheetId || undefined,
+            learningGoals: learningGoals.filter((g) => g.trim()),
           }),
         });
 
@@ -400,6 +412,43 @@ export default function NewTaskPage() {
           <p className="text-xs text-gray-500 mt-1">
             선택한 과목({formData.subject === 'KOREAN' ? '국어' : formData.subject === 'ENGLISH' ? '영어' : '수학'})의 학습지만 표시됩니다
           </p>
+        </div>
+
+        {/* 학습 목표 설정 (선택) */}
+        <div className="border rounded-lg p-4 bg-gray-50">
+          <label className="block text-sm font-medium mb-3">
+            학습 목표 (선택)
+            <span className="text-xs text-gray-500 ml-2 font-normal">
+              학생이 달성해야 할 세부 목표를 설정하세요
+            </span>
+          </label>
+
+          {learningGoals.map((goal, index) => (
+            <div key={index} className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={goal}
+                onChange={(e) => updateGoal(index, e.target.value)}
+                placeholder="예: 주격조사 이해하기"
+                className="flex-1 px-3 py-2 border rounded-md"
+              />
+              <button
+                type="button"
+                onClick={() => removeGoal(index)}
+                className="px-3 py-2 text-red-600 hover:bg-red-50 rounded"
+              >
+                삭제
+              </button>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            onClick={addGoal}
+            className="w-full px-3 py-2 border-2 border-dashed rounded-md text-gray-600 hover:bg-gray-100"
+          >
+            + 학습 목표 추가
+          </button>
         </div>
 
         {/* 버튼 */}

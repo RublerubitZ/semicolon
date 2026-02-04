@@ -1,6 +1,6 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
-
+import NotificationBell from '@/components/NotificationBell';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -9,6 +9,7 @@ interface Mentee {
   name: string;
   nickname?: string;
   email: string;
+  grade?: string;
   profileImage?: string;
   totalTasks: number;
   completedTasks: number;
@@ -19,6 +20,7 @@ export default function MentorDashboard() {
   const [user, setUser] = useState<any>(null);
   const [mentees, setMentees] = useState<Mentee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
 
   const fetchMentees = async () => {
     setIsLoading(true);
@@ -39,7 +41,6 @@ export default function MentorDashboard() {
       setMentees(data);
     } catch (err) {
       console.error('Fetch mentees error:', err);
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -53,133 +54,118 @@ export default function MentorDashboard() {
     fetchMentees();
   }, []);
 
-  const calculateProgress = (completed: number, total: number): number => {
-    if (total === 0) return 0;
-    return Math.round((completed / total) * 100);
-  };
-
   return (
     <div>
-      {/* 헤더 */}
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold mb-2">담당 멘티 관리</h2>
-        <p className="text-gray-900 dark:text-gray-300">
-          {user?.nickname || user?.name || '멘토'} 선생님의 대시보드
-        </p>
-      </div>
-
-      {/* 통계 카드 */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border">
-          <p className="text-sm text-gray-900 dark:text-gray-300 mb-1">담당 멘티</p>
-          <p className="text-3xl font-bold">{mentees.length}명</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border">
-          <p className="text-sm text-gray-900 dark:text-gray-300 mb-1">전체 할 일</p>
-          <p className="text-3xl font-bold">
-            {mentees.reduce((sum, m) => sum + m.totalTasks, 0)}개
+      {/* Header */}
+      <div className="mb-6 md:mb-[60px] flex justify-between items-start">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-semibold text-black mb-2 font-['Pretendard']">멘티관리</h1>
+          <p className="text-xl md:text-2xl font-medium text-black font-['Pretendard']">
+            {user?.name || '멘토'}님의 담당 멘티
           </p>
         </div>
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg border">
-          <p className="text-sm text-gray-900 dark:text-gray-300 mb-1">완료된 할 일</p>
-          <p className="text-3xl font-bold">
-            {mentees.reduce((sum, m) => sum + m.completedTasks, 0)}개
-          </p>
-        </div>
+        <NotificationBell />
       </div>
 
-      {/* 멘티 목록 */}
-      <div>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">멘티 목록</h3>
-          <button
-            onClick={() => router.push('/mentor/tasks/new')}
-            className="px-4 py-2 bg-black text-white rounded-lg text-sm hover:bg-gray-800"
-          >
-            + 할 일 등록
-          </button>
-        </div>
+      {/* Mentee List Grid */}
+      {isLoading ? (
+        <p className="text-gray-500">로딩 중...</p>
+      ) : mentees.length === 0 ? (
+        <p className="text-gray-500">담당 멘티가 없습니다.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {mentees.map((mentee, index) => {
+            const progress = mentee.totalTasks > 0
+              ? Math.round((mentee.completedTasks / mentee.totalTasks) * 100)
+              : 0;
+            const incomplete = mentee.totalTasks - mentee.completedTasks;
 
-        {isLoading ? (
-          <p className="text-center text-gray-900 dark:text-gray-300">로딩 중...</p>
-        ) : mentees.length === 0 ? (
-          <p className="text-center text-gray-900 dark:text-gray-300">담당 멘티가 없습니다.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-4">
-            {mentees.map((mentee) => {
-              const progress = calculateProgress(mentee.completedTasks, mentee.totalTasks);
+            // Get grade from database
+            const grade = mentee.grade || '미설정';
 
-              return (
-                <div
-                  key={mentee.id}
-                  onClick={() => router.push(`/mentor/mentees/${mentee.id}`)}
-                  className="bg-white dark:bg-gray-800 p-6 rounded-lg border hover:shadow-lg transition-shadow cursor-pointer"
-                >
-                  <div className="flex items-center gap-3 mb-4">
-                    {mentee.profileImage ? (
-                      <img
-                        src={mentee.profileImage}
-                        alt={mentee.name}
-                        className="w-12 h-12 rounded-full object-cover"
-                      />
+            // Status Logic: < 80% is 'Warning', else 'Good'
+            const isWarning = progress < 80;
+
+            // Name display logic: Name (Nickname)
+            const displayName = mentee.nickname ? `${mentee.name} (${mentee.nickname})` : mentee.name;
+
+            return (
+              <div 
+                key={mentee.id}
+                onClick={() => router.push(`/mentor/mentees/${mentee.id}`)}
+                className="w-full bg-white rounded-[10px] p-6 md:p-8 shadow-[0px_4px_20px_0px_rgba(0,0,0,0.05)] cursor-pointer hover:shadow-lg transition-shadow border border-transparent hover:border-gray-200 min-h-[256px] relative flex flex-col justify-between"
+              >
+                <div>
+                  {/* Header: Avatar + Status Badge */}
+                  <div className="flex justify-between items-start mb-6">
+                    {/* Avatar Placeholder */}
+                    <div className="w-16 h-16 md:w-20 md:h-20 bg-gray-200 rounded-[10px] overflow-hidden flex items-center justify-center">
+                      {mentee.profileImage ? (
+                        <img src={mentee.profileImage} alt={mentee.name} className="w-full h-full object-cover" />
+                      ) : (
+                        // Default Placeholder (User Icon SVG)
+                         <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 md:w-10 md:h-10">
+                              <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clipRule="evenodd" />
+                            </svg>
+                         </div>
+                      )}
+                    </div>
+                    
+                    {/* Status Badge */}
+                    {isWarning ? (
+                      <div className="px-2.5 py-1.5 bg-pink-100 rounded-lg border border-pink-200/30 flex items-center justify-center">
+                          <span className="text-pink-500 text-sm font-medium font-['Pretendard']">관리 필요</span>
+                      </div>
                     ) : (
-                      <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                        <span className="text-lg font-bold">
-                          {mentee.nickname?.[0] || mentee.name[0]}
-                        </span>
+                      <div className="px-2.5 py-1.5 bg-sky-200 rounded-lg border border-blue-200 flex items-center justify-center">
+                          <span className="text-blue-400 text-sm font-medium font-['Pretendard']">양호</span>
                       </div>
                     )}
-                    <div>
-                      <h4 className="font-semibold">
-                        {mentee.nickname || mentee.name}
-                        {mentee.nickname && (
-                          <span className="text-sm font-normal text-gray-900 dark:text-gray-300">
-                            ({mentee.name})
-                          </span>
-                        )}
-                      </h4>
-                      <p className="text-sm text-gray-900 dark:text-gray-300">{mentee.email}</p>
-                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-900 dark:text-gray-300">전체 할 일</span>
-                      <span className="font-medium">{mentee.totalTasks}개</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-900 dark:text-gray-300">완료</span>
-                      <span className="font-medium text-green-600">
-                        {mentee.completedTasks}개
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-900 dark:text-gray-300">달성률</span>
-                      <span className="font-medium">{progress}%</span>
-                    </div>
+                  {/* Name Info */}
+                  <div className="mb-6">
+                      <div className="flex flex-col md:flex-row md:items-end gap-1 md:gap-2 mb-1">
+                          {/* Use break-words or similar to handle long names, but 'flex-col' on mobile already stacks them if needed. 
+                              The user complained about '2 lines' for name/nickname. 
+                              'whitespace-nowrap' prevents wrapping. 'truncate' handles overflow.
+                          */}
+                          <span className="text-xl font-semibold text-black font-['Pretendard'] whitespace-nowrap overflow-hidden text-ellipsis">{displayName}</span>
+                          <div className="flex items-center gap-1 mb-1">
+                              <span className="text-xs font-medium text-gray-400 font-['Pretendard']">{grade}</span>
+                              {/* Removed target university info */}
+                          </div>
+                      </div>
                   </div>
 
-                  {/* 프로그레스 바 */}
-                  <div className="mt-4">
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t">
-                    <button className="text-sm text-blue-600 hover:underline">
-                      플래너 보기 →
-                    </button>
+                  {/* Progress Bar */}
+                  <div className="mb-4">
+                      <div className="flex justify-between items-center mb-1">
+                          <span className="text-[10px] font-medium text-gray-500 font-['Pretendard']">주간 목표 이행률</span>
+                          <span className="text-[10px] font-medium text-sky-950 font-['Pretendard']">{progress}%</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                          <div 
+                              className="bg-gray-500 h-1.5 rounded-full" 
+                              style={{ width: `${progress}%` }} 
+                          />
+                      </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+
+                {/* Bottom Stats (Incomplete Tasks) */}
+                <div className="flex justify-between items-center mt-auto pt-4 md:pt-0">
+                     <span className="text-xs font-medium text-gray-500 font-['Pretendard']">미완료 과제</span>
+                     <span className={`text-xs font-medium font-['Pretendard'] ${incomplete > 0 ? 'text-pink-500' : 'text-gray-500'}`}>
+                        {incomplete}
+                     </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

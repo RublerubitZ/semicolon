@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from "next/image";
+import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
 
 
@@ -50,10 +51,10 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
       <div className="w-full max-w-md p-5 sm:p-8 bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/50">
-        <div className="flex items-center justify-center gap-2 mb-6">
+        <Link href="/" className="flex items-center justify-center gap-2 mb-6">
           <Image src="/logo.png" alt="로고" width={50} height={50} />
-          <h1 className="text-3xl font-bold dark:text-white">설스터디</h1>
-        </div>
+          <h1 className="text-3xl font-bold dark:text-white font-['S-Core_Dream']">설스터디</h1>
+        </Link>
 
 
         <form onSubmit={handleSubmit} className="space-y-4">

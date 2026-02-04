@@ -29,195 +29,144 @@ export default function Home() {
 
   if (isChecking) {
     return (
-      <div className="min-h-screen flex items-center justify-center dark:bg-gray-900">
-        <p className="text-gray-900 dark:text-gray-300 dark:text-gray-100">로딩 중...</p>
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <p className="text-gray-900">로딩 중...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+    <div className="w-full min-h-screen bg-white overflow-hidden" style={{ fontFamily: 'var(--font-pretendard)' }}>
       {/* 헤더 */}
-      <header className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold dark:text-white">설스터디</h1>
+      <header className="relative px-4 py-8 sm:px-8 md:px-12 lg:px-[60px] md:py-[73px]">
+        <div className="flex items-center justify-between max-w-[1440px] mx-auto">
+          {/* 로고 */}
+          <div className="flex items-center gap-4 sm:gap-6 md:gap-[43px]">
+            <div className="w-8 h-7 sm:w-10 sm:h-8 md:w-11 md:h-9 bg-sky-950 rounded" />
+            <h1 className="text-zinc-800 text-2xl sm:text-3xl md:text-4xl font-bold" style={{ fontFamily: 'var(--font-scoredream)' }}>
+              설스터디
+            </h1>
+          </div>
+
+          {/* 로그인 버튼 */}
           <button
             onClick={() => router.push('/login')}
-            className="px-6 py-2 bg-black dark:bg-white text-white dark:text-black rounded-lg hover:bg-gray-800 dark:hover:bg-gray-100"
+            className="text-gray-700 text-sm sm:text-base md:text-lg font-medium hover:text-gray-900 transition-colors whitespace-nowrap"
+            style={{ fontFamily: 'var(--font-pretendard)' }}
           >
-            로그인
+            로그인/회원가입
           </button>
         </div>
+
+        {/* 구분선 */}
+        <div className="absolute bottom-0 left-0 w-full h-px bg-gray-200" />
       </header>
 
-      {/* 히어로 섹션 */}
-      <section className="max-w-6xl mx-auto px-6 py-20 text-center">
-        <h2 className="text-5xl font-bold mb-6 dark:text-white">
-          멘토와 함께하는
-          <br />
-          <span className="text-blue-600 dark:text-blue-400">체계적인 수능 학습 관리</span>
-        </h2>
-        <p className="text-xl text-gray-900 dark:text-gray-300 dark:text-gray-100 mb-10">
-          국어, 영어, 수학 학습을 위한 1:1 멘토링 기반 학습 코칭 플랫폼
-        </p>
-        <div className="flex gap-4 justify-center">
-          <button
-            onClick={() => router.push('/login')}
-            className="px-8 py-4 bg-black dark:bg-white text-white dark:text-black rounded-lg text-lg font-semibold hover:bg-gray-800 dark:hover:bg-gray-100"
-          >
-            시작하기
-          </button>
-          <a
-            href="https://forms.gle/FchKdDcm23JdGHpK9"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-8 py-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg text-lg font-semibold hover:border-gray-400 dark:hover:border-gray-500 dark:text-white"
-          >
-            상담 신청
-          </a>
-        </div>
-      </section>
+      {/* 메인 콘텐츠 */}
+      <main className="max-w-[1440px] mx-auto px-4 sm:px-8 md:px-12 lg:px-[60px]">
+        {/* 히어로 섹션 */}
+        <section className="pt-12 pb-16 sm:pt-16 sm:pb-24 md:pt-24 md:pb-32 lg:pt-[98px] lg:pb-[146px] text-center" style={{ fontFamily: 'var(--font-pretendard)' }}>
+          <h2 className="text-black text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-semibold leading-tight sm:leading-tight md:leading-tight lg:leading-[96px] mb-4 sm:mb-5 md:mb-6 lg:mb-[26px] px-2">
+            당신의 멘토가 공부 방법부터 <br className="hidden sm:block" />
+            실행까지 함께 만듭니다.
+          </h2>
+          <p className="text-gray-500 text-lg sm:text-xl md:text-2xl lg:text-3xl font-medium leading-relaxed sm:leading-relaxed md:leading-relaxed lg:leading-[48px] px-2">
+            학생들의 공부 습관을 길러주는 학습코칭 플랫폼
+          </p>
+        </section>
 
-      {/* 핵심 가치 */}
-      <section className="max-w-6xl mx-auto px-6 py-16">
-        <div className="grid md:grid-cols-3 gap-8">
-          <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm dark:shadow-gray-900/50">
-            <div className="text-4xl mb-4">📚</div>
-            <h3 className="text-xl font-bold mb-3 dark:text-white">체계적인 학습 방법</h3>
-            <p className="text-gray-900 dark:text-gray-300 dark:text-gray-300">
-              멘토가 직접 설계하는 맞춤형 학습 플랜
-            </p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm dark:shadow-gray-900/50">
-            <div className="text-4xl mb-4">✅</div>
-            <h3 className="text-xl font-bold mb-3 dark:text-white">실행력 향상</h3>
-            <p className="text-gray-900 dark:text-gray-300 dark:text-gray-300">
-              일일 플래너와 공부 시간 추적
-            </p>
-          </div>
-          <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm dark:shadow-gray-900/50">
-            <div className="text-4xl mb-4">💬</div>
-            <h3 className="text-xl font-bold mb-3 dark:text-white">표준화된 관리 품질</h3>
-            <p className="text-gray-900 dark:text-gray-300 dark:text-gray-300">
-              과목별 피드백 시스템
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* 주요 기능 */}
-      <section className="bg-white dark:bg-gray-800 py-16">
-        <div className="max-w-6xl mx-auto px-6">
-          <h2 className="text-3xl font-bold text-center mb-12 dark:text-white">주요 기능</h2>
-          <div className="grid md:grid-cols-2 gap-12">
-            {/* 멘티 기능 */}
-            <div>
-              <h3 className="text-2xl font-bold mb-6 dark:text-white">학생 (멘티)</h3>
-              <ul className="space-y-4">
-                <li className="flex items-start gap-3">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <div>
-                    <p className="font-semibold">플래너</p>
-                    <p className="text-gray-900 dark:text-gray-300 text-sm">일일/주간/월간 학습 계획 관리</p>
-                  </div>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <div>
-                    <p className="font-semibold">공부 시간 기록</p>
-                    <p className="text-gray-900 dark:text-gray-300 text-sm">과목별 학습 시간 추적</p>
-                  </div>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <div>
-                    <p className="font-semibold">과제 제출</p>
-                    <p className="text-gray-900 dark:text-gray-300 text-sm">학습 결과물 이미지 업로드</p>
-                  </div>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <div>
-                    <p className="font-semibold">피드백 확인</p>
-                    <p className="text-gray-900 dark:text-gray-300 text-sm">멘토의 과목별 피드백 열람</p>
-                  </div>
-                </li>
-              </ul>
+        {/* 핵심 가치 섹션 */}
+        <section className="pb-16 sm:pb-24 md:pb-32 lg:pb-[153px]" style={{ fontFamily: 'var(--font-pretendard)' }}>
+          <div className="flex flex-col sm:flex-row justify-center items-center gap-12 sm:gap-16 md:gap-24 lg:gap-[228px]">
+            {/* 실행력 향상 */}
+            <div className="flex flex-col items-center">
+              <div className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 lg:w-36 lg:h-36 mb-3 sm:mb-4 md:mb-[17px] flex items-center justify-center">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 md:w-26 md:h-26 lg:w-28 lg:h-28 bg-sky-950 rounded-lg" />
+              </div>
+              <h3 className="text-gray-400 text-base sm:text-lg md:text-xl font-medium leading-6 sm:leading-7 md:leading-8 mb-4 sm:mb-5 md:mb-[24px]">
+                실행력 향상
+              </h3>
+              <p className="text-gray-600 text-lg sm:text-xl md:text-2xl font-medium leading-7 sm:leading-8 md:leading-9 text-center">
+                하루 단위 체크리스트
+                <br />
+                꾸준한 학습 점검
+              </p>
             </div>
 
-            {/* 멘토 기능 */}
-            <div>
-              <h3 className="text-2xl font-bold mb-6 dark:text-white">선생님 (멘토)</h3>
-              <ul className="space-y-4">
-                <li className="flex items-start gap-3">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <div>
-                    <p className="font-semibold">멘티 관리</p>
-                    <p className="text-gray-900 dark:text-gray-300 text-sm">담당 학생 목록 및 현황 파악</p>
-                  </div>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <div>
-                    <p className="font-semibold">할 일 등록</p>
-                    <p className="text-gray-900 dark:text-gray-300 text-sm">학생별 맞춤 과제 생성</p>
-                  </div>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <div>
-                    <p className="font-semibold">학습지 관리</p>
-                    <p className="text-gray-900 dark:text-gray-300 text-sm">칼럼/PDF 형태의 학습 자료 업로드</p>
-                  </div>
-                </li>
-                <li className="flex items-start gap-3">
-                  <span className="text-blue-600 mt-1">✓</span>
-                  <div>
-                    <p className="font-semibold">피드백 작성</p>
-                    <p className="text-gray-900 dark:text-gray-300 text-sm">과목별 상세 피드백 제공</p>
-                  </div>
-                </li>
-              </ul>
+            {/* 학습 품질 보증 */}
+            <div className="flex flex-col items-center">
+              <div className="w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 lg:w-36 lg:h-36 mb-3 sm:mb-4 md:mb-[17px] flex items-center justify-center">
+                <div className="w-22 h-20 sm:w-26 sm:h-24 md:w-30 md:h-26 lg:w-32 lg:h-28 bg-sky-950 rounded-lg" />
+              </div>
+              <h3 className="text-gray-400 text-base sm:text-lg md:text-xl font-medium leading-6 sm:leading-7 md:leading-8 mb-4 sm:mb-5 md:mb-[24px]">
+                학습 품질 보증
+              </h3>
+              <p className="text-gray-600 text-lg sm:text-xl md:text-2xl font-medium leading-7 sm:leading-8 md:leading-9 text-center">
+                정형화 된 템플릿
+                <br />
+                정보 불균형 해소
+              </p>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="max-w-6xl mx-auto px-6 py-20 text-center">
-        <h2 className="text-3xl font-bold mb-6 dark:text-white">지금 바로 시작하세요</h2>
-        <p className="text-gray-900 dark:text-gray-300 mb-8">
-          체계적인 학습 관리로 목표를 달성하세요
-        </p>
-        <button
-          onClick={() => router.push('/login')}
-          className="px-10 py-4 bg-blue-600 dark:bg-blue-500 text-white rounded-lg text-lg font-semibold hover:bg-blue-700 dark:hover:bg-blue-600"
-        >
-          로그인하기
-        </button>
-      </section>
+        </section>
+      </main>
 
       {/* 푸터 */}
-      <footer className="bg-gray-900 dark:bg-black text-white py-8">
-        <div className="max-w-6xl mx-auto px-6 text-center">
-          <p className="text-gray-400 dark:text-gray-500">© 2024 설스터디. All rights reserved.</p>
-          <div className="mt-4">
-            <a
-              href="https://malachite-fontina-5e0.notion.site/2cfa56db406080f68bd2f8624b344a63"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gray-400 dark:text-gray-500 hover:text-white mx-3"
-            >
-              노션 페이지
-            </a>
-            <a
-              href="https://forms.gle/FchKdDcm23JdGHpK9"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gray-400 dark:text-gray-500 hover:text-white mx-3"
-            >
-              상담 신청
-            </a>
+      <footer className="pb-8 sm:pb-12 md:pb-16 lg:pb-[76px]" style={{ fontFamily: 'var(--font-pretendard)' }}>
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-8 md:px-12 lg:px-[60px]">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center justify-center sm:justify-start gap-4 sm:gap-5">
+            {/* 푸터 링크 */}
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+              <a
+                href="#"
+                className="text-gray-400 text-sm sm:text-base md:text-lg lg:text-2xl font-medium leading-6 sm:leading-7 md:leading-8 lg:leading-9 hover:text-gray-600 transition-colors whitespace-nowrap"
+              >
+                회사소개
+              </a>
+              <div className="w-px h-3 sm:h-4 bg-gray-300" />
+              <a
+                href="#"
+                className="text-gray-400 text-sm sm:text-base md:text-lg lg:text-2xl font-medium leading-6 sm:leading-7 md:leading-8 lg:leading-9 hover:text-gray-600 transition-colors whitespace-nowrap"
+              >
+                인재채용
+              </a>
+              <div className="w-px h-3 sm:h-4 bg-gray-300" />
+              <a
+                href="#"
+                className="text-gray-400 text-sm sm:text-base md:text-lg lg:text-2xl font-medium leading-6 sm:leading-7 md:leading-8 lg:leading-9 hover:text-gray-600 transition-colors whitespace-nowrap"
+              >
+                이용약관
+              </a>
+              <div className="w-px h-3 sm:h-4 bg-gray-300 hidden sm:block" />
+              <a
+                href="#"
+                className="text-gray-400 text-sm sm:text-base md:text-lg lg:text-2xl font-medium leading-6 sm:leading-7 md:leading-8 lg:leading-9 hover:text-gray-600 transition-colors whitespace-nowrap"
+              >
+                개인정보처리방침
+              </a>
+              <div className="w-px h-3 sm:h-4 bg-gray-300" />
+              <a
+                href="#"
+                className="text-gray-400 text-sm sm:text-base md:text-lg lg:text-2xl font-medium leading-6 sm:leading-7 md:leading-8 lg:leading-9 hover:text-gray-600 transition-colors whitespace-nowrap"
+              >
+                청소년보호정책
+              </a>
+              <div className="w-px h-3 sm:h-4 bg-gray-300" />
+              <a
+                href="#"
+                className="text-gray-400 text-sm sm:text-base md:text-lg lg:text-2xl font-medium leading-6 sm:leading-7 md:leading-8 lg:leading-9 hover:text-gray-600 transition-colors whitespace-nowrap"
+              >
+                고객센터
+              </a>
+            </div>
+
+            {/* 푸터 로고 */}
+            <div className="flex items-center gap-1 mt-2 sm:mt-0">
+              <div className="w-4 h-4 sm:w-5 sm:h-5 bg-sky-950 rounded" />
+              <span className="text-zinc-800 text-base sm:text-lg font-bold" style={{ fontFamily: 'var(--font-scoredream)' }}>
+                설스터디
+              </span>
+            </div>
           </div>
         </div>
       </footer>

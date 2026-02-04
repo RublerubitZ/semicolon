@@ -2,7 +2,16 @@
 // 로컬 백엔드가 실행 중이면 로컬 사용, 아니면 Railway 사용
 
 const RAILWAY_URL = 'https://semicolon-production.up.railway.app';
-const LOCAL_URL = 'http://localhost:4000';
+
+// 동적 로컬 URL 생성 함수
+function getLocalUrl(): string {
+  if (typeof window === 'undefined') {
+    return 'http://localhost:4000';
+  }
+  // IP 접속 시 같은 IP의 백엔드 사용
+  const hostname = window.location.hostname;
+  return `http://${hostname}:4000`;
+}
 
 let cachedApiUrl: string | null = null;
 let isCheckingBackend = false;
@@ -15,7 +24,7 @@ async function checkLocalBackend(): Promise<boolean> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 1000); // 1초 타임아웃
 
-    const response = await fetch(`${LOCAL_URL}/api/health`, {
+    const response = await fetch(`${getLocalUrl()}/api/health`, {
       method: 'GET',
       signal: controller.signal,
     });
@@ -35,7 +44,7 @@ async function checkLocalBackend(): Promise<boolean> {
 export function getApiUrl(): string {
   // 서버 사이드에서는 항상 로컬 사용
   if (typeof window === 'undefined') {
-    return LOCAL_URL;
+    return getLocalUrl();
   }
 
   // 캐시된 URL이 있으면 반환
@@ -47,13 +56,13 @@ export function getApiUrl(): string {
   if (!isCheckingBackend) {
     isCheckingBackend = true;
     checkLocalBackend().then((isLocalAvailable) => {
-      cachedApiUrl = isLocalAvailable ? LOCAL_URL : RAILWAY_URL;
+      cachedApiUrl = isLocalAvailable ? getLocalUrl() : RAILWAY_URL;
       console.log(`[API] Using ${cachedApiUrl}`);
     });
   }
 
   // 첫 호출 시에는 로컬 URL 반환 (개발 환경 우선)
-  return LOCAL_URL;
+  return getLocalUrl();
 }
 
 /**
@@ -62,11 +71,11 @@ export function getApiUrl(): string {
  */
 export async function initializeApiUrl(): Promise<string> {
   if (typeof window === 'undefined') {
-    return LOCAL_URL;
+    return getLocalUrl();
   }
 
   const isLocalAvailable = await checkLocalBackend();
-  cachedApiUrl = isLocalAvailable ? LOCAL_URL : RAILWAY_URL;
+  cachedApiUrl = isLocalAvailable ? getLocalUrl() : RAILWAY_URL;
 
   console.log(`[API] Initialized: ${cachedApiUrl}`);
   return cachedApiUrl;

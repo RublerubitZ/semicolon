@@ -13,6 +13,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-pretendard: var(--font-pretendard);
+  --font-scoredream: var(--font-scoredream);
 }
 
 body {

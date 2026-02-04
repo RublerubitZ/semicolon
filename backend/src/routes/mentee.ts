@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { prisma } from '../lib/prisma';
+import { parseUTCDate, getDateRange, getTodayUTC } from '../lib/date-utils';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 // 모든 멘티 라우트에 인증 미들웨어 적용
 router.use(authMiddleware);
@@ -14,12 +14,15 @@ router.get('/planner/daily', async (req: AuthRequest, res: Response) => {
     const { date } = req.query;
     const menteeId = req.user!.userId;
 
-    // 날짜 범위로 조회 (시간대 문제 해결)
-    const targetDate = date ? new Date(date as string) : new Date();
-    targetDate.setHours(0, 0, 0, 0);
-
-    const nextDay = new Date(targetDate);
-    nextDay.setDate(nextDay.getDate() + 1);
+    // 날짜 범위로 조회 (UTC 기준, 타임존 문제 해결)
+    const [targetDate, nextDay] = date
+      ? getDateRange(date as string)
+      : (() => {
+          const today = getTodayUTC();
+          const tomorrow = new Date(today);
+          tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+          return [today, tomorrow];
+        })();
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -60,12 +63,15 @@ router.get('/planner', async (req: AuthRequest, res: Response) => {
     const { date } = req.query;
     const menteeId = req.user!.userId;
 
-    // 날짜 범위로 조회 (시간대 문제 해결)
-    const targetDate = date ? new Date(date as string) : new Date();
-    targetDate.setHours(0, 0, 0, 0);
-
-    const nextDay = new Date(targetDate);
-    nextDay.setDate(nextDay.getDate() + 1);
+    // 날짜 범위로 조회 (UTC 기준, 타임존 문제 해결)
+    const [targetDate, nextDay] = date
+      ? getDateRange(date as string)
+      : (() => {
+          const today = getTodayUTC();
+          const tomorrow = new Date(today);
+          tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+          return [today, tomorrow];
+        })();
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -106,9 +112,10 @@ router.get('/planner/weekly', async (req: AuthRequest, res: Response) => {
     const { startDate } = req.query;
     const menteeId = req.user!.userId;
 
-    const start = startDate ? new Date(startDate as string) : new Date();
+    // UTC 기준으로 주 시작일 파싱 (타임존 문제 해결)
+    const start = startDate ? parseUTCDate(startDate as string) : getTodayUTC();
     const end = new Date(start);
-    end.setDate(start.getDate() + 6);
+    end.setUTCDate(end.getUTCDate() + 6);
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -169,11 +176,13 @@ router.get('/planner/monthly', async (req: AuthRequest, res: Response) => {
     const { year, month } = req.query;
     const menteeId = req.user!.userId;
 
-    const targetYear = year ? parseInt(year as string) : new Date().getFullYear();
-    const targetMonth = month ? parseInt(month as string) : new Date().getMonth() + 1;
+    // UTC 기준으로 월 시작일/종료일 계산 (타임존 문제 해결)
+    const today = getTodayUTC();
+    const targetYear = year ? parseInt(year as string) : today.getUTCFullYear();
+    const targetMonth = month ? parseInt(month as string) : today.getUTCMonth() + 1;
 
-    const start = new Date(targetYear, targetMonth - 1, 1);
-    const end = new Date(targetYear, targetMonth, 0);
+    const start = new Date(Date.UTC(targetYear, targetMonth - 1, 1));
+    const end = new Date(Date.UTC(targetYear, targetMonth, 0, 23, 59, 59, 999));
 
     const tasks = await prisma.task.findMany({
       where: {
@@ -246,8 +255,8 @@ router.post('/tasks', async (req: AuthRequest, res: Response) => {
     const menteeId = req.user!.userId;
     const { title, description, subject, date } = req.body;
 
-    const taskDate = new Date(date);
-    taskDate.setHours(0, 0, 0, 0);
+    // UTC 기준으로 날짜 파싱 (타임존 문제 해결)
+    const taskDate = parseUTCDate(date);
 
     const task = await prisma.task.create({
       data: {
@@ -296,11 +305,8 @@ router.put('/tasks/:id', async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: '멘토가 등록한 할 일은 수정할 수 없습니다.' });
     }
 
-    let taskDate;
-    if (date) {
-      taskDate = new Date(date);
-      taskDate.setHours(0, 0, 0, 0);
-    }
+    // UTC 기준으로 날짜 파싱 (타임존 문제 해결)
+    const taskDate = date ? parseUTCDate(date) : undefined;
 
     const task = await prisma.task.update({
       where: { id },
@@ -422,25 +428,99 @@ router.patch('/tasks/:id/self-check', async (req: AuthRequest, res: Response) =>
   }
 });
 
+// 학습 목표 항목 토글 (체크/해제)
+router.patch('/tasks/:taskId/learning-goals/:itemId/toggle', async (req: AuthRequest, res: Response) => {
+  try {
+    const menteeId = req.user!.userId;
+    const { taskId, itemId } = req.params as { taskId: string; itemId: string };
+
+    // 1. Task 소유권 확인
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: { menteeId: true },
+    });
+
+    if (!task) {
+      return res.status(404).json({ error: '과제를 찾을 수 없습니다.' });
+    }
+
+    if (task.menteeId !== menteeId) {
+      return res.status(403).json({ error: '권한이 없습니다.' });
+    }
+
+    // 2. 항목 조회
+    const item = await prisma.learningGoalItem.findUnique({
+      where: { id: itemId },
+    });
+
+    if (!item) {
+      return res.status(404).json({ error: '학습 목표 항목을 찾을 수 없습니다.' });
+    }
+
+    // 3. 토글
+    const updated = await prisma.learningGoalItem.update({
+      where: { id: itemId },
+      data: {
+        isCompleted: !item.isCompleted,
+        completedAt: !item.isCompleted ? new Date() : null,
+      },
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Toggle learning goal error:', error);
+    res.status(500).json({ error: '학습 목표 업데이트에 실패했습니다.' });
+  }
+});
+
 // 공부 시간 기록
 router.post('/tasks/:id/time', async (req: AuthRequest, res: Response) => {
   try {
     const id = req.params.id as string;
     const menteeId = req.user!.userId;
-    const { duration, date } = req.body;
+    const { duration, date, startTime, endTime } = req.body;
 
     const task = await prisma.task.findUnique({ where: { id } });
     if (!task) {
       return res.status(404).json({ error: '할 일을 찾을 수 없습니다.' });
     }
 
+    // UTC 기준으로 날짜 파싱 (타임존 문제 해결)
+    const studyDate = parseUTCDate(date);
+
+    // 중복 확인: 같은 taskId, date, startTime, endTime을 가진 로그가 있는지 확인
+    if (startTime && endTime) {
+      const existingLog = await prisma.studyTimeLog.findFirst({
+        where: {
+          taskId: id,
+          date: studyDate,
+          startTime,
+          endTime,
+        },
+      });
+
+      // 중복된 기록이 있으면 업데이트
+      if (existingLog) {
+        const updatedLog = await prisma.studyTimeLog.update({
+          where: { id: existingLog.id },
+          data: {
+            duration,
+          },
+        });
+        return res.json({ ...updatedLog, isUpdated: true });
+      }
+    }
+
+    // 새로운 기록 생성
     const studyLog = await prisma.studyTimeLog.create({
       data: {
         menteeId,
         taskId: id,
         subject: task.subject,
-        date: new Date(date),
+        date: studyDate,
         duration,
+        startTime: startTime || null, // "09:00" 형식
+        endTime: endTime || null,     // "10:30" 형식
       },
     });
 
@@ -472,6 +552,13 @@ router.get('/tasks/:id', async (req: AuthRequest, res: Response) => {
             nickname: true,
           },
         },
+        learningGoal: {
+          include: {
+            items: {
+              orderBy: { order: 'asc' },
+            },
+          },
+        },
       },
     });
 
@@ -481,10 +568,9 @@ router.get('/tasks/:id', async (req: AuthRequest, res: Response) => {
 
     // 멘토가 생성한 과제(isFixed=true)의 경우 미래 과제는 볼 수 없음
     if (task.isFixed) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = getTodayUTC();
       const taskDate = new Date(task.date);
-      taskDate.setHours(0, 0, 0, 0);
+      taskDate.setUTCHours(0, 0, 0, 0);
 
       if (taskDate > today) {
         return res.status(403).json({ error: '아직 시작되지 않은 과제입니다.' });
@@ -505,9 +591,13 @@ router.post('/tasks/:id/submit', async (req: AuthRequest, res: Response) => {
     const menteeId = req.user!.userId;
     const { imageUrls, comment } = req.body;
 
-    // 과제 존재 여부 및 날짜 확인
+    // 과제 존재 여부 및 날짜 확인 (멘티, 멘토 정보 포함)
     const task = await prisma.task.findUnique({
       where: { id },
+      include: {
+        mentee: { select: { name: true } },
+        mentor: { select: { id: true, name: true } },
+      },
     });
 
     if (!task) {
@@ -516,10 +606,9 @@ router.post('/tasks/:id/submit', async (req: AuthRequest, res: Response) => {
 
     // 멘토가 생성한 과제(isFixed=true)의 경우 미래 과제는 제출할 수 없음
     if (task.isFixed) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = getTodayUTC();
       const taskDate = new Date(task.date);
-      taskDate.setHours(0, 0, 0, 0);
+      taskDate.setUTCHours(0, 0, 0, 0);
 
       if (taskDate > today) {
         return res.status(403).json({ error: '아직 시작되지 않은 과제는 제출할 수 없습니다.' });
@@ -534,6 +623,22 @@ router.post('/tasks/:id/submit', async (req: AuthRequest, res: Response) => {
         comment,
       },
     });
+
+    // 멘토에게 알림 전송
+    if (task.mentorId && task.mentor) {
+      try {
+        const { notifyTaskSubmitted } = await import('../lib/notifications');
+        await notifyTaskSubmitted({
+          mentorId: task.mentorId,
+          menteeName: task.mentee.name,
+          taskTitle: task.title,
+          taskId: task.id,
+        });
+      } catch (notifError) {
+        console.error('[Notification Error] Failed to send task submission notification:', notifError);
+        // 알림 실패는 과제 제출 자체를 실패시키지 않음
+      }
+    }
 
     res.status(201).json(submission);
   } catch (error) {
@@ -579,13 +684,16 @@ router.post('/comments', async (req: AuthRequest, res: Response) => {
     const menteeId = req.user!.userId;
     const { date, content } = req.body;
 
+    // UTC 기준으로 날짜 파싱 (타임존 문제 해결)
+    const commentDate = parseUTCDate(date);
+
     const comment = await prisma.plannerComment.upsert({
       where: {
         id: '', // placeholder for upsert
       },
       create: {
         menteeId,
-        date: new Date(date),
+        date: commentDate,
         content,
       },
       update: {
@@ -638,11 +746,10 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
 router.get('/assignments', async (req: AuthRequest, res: Response) => {
   try {
     const menteeId = req.user!.userId;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getTodayUTC();
 
     const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
     // 멘토가 지정한 과제만 조회 (isFixed: true)
     const allTasks = await prisma.task.findMany({
@@ -667,7 +774,7 @@ router.get('/assignments', async (req: AuthRequest, res: Response) => {
 
     allTasks.forEach((task) => {
       const taskDate = new Date(task.date);
-      taskDate.setHours(0, 0, 0, 0);
+      taskDate.setUTCHours(0, 0, 0, 0);
 
       // 과제 제출 여부로 완료 판단
       const isSubmitted = task.submissions && task.submissions.length > 0;
@@ -702,16 +809,14 @@ router.get('/dashboard', async (req: AuthRequest, res: Response) => {
   try {
     const menteeId = req.user!.userId;
 
-    // 오늘 날짜 (날짜 범위로 조회)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
+    // 오늘 날짜 (UTC 기준, 타임존 문제 해결)
+    const today = getTodayUTC();
     const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
     // 어제 날짜
     const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
 
     // 오늘의 과제 조회 (날짜 범위)
     const todayTasks = await prisma.task.findMany({
@@ -784,6 +889,220 @@ router.get('/dashboard', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Dashboard error:', error);
     res.status(500).json({ error: '대시보드 정보를 불러오는데 실패했습니다.' });
+  }
+});
+
+// 일일 전체 피드백 조회 (특정 날짜)
+router.get('/daily-feedbacks', async (req: AuthRequest, res: Response) => {
+  try {
+    const { date } = req.query;
+    const menteeId = req.user!.userId;
+
+    if (!date) {
+      return res.status(400).json({ error: '날짜를 입력해주세요.' });
+    }
+
+    // 날짜 범위로 조회 (UTC 기준, 타임존 문제 해결)
+    const [targetDate, nextDay] = getDateRange(date as string);
+
+    const dailyFeedback = await prisma.dailyFeedback.findFirst({
+      where: {
+        menteeId,
+        date: {
+          gte: targetDate,
+          lt: nextDay,
+        },
+      },
+      include: {
+        mentor: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+          },
+        },
+      },
+    });
+
+    res.json(dailyFeedback);
+  } catch (error) {
+    console.error('Daily feedback fetch error:', error);
+    res.status(500).json({ error: '일일 피드백을 불러오는데 실패했습니다.' });
+  }
+});
+
+// 일일 전체 피드백 월별 조회
+router.get('/daily-feedbacks/monthly', async (req: AuthRequest, res: Response) => {
+  try {
+    const { year, month } = req.query;
+    const menteeId = req.user!.userId;
+
+    if (!year || !month) {
+      return res.status(400).json({ error: '년도와 월을 입력해주세요.' });
+    }
+
+    const yearNum = parseInt(year as string);
+    const monthNum = parseInt(month as string);
+
+    // 해당 월의 시작일과 종료일 (UTC 기준, 타임존 문제 해결)
+    const startDate = new Date(Date.UTC(yearNum, monthNum - 1, 1));
+    const endDate = new Date(Date.UTC(yearNum, monthNum, 0, 23, 59, 59, 999));
+
+    const dailyFeedbacks = await prisma.dailyFeedback.findMany({
+      where: {
+        menteeId,
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        mentor: {
+          select: {
+            id: true,
+            name: true,
+            nickname: true,
+          },
+        },
+      },
+      orderBy: {
+        date: 'desc',
+      },
+    });
+
+    res.json(dailyFeedbacks);
+  } catch (error) {
+    console.error('Monthly daily feedbacks fetch error:', error);
+    res.status(500).json({ error: '월별 일일 피드백을 불러오는데 실패했습니다.' });
+  }
+});
+
+// 월간 리포트
+router.get('/reports/monthly', async (req: AuthRequest, res: Response) => {
+  try {
+    const { year, month } = req.query;
+    const menteeId = req.user!.userId;
+
+    if (!year || !month) {
+      return res.status(400).json({ error: '년도와 월을 입력해주세요.' });
+    }
+
+    const yearNum = parseInt(year as string);
+    const monthNum = parseInt(month as string);
+
+    // 해당 월의 시작일과 종료일 (UTC 기준, 타임존 문제 해결)
+    const startDate = new Date(Date.UTC(yearNum, monthNum - 1, 1));
+    const endDate = new Date(Date.UTC(yearNum, monthNum, 0, 23, 59, 59, 999));
+
+    // 해당 월의 모든 과제 조회
+    const tasks = await prisma.task.findMany({
+      where: {
+        menteeId,
+        date: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        submissions: true,
+        feedbacks: true,
+        studyLogs: true,
+      },
+      orderBy: {
+        date: 'asc',
+      },
+    });
+
+    // 1. 전체 요약 통계
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter((t) => t.isApproved).length;
+    const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+    const totalStudyTime = tasks.reduce((sum, task) => {
+      return sum + task.studyLogs.reduce((s, log) => s + log.duration, 0);
+    }, 0);
+
+    const totalFeedbacks = tasks.reduce((sum, task) => sum + task.feedbacks.length, 0);
+
+    // 2. 과목별 통계
+    const subjectStats: Record<string, any> = {};
+
+    tasks.forEach((task) => {
+      if (!subjectStats[task.subject]) {
+        subjectStats[task.subject] = {
+          subject: task.subject,
+          totalTasks: 0,
+          completedTasks: 0,
+          completionRate: 0,
+          totalStudyTime: 0,
+          totalFeedbacks: 0,
+        };
+      }
+
+      const stat = subjectStats[task.subject];
+      stat.totalTasks += 1;
+      if (task.isApproved) {
+        stat.completedTasks += 1;
+      }
+      stat.totalStudyTime += task.studyLogs.reduce((s, log) => s + log.duration, 0);
+      stat.totalFeedbacks += task.feedbacks.length;
+    });
+
+    // 과목별 완료율 계산
+    Object.values(subjectStats).forEach((stat: any) => {
+      stat.completionRate =
+        stat.totalTasks > 0 ? Math.round((stat.completedTasks / stat.totalTasks) * 100) : 0;
+    });
+
+    // 3. 일별 달성률
+    const dailyProgress: Record<string, any> = {};
+
+    // 해당 월의 모든 날짜에 대해 초기화
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      dailyProgress[dateStr] = {
+        date: dateStr,
+        totalTasks: 0,
+        completedTasks: 0,
+        progressRate: 0,
+      };
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // 과제 데이터로 채우기
+    tasks.forEach((task) => {
+      const dateStr = new Date(task.date).toISOString().split('T')[0];
+      if (dailyProgress[dateStr]) {
+        dailyProgress[dateStr].totalTasks += 1;
+        if (task.isApproved) {
+          dailyProgress[dateStr].completedTasks += 1;
+        }
+      }
+    });
+
+    // 일별 달성률 계산
+    Object.values(dailyProgress).forEach((day: any) => {
+      day.progressRate =
+        day.totalTasks > 0 ? Math.round((day.completedTasks / day.totalTasks) * 100) : 0;
+    });
+
+    res.json({
+      year: yearNum,
+      month: monthNum,
+      summary: {
+        totalTasks,
+        completedTasks,
+        completionRate,
+        totalStudyTime, // 분 단위
+        totalFeedbacks,
+      },
+      subjectStats: Object.values(subjectStats),
+      dailyProgress: Object.values(dailyProgress),
+    });
+  } catch (error) {
+    console.error('Monthly report error:', error);
+    res.status(500).json({ error: '월간 리포트를 불러오는데 실패했습니다.' });
   }
 });
 

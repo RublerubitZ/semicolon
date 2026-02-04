@@ -5,6 +5,8 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Connection pool settings for Railway and production
+  // Add ?connection_limit=10&pool_timeout=30 to DATABASE_URL if needed
 }
 
 // 사용자
@@ -15,21 +17,24 @@ model User {
   name         String
   nickname     String?
   role         Role     @default(MENTEE)
+  grade        String?  // 학년 (고1, 고2, 고3, 재수생 등)
   profileImage String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   // Relations
-  menteeTasks     Task[]           @relation("MenteeTasks")
-  mentorTasks     Task[]           @relation("MentorTasks")
-  submissions     TaskSubmission[]
-  feedbacksGiven  Feedback[]       @relation("FeedbacksMentor")
-  worksheets      Worksheet[]
-  studyTimeLogs   StudyTimeLog[]
-  plannerComments PlannerComment[]
-  notifications   Notification[]
-  mentorRelation  MentorMentee[]   @relation("Mentor")
-  menteeRelation  MentorMentee[]   @relation("Mentee")
+  menteeTasks            Task[]           @relation("MenteeTasks")
+  mentorTasks            Task[]           @relation("MentorTasks")
+  submissions            TaskSubmission[]
+  feedbacksGiven         Feedback[]       @relation("FeedbacksMentor")
+  worksheets             Worksheet[]
+  studyTimeLogs          StudyTimeLog[]
+  plannerComments        PlannerComment[]
+  notifications          Notification[]
+  mentorRelation         MentorMentee[]   @relation("Mentor")
+  menteeRelation         MentorMentee[]   @relation("Mentee")
+  dailyFeedbacksGiven    DailyFeedback[]  @relation("DailyFeedbacksMentor")
+  dailyFeedbacksReceived DailyFeedback[]  @relation("DailyFeedbacksMentee")
 }
 
 enum Role {
@@ -87,15 +92,43 @@ model Task {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  mentee      User             @relation("MenteeTasks", fields: [menteeId], references: [id])
-  mentor      User?            @relation("MentorTasks", fields: [mentorId], references: [id])
-  worksheet   Worksheet?       @relation(fields: [worksheetId], references: [id])
-  submissions TaskSubmission[]
-  feedbacks   Feedback[]
-  studyLogs   StudyTimeLog[]
+  mentee       User             @relation("MenteeTasks", fields: [menteeId], references: [id])
+  mentor       User?            @relation("MentorTasks", fields: [mentorId], references: [id])
+  worksheet    Worksheet?       @relation(fields: [worksheetId], references: [id])
+  submissions  TaskSubmission[]
+  feedbacks    Feedback[]
+  studyLogs    StudyTimeLog[]
+  learningGoal LearningGoal?    // 학습 목표 (선택)
 
   @@index([menteeId, date])
   @@index([mentorId, date])
+}
+
+// 학습 목표
+model LearningGoal {
+  id        String   @id @default(cuid())
+  taskId    String   @unique // 과제당 하나
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task  Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  items LearningGoalItem[]
+}
+
+// 학습 목표 항목 (체크리스트)
+model LearningGoalItem {
+  id             String    @id @default(cuid())
+  learningGoalId String
+  title          String    // "주격조사 이해하기"
+  order          Int       @default(0)
+  isCompleted    Boolean   @default(false)
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  learningGoal LearningGoal @relation(fields: [learningGoalId], references: [id], onDelete: Cascade)
+
+  @@index([learningGoalId])
 }
 
 // 과제 제출
@@ -197,7 +230,28 @@ model Notification {
 }
 
 enum NotificationType {
-  TASK_INCOMPLETE
-  NEW_FEEDBACK
-  REMINDER
+  TASK_INCOMPLETE  // 과제 미완료 알림
+  NEW_FEEDBACK     // 새로운 피드백
+  REMINDER         // 리마인더
+  NEW_TASK         // 새로운 과제 등록 (멘토 -> 멘티)
+  TASK_SUBMITTED   // 과제 제출 (멘티 -> 멘토)
+  TASK_APPROVED    // 과제 승인 (멘토 -> 멘티)
+}
+
+// 일일 전체 피드백
+model DailyFeedback {
+  id        String   @id @default(cuid())
+  menteeId  String
+  mentorId  String
+  date      DateTime @db.Date
+  content   String   // 일일 전체 피드백
+  summary   String?  // 한 줄 요약
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mentee User @relation("DailyFeedbacksMentee", fields: [menteeId], references: [id])
+  mentor User @relation("DailyFeedbacksMentor", fields: [mentorId], references: [id])
+
+  @@unique([menteeId, date]) // 멘티당 날짜별로 하나만
+  @@index([menteeId, date])
 }

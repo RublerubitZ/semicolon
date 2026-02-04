@@ -38,8 +38,10 @@ export default function MenteeLayout({
           <h1 className="text-lg font-bold dark:text-white">설스터디</h1>
           <button
             onClick={() => {
-              localStorage.clear();
-              router.push('/login');
+              if (confirm('정말 로그아웃 하시겠습니까?')) {
+                localStorage.clear();
+                router.push('/');
+              }
             }}
             className="text-sm text-gray-900 dark:text-gray-100"
           >
