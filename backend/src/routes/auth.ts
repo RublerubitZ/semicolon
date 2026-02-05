@@ -32,6 +32,10 @@ router.post('/login', async (req: Request, res: Response) => {
         role: true,
         grade: true,
         profileImage: true,
+        gender: true,
+        birthDate: true,
+        goal: true,
+        phone: true,
       },
     });
 
@@ -60,6 +64,10 @@ router.post('/login', async (req: Request, res: Response) => {
         role: user.role,
         grade: user.grade,
         profileImage: user.profileImage,
+        gender: user.gender,
+        birthDate: user.birthDate,
+        goal: user.goal,
+        phone: user.phone,
       },
     });
   } catch (error) {
@@ -89,6 +97,10 @@ router.get('/me', async (req: Request, res: Response) => {
         role: true,
         grade: true,
         profileImage: true,
+        gender: true,
+        birthDate: true,
+        goal: true,
+        phone: true,
       },
     });
 
@@ -103,16 +115,79 @@ router.get('/me', async (req: Request, res: Response) => {
   }
 });
 
-// 프로필 업데이트 (닉네임, 프로필 사진, 학년)
+// 프로필 조회 (기본정보 + 멘토이름 + 과목 목록)
+router.get('/profile', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        nickname: true,
+        role: true,
+        grade: true,
+        profileImage: true,
+        gender: true,
+        birthDate: true,
+        goal: true,
+        phone: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
+    }
+
+    // 멘토 이름 조회 (멘티인 경우)
+    let mentorName: string | null = null;
+    if (user.role === 'MENTEE') {
+      const relation = await prisma.mentorMentee.findFirst({
+        where: { menteeId: userId },
+        include: { mentor: { select: { name: true } } },
+      });
+      if (relation) {
+        mentorName = relation.mentor.name;
+      }
+    }
+
+    // 과목 목록 조회 (멘티의 과제에서 고유 subject 추출)
+    const tasks = await prisma.task.findMany({
+      where: { menteeId: userId },
+      select: { subject: true },
+      distinct: ['subject'],
+    });
+    const subjects = tasks.map((t) => t.subject);
+
+    res.json({
+      user: {
+        ...user,
+        mentorName,
+        subjects,
+      },
+    });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ error: '프로필 조회에 실패했습니다.' });
+  }
+});
+
+// 프로필 업데이트
 router.patch('/update-profile', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { nickname, profileImage, grade } = req.body;
+    const { nickname, profileImage, grade, gender, birthDate, goal, phone } = req.body;
 
     const updateData: any = {};
     if (nickname) updateData.nickname = nickname;
     if (profileImage !== undefined) updateData.profileImage = profileImage;
     if (grade !== undefined) updateData.grade = grade;
+    if (gender !== undefined) updateData.gender = gender;
+    if (birthDate !== undefined) updateData.birthDate = birthDate;
+    if (goal !== undefined) updateData.goal = goal;
+    if (phone !== undefined) updateData.phone = phone;
 
     const updatedUser = await prisma.user.update({
       where: { id: userId },
@@ -125,6 +200,10 @@ router.patch('/update-profile', authMiddleware, async (req: AuthRequest, res: Re
         role: true,
         grade: true,
         profileImage: true,
+        gender: true,
+        birthDate: true,
+        goal: true,
+        phone: true,
       },
     });
 

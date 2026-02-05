@@ -1,11 +1,16 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
-import { EditIcon, DeleteIcon } from '@/components/icons';
-import TimelineChart from '@/components/TimelineChart';
-import NotificationBell from '@/components/NotificationBell';
-
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { HiDotsVertical } from 'react-icons/hi';
+import { MdOutlineFileDownload, MdInfoOutline } from 'react-icons/md';
+
+import { PiPushPinFill } from "react-icons/pi";
+import { PiPencilLineLight } from 'react-icons/pi';
+import { LuDownload } from "react-icons/lu";
+import { IoIosNotifications, IoIosArrowDown } from "react-icons/io";
+import { RiUserFill } from "react-icons/ri";
+import { motion, AnimatePresence } from 'framer-motion';
 
 type SelfCheckStatus = 'PENDING' | 'IN_PROGRESS' | 'DONE' | 'NOT_DONE';
 
@@ -17,56 +22,30 @@ interface Task {
   isCompleted: boolean;
   isFixed: boolean;
   date: string;
-  // 자가점검 (멘티용)
   selfCheck: SelfCheckStatus;
   selfCheckedAt?: string;
-  // 멘토 승인 (달성률 반영)
   isApproved: boolean;
   approvedAt?: string;
   approvedBy?: string;
   worksheet?: {
     id: string;
     title: string;
+    pdfUrl: string;
+    type: 'PDF' | 'COLUMN';
   };
   submissions: any[];
   studyLogs: any[];
-}
-
-// 자가점검 상태 표시 설정
-const SELF_CHECK_OPTIONS: { value: SelfCheckStatus; label: string; icon: string; color: string }[] = [
-  { value: 'PENDING', label: '미시작', icon: '○', color: 'text-gray-400' },
-  { value: 'IN_PROGRESS', label: '진행중', icon: '△', color: 'text-yellow-500' },
-  { value: 'DONE', label: '완료', icon: '✓', color: 'text-green-500' },
-  { value: 'NOT_DONE', label: '미진행', icon: '✕', color: 'text-red-500' },
-];
-
-interface PlannerComment {
-  id: string;
-  content: string;
-  date: string;
+  feedbacks: any[];
+  learningGoal?: {
+    id: string;
+    items: { id: string; title: string; isCompleted: boolean }[];
+  };
 }
 
 interface PlannerData {
   tasks: Task[];
-  comment?: PlannerComment;
   date: string;
 }
-
-const DEFAULT_SUBJECTS = [
-  { value: 'KOREAN', label: '국어', color: 'bg-blue-100 text-blue-800' },
-  { value: 'ENGLISH', label: '영어', color: 'bg-green-100 text-green-800' },
-  { value: 'MATH', label: '수학', color: 'bg-purple-100 text-purple-800' },
-];
-
-const getSubjectLabel = (subject: string) => {
-  const found = DEFAULT_SUBJECTS.find((s) => s.value === subject);
-  return found ? found.label : subject;
-};
-
-const getSubjectColor = (subject: string) => {
-  const found = DEFAULT_SUBJECTS.find((s) => s.value === subject);
-  return found ? found.color : 'bg-gray-100 dark:bg-gray-700 text-gray-800';
-};
 
 interface DashboardData {
   todayStats: {
@@ -74,94 +53,100 @@ interface DashboardData {
     completed: number;
     progressRate: number;
   };
-  yesterdayFeedbacks: Array<{
-    id: string;
-    content: string;
-    summary?: string;
-    task: {
-      title: string;
-      subject: string;
+  yesterdayFeedbacks: {
+    taskId: string;
+    taskTitle: string;
+    subject: string;
+    feedback: {
+      content: string;
+      summary?: string;
+      mentor: { name: string };
     };
-    mentor: {
-      name: string;
-    };
-  }>;
+  }[];
+}
+
+const DEFAULT_SUBJECTS = [
+  { value: 'KOREAN', label: '국어', color: 'bg-pink-100 outline-pink-300/50', textColor: 'text-gray-900' },
+  { value: 'ENGLISH', label: '영어', color: 'bg-amber-100 outline-amber-300/30', textColor: 'text-gray-900' },
+  { value: 'MATH', label: '수학', color: 'bg-blue-200/60 outline-blue-200', textColor: 'text-black' },
+];
+
+const getSubjectStyles = (subject: string) => {
+  const found = DEFAULT_SUBJECTS.find((s) => s.value === subject);
+  if (found) return `${found.color} ${found.textColor}`;
+  return 'bg-gray-100 outline-gray-200 text-gray-700';
+};
+
+const getSubjectLabel = (subject: string) => {
+  const found = DEFAULT_SUBJECTS.find((s) => s.value === subject);
+  return found ? found.label : subject;
+};
+
+/** Calendar Grid Builder Helper */
+function buildCalendarGrid(year: number, month1to12: number) {
+  const first = new Date(year, month1to12 - 1, 1);
+  const last = new Date(year, month1to12, 0);
+  // Mon=0, ..., Sun=6
+  const offset = (first.getDay() + 6) % 7;
+  const daysInMonth = last.getDate();
+  const totalCells = Math.ceil((offset + daysInMonth) / 7) * 7;
+  const prevLast = new Date(year, month1to12 - 1, 0).getDate();
+
+  const cells = [];
+  for (let i = 0; i < totalCells; i++) {
+    const dayNum = i - offset + 1;
+    let y = year, m = month1to12, d = dayNum, inMonth = true;
+
+    if (dayNum < 1) {
+      inMonth = false;
+      m = month1to12 - 1;
+      if (m === 0) { m = 12; y = year - 1; }
+      d = prevLast + dayNum;
+    } else if (dayNum > daysInMonth) {
+      inMonth = false;
+      m = month1to12 + 1;
+      if (m === 13) { m = 1; y = year + 1; }
+      d = dayNum - daysInMonth;
+    }
+    cells.push({ year: y, month: m, day: d, inMonth });
+  }
+  return cells;
 }
 
 export default function MenteeDashboard() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [plannerData, setPlannerData] = useState<PlannerData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [dailyFeedback, setDailyFeedback] = useState<any>(null);
 
-  // 모달 상태
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showEditTaskModal, setShowEditTaskModal] = useState(false);
   const [showStudyTimeModal, setShowStudyTimeModal] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showFeedbackSummary, setShowFeedbackSummary] = useState(false);
+  
+  // Date Picker States
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [draftYear, setDraftYear] = useState(currentDate.getFullYear());
+  const [draftMonth, setDraftMonth] = useState(currentDate.getMonth() + 1);
+  const [draftDay, setDraftDay] = useState(currentDate.getDate());
+
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-  // 공부 시간 기록 상태
-  const [timeRecord, setTimeRecord] = useState({
-    taskId: '',
-    startTime: '',
-    endTime: '',
-  });
-
-  // 할 일 추가 폼 상태
-  const [newTask, setNewTask] = useState({
-    title: '',
-    description: '',
-    subject: 'KOREAN',
-    customSubject: '',
-  });
-
-  // 반복 설정 상태
-  const [repeatMode, setRepeatMode] = useState<'single' | 'repeat'>('single');
-  const [repeatSettings, setRepeatSettings] = useState({
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
-    weekdays: {
-      0: false, // 일요일
-      1: false, // 월요일
-      2: false, // 화요일
-      3: false, // 수요일
-      4: false, // 목요일
-      5: false, // 금요일
-      6: false, // 토요일
-    },
-  });
-
-  // 할 일 수정 폼 상태
-  const [editTask, setEditTask] = useState({
-    id: '',
-    title: '',
-    description: '',
-    subject: '',
-    customSubject: '',
-    date: '',
-  });
-
-  // 과제 제출 폼 상태
+  const [timeRecord, setTimeRecord] = useState({ taskId: '', startTime: '', endTime: '' });
+  const [newTask, setNewTask] = useState({ title: '', description: '', subject: 'KOREAN', customSubject: '' });
+  const [editTask, setEditTask] = useState({ id: '', title: '', description: '', subject: '', customSubject: '' });
   const [submitComment, setSubmitComment] = useState('');
-  const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
-  // 날짜 포맷팅
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('ko-KR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // 로컬 타임존 기준 날짜 포맷팅 (YYYY-MM-DD)
+  const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+
   const formatDateForApi = (date: Date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -169,1272 +154,607 @@ export default function MenteeDashboard() {
     return `${year}-${month}-${day}`;
   };
 
-  // 플래너 데이터 가져오기
-  const fetchPlannerData = async (date: Date) => {
-    setIsLoading(true);
-    setError('');
-
-    try {
-      const token = localStorage.getItem('token');
-      const dateStr = formatDateForApi(date);
-
-      const res = await fetch(`${getApiUrl()}/api/mentee/planner?date=${dateStr}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!res.ok) {
-        throw new Error('플래너를 불러오는데 실패했습니다.');
-      }
-
-      const data = await res.json();
-      setPlannerData(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '오류가 발생했습니다.');
-    } finally {
-      setIsLoading(false);
+  const getWeekDates = (baseDate: Date) => {
+    const dates: Date[] = [];
+    const day = baseDate.getDay();
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(baseDate);
+      date.setDate(date.getDate() + mondayOffset + i);
+      dates.push(date);
     }
-  };
-
-  // 자가점검 상태 변경
-  const handleSelfCheck = async (taskId: string, newStatus: SelfCheckStatus) => {
-    try {
-      const token = localStorage.getItem('token');
-
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}/self-check`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ selfCheck: newStatus }),
-      });
-
-      if (!res.ok) {
-        throw new Error('자가점검 저장에 실패했습니다.');
-      }
-
-      fetchPlannerData(currentDate);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
-    }
-  };
-
-  // 반복 날짜 계산
-  const calculateRepeatDates = () => {
-    const dates: string[] = [];
-    const start = new Date(repeatSettings.startDate);
-    const end = new Date(repeatSettings.endDate);
-
-    // 선택된 요일 확인
-    const selectedWeekdays = Object.entries(repeatSettings.weekdays)
-      .filter(([_, selected]) => selected)
-      .map(([day, _]) => parseInt(day));
-
-    if (selectedWeekdays.length === 0) {
-      return dates;
-    }
-
-    // 시작일부터 종료일까지 순회
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      if (selectedWeekdays.includes(d.getDay())) {
-        dates.push(formatDateForApi(new Date(d)));
-      }
-    }
-
     return dates;
   };
 
-  // 할 일 추가
-  const handleAddTask = async () => {
-    if (!newTask.title.trim()) {
-      alert('할 일 제목을 입력해주세요.');
-      return;
-    }
+  const weekDates = getWeekDates(currentDate);
+  const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
-    const finalSubject = newTask.subject === 'CUSTOM' ? newTask.customSubject : newTask.subject;
-    if (!finalSubject) {
-      alert('과목을 선택하거나 입력해주세요.');
-      return;
-    }
+  // 진행률 계산 (멘토 과제 기준)
+  const calculateMentorProgress = () => {
+    if (!plannerData || !plannerData.tasks) return { rate: 0, completed: 0, total: 0 };
+    const mentorTasks = plannerData.tasks.filter(t => t.isFixed);
+    if (mentorTasks.length === 0) return { rate: 0, completed: 0, total: 0 };
+    const completed = mentorTasks.filter(t => t.submissions.length > 0).length;
+    return { rate: Math.round((completed / mentorTasks.length) * 100), completed, total: mentorTasks.length };
+  };
 
-    // 반복 모드일 때 요일 선택 확인
-    if (repeatMode === 'repeat') {
-      const hasSelectedWeekday = Object.values(repeatSettings.weekdays).some((selected) => selected);
-      if (!hasSelectedWeekday) {
-        alert('최소 하나의 요일을 선택해주세요.');
-        return;
-      }
-    }
+  const mentorProgress = calculateMentorProgress();
 
+  const fetchPlannerData = async (date: Date) => {
+    setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-
-      // 날짜 목록 계산
-      const dates =
-        repeatMode === 'repeat'
-          ? calculateRepeatDates()
-          : [formatDateForApi(currentDate)];
-
-      if (dates.length === 0) {
-        alert('선택한 요일에 해당하는 날짜가 없습니다.');
-        return;
-      }
-
-      // 각 날짜에 대해 할 일 생성
-      for (const dateStr of dates) {
-        const res = await fetch(`${getApiUrl()}/api/mentee/tasks`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            title: newTask.title,
-            description: newTask.description,
-            subject: finalSubject,
-            date: dateStr,
-          }),
-        });
-
-        if (!res.ok) {
-          throw new Error('할 일 추가에 실패했습니다.');
-        }
-      }
-
-      const successMessage =
-        repeatMode === 'repeat'
-          ? `${dates.length}개의 할 일이 추가되었습니다.`
-          : '할 일이 추가되었습니다.';
-      alert(successMessage);
-
-      setShowAddTaskModal(false);
-      setNewTask({ title: '', description: '', subject: 'KOREAN', customSubject: '' });
-      setRepeatMode('single');
-      setRepeatSettings({
-        startDate: new Date().toISOString().split('T')[0],
-        endDate: new Date().toISOString().split('T')[0],
-        weekdays: {
-          0: false,
-          1: false,
-          2: false,
-          3: false,
-          4: false,
-          5: false,
-          6: false,
-        },
+      const res = await fetch(`${getApiUrl()}/api/mentee/planner?date=${formatDateForApi(date)}`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-      fetchPlannerData(currentDate);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
-    }
+      if (res.ok) setPlannerData(await res.json());
+    } catch (err) { console.error(err); }
+    finally { setIsLoading(false); }
   };
 
-  // 할 일 수정 모달 열기
-  const openEditModal = (task: Task) => {
-    const isDefaultSubject = DEFAULT_SUBJECTS.some((s) => s.value === task.subject);
-    // ISO 날짜를 YYYY-MM-DD 형식으로 변환 (input[type="date"] 호환)
-    const dateStr = task.date.includes('T') ? task.date.split('T')[0] : task.date;
-    setEditTask({
-      id: task.id,
-      title: task.title,
-      description: task.description || '',
-      subject: isDefaultSubject ? task.subject : 'CUSTOM',
-      customSubject: isDefaultSubject ? '' : task.subject,
-      date: dateStr,
-    });
-    setShowEditTaskModal(true);
-  };
-
-  // 할 일 수정
-  const handleEditTask = async () => {
-    if (!editTask.title.trim()) {
-      alert('할 일 제목을 입력해주세요.');
-      return;
-    }
-
-    const finalSubject = editTask.subject === 'CUSTOM' ? editTask.customSubject : editTask.subject;
-    if (!finalSubject) {
-      alert('과목을 선택하거나 입력해주세요.');
-      return;
-    }
-
+  const handleSelfCheck = async (taskId: string, newStatus: SelfCheckStatus) => {
     try {
       const token = localStorage.getItem('token');
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}/self-check`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ selfCheck: newStatus }),
+      });
+      if (res.ok) fetchPlannerData(currentDate);
+    } catch (err) { console.error(err); }
+  };
 
+  const handleAddTask = async () => {
+    if (!newTask.title.trim()) return;
+    const finalSubject = newTask.subject === 'CUSTOM' ? newTask.customSubject : newTask.subject;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: newTask.title, description: newTask.description, subject: finalSubject, date: formatDateForApi(currentDate) }),
+      });
+      if (res.ok) {
+        setShowAddTaskModal(false);
+        setNewTask({ title: '', description: '', subject: 'KOREAN', customSubject: '' });
+        fetchPlannerData(currentDate);
+      }
+    } catch (err) { console.error(err); }
+  };
+
+  const handleEditTask = async () => {
+    const finalSubject = editTask.subject === 'CUSTOM' ? editTask.customSubject : editTask.subject;
+    try {
+      const token = localStorage.getItem('token');
       const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${editTask.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          title: editTask.title,
-          description: editTask.description,
-          subject: finalSubject,
-          date: editTask.date,
-        }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: editTask.title, description: editTask.description, subject: finalSubject }),
       });
-
-      if (!res.ok) {
-        throw new Error('할 일 수정에 실패했습니다.');
-      }
-
-      alert('할 일이 수정되었습니다.');
-      setShowEditTaskModal(false);
-      fetchPlannerData(currentDate);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
-    }
+      if (res.ok) { setShowEditTaskModal(false); fetchPlannerData(currentDate); }
+    } catch (err) { console.error(err); }
   };
 
-  // 할 일 삭제
   const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('정말 삭제하시겠습니까?')) {
-      return;
-    }
-
+    if(!confirm('정말 삭제하시겠습니까?')) return;
     try {
       const token = localStorage.getItem('token');
-
       const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!res.ok) {
-        throw new Error('할 일 삭제에 실패했습니다.');
-      }
-
-      alert('할 일이 삭제되었습니다.');
-      fetchPlannerData(currentDate);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
-    }
+      if (res.ok) { fetchPlannerData(currentDate); setActiveMenuId(null); }
+    } catch (err) { console.error(err); }
   };
 
-  // 시간을 분으로 변환 ("09:00" -> 540)
-  const parseTime = (timeStr: string): number => {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    return hours * 60 + minutes;
+  const openEditModal = (task: Task) => {
+    const isDefault = DEFAULT_SUBJECTS.some(s => s.value === task.subject);
+    setEditTask({ id: task.id, title: task.title, description: task.description || '', subject: isDefault ? task.subject : 'CUSTOM', customSubject: isDefault ? '' : task.subject });
+    setShowEditTaskModal(true); setActiveMenuId(null);
   };
 
-  // 분을 시간 문자열로 변환 (90 -> "1시간 30분")
-  const formatDuration = (minutes: number): string => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (hours === 0) return `${mins}분`;
-    if (mins === 0) return `${hours}시간`;
-    return `${hours}시간 ${mins}분`;
-  };
-
-  // 공부 시간 기록 모달 열기
-  const handleRecordStudyTime = (taskId: string) => {
-    setTimeRecord({ taskId, startTime: '', endTime: '' });
-    setShowStudyTimeModal(true);
-  };
-
-  // 공부 시간 기록 제출
   const handleSubmitStudyTime = async () => {
-    const { taskId, startTime, endTime } = timeRecord;
-
-    // 유효성 검사
-    if (!startTime || !endTime) {
-      alert('시작 시간과 종료 시간을 모두 입력해주세요.');
-      return;
-    }
-
-    const startMinutes = parseTime(startTime);
-    const endMinutes = parseTime(endTime);
-
-    if (startMinutes >= endMinutes) {
-      alert('종료 시간은 시작 시간보다 늦어야 합니다.');
-      return;
-    }
-
-    const duration = endMinutes - startMinutes;
-
+    if (!timeRecord.startTime || !timeRecord.endTime) return;
+    const [startH, startM] = timeRecord.startTime.split(':').map(Number);
+    const [endH, endM] = timeRecord.endTime.split(':').map(Number);
+    const duration = (endH * 60 + endM) - (startH * 60 + startM);
+    if (duration <= 0) return alert('종료 시간은 시작 시간보다 늦어야 합니다.');
     try {
       const token = localStorage.getItem('token');
-      const dateStr = formatDateForApi(currentDate);
-
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}/time`, {
+      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${timeRecord.taskId}/time`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          duration,
-          startTime,
-          endTime,
-          date: dateStr,
-        }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ duration, startTime: timeRecord.startTime, endTime: timeRecord.endTime, date: formatDateForApi(currentDate) }),
       });
-
-      if (!res.ok) {
-        throw new Error('공부 시간 기록에 실패했습니다.');
-      }
-
-      alert('공부 시간이 기록되었습니다.');
-      setShowStudyTimeModal(false);
-      setTimeRecord({ taskId: '', startTime: '', endTime: '' });
-      fetchPlannerData(currentDate);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
-    }
+      if (res.ok) { setShowStudyTimeModal(false); fetchPlannerData(currentDate); }
+    } catch (err) { console.error(err); }
   };
 
-  // 이미지 업로드
   const handleImageUpload = async (files: File[]) => {
     setIsUploading(true);
     const urls: string[] = [];
-
     try {
       const token = localStorage.getItem('token');
-
       for (const file of files) {
         const formData = new FormData();
         formData.append('image', file);
-
         const res = await fetch(`${getApiUrl()}/api/upload/image`, {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
-
-        if (!res.ok) {
-          throw new Error('이미지 업로드에 실패했습니다.');
-        }
-
-        const data = await res.json();
-        urls.push(data.url);
+        if (res.ok) { const data = await res.json(); urls.push(data.url); }
       }
-
       setUploadedImageUrls([...uploadedImageUrls, ...urls]);
-      alert(`${files.length}개의 이미지가 업로드되었습니다.`);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
-    } finally {
-      setIsUploading(false);
-    }
+    } catch (err) { console.error(err); }
+    finally { setIsUploading(false); }
   };
 
-  // 과제 제출 모달 열기
-  const openSubmitModal = (task: Task) => {
-    setSelectedTask(task);
-    setShowSubmitModal(true);
-    setSubmitComment('');
-    setSelectedImages([]);
-    setUploadedImageUrls([]);
-    setIsUploading(false); // 업로드 상태 초기화
-  };
-
-  // 과제 제출
   const handleSubmitTask = async () => {
-    if (!selectedTask) {
-      console.log('선택된 과제가 없습니다.');
-      return;
-    }
-
-    console.log('과제 제출 시도:', {
-      isFixed: selectedTask.isFixed,
-      hasImages: uploadedImageUrls.length > 0,
-      imageCount: uploadedImageUrls.length,
-      hasComment: !!submitComment.trim(),
-      commentLength: submitComment.length,
-    });
-
-    // 멘토가 생성한 과제(isFixed=true): 이미지 필수
-    if (selectedTask.isFixed) {
-      if (uploadedImageUrls.length === 0) {
-        alert('멘토가 생성한 과제는 이미지 업로드가 필수입니다.');
-        return;
-      }
-    } else {
-      // 멘티가 자체 생성한 과제(isFixed=false): 이미지 또는 코멘트 중 하나는 필수
-      if (uploadedImageUrls.length === 0 && !submitComment.trim()) {
-        alert('이미지를 업로드하거나 코멘트를 작성해주세요.');
-        return;
-      }
-    }
-
-    console.log('검증 통과, 제출 시작');
-
+    if (!selectedTask) return;
     try {
       const token = localStorage.getItem('token');
-
       const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${selectedTask.id}/submit`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          imageUrls: uploadedImageUrls,
-          comment: submitComment,
-        }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ imageUrls: uploadedImageUrls, comment: submitComment }),
       });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        console.error('제출 실패:', res.status, errorData);
-        throw new Error(errorData.error || '과제 제출에 실패했습니다.');
-      }
-
-      alert('과제가 제출되었습니다.');
-      setShowSubmitModal(false);
-      setSubmitComment('');
-      setSelectedImages([]);
-      setUploadedImageUrls([]);
-      setIsUploading(false);
-      fetchPlannerData(currentDate);
-    } catch (err) {
-      console.error('과제 제출 에러:', err);
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
-    }
+      if (res.ok) { setShowSubmitModal(false); fetchPlannerData(currentDate); alert('제출 완료!'); }
+    } catch (err) { console.error(err); }
   };
 
-  // 대시보드 데이터 가져오기
-  const fetchDashboard = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentee/dashboard`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setDashboard(data);
-      }
-    } catch (error) {
-      console.error('Dashboard fetch error:', error);
-    }
+  const calculateTotalStudyTime = () => {
+    if (!plannerData) return '0시간';
+    const totalMinutes = plannerData.tasks.reduce((total, task) => {
+      return total + task.studyLogs.reduce((taskTotal, log) => taskTotal + log.duration, 0);
+    }, 0);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return `${h}시간${m > 0 ? ` ${m}분` : ''}`;
   };
 
-  const fetchDailyFeedback = async (date: Date) => {
-    try {
-      const token = localStorage.getItem('token');
-      const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD format
-      const res = await fetch(`${getApiUrl()}/api/mentee/daily-feedbacks?date=${dateStr}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setDailyFeedback(data);
-      } else {
-        setDailyFeedback(null);
-      }
-    } catch (error) {
-      console.error('Daily feedback fetch error:', error);
-      setDailyFeedback(null);
+  const handleViewPdf = (fileUrl: string) => {
+    if (!fileUrl) return;
+    let fullUrl = fileUrl;
+    if (!fileUrl.startsWith('http')) {
+      const baseUrl = getApiUrl().replace(/\/$/, '');
+      const cleanPath = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
+      fullUrl = `${baseUrl}${cleanPath}`;
     }
+    const link = document.createElement('a');
+    link.href = fullUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const getTaskStatusInfo = (task: Task) => {
+    if (task.feedbacks && task.feedbacks.length > 0) return { label: '피드백 완료', color: 'text-green-600 bg-green-50' };
+    if (task.submissions && task.submissions.length > 0) return { label: '제출 완료', color: 'text-blue-600 bg-blue-50' };
+    return { label: '미완료', color: 'text-gray-400 bg-gray-50' };
   };
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      setUser(JSON.parse(userStr));
-    }
-    fetchDashboard();
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setActiveMenuId(null);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
     fetchPlannerData(currentDate);
-    fetchDailyFeedback(currentDate);
+    const token = localStorage.getItem('token');
+    const dateStr = formatDateForApi(currentDate);
+    const d = new Date(currentDate); d.setDate(d.getDate()-1); 
+    const prevDateStr = formatDateForApi(d);
+    fetch(`${getApiUrl()}/api/mentee/daily-feedbacks?date=${prevDateStr}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null).then(setDailyFeedback);
+    fetch(`${getApiUrl()}/api/mentee/dashboard?date=${dateStr}`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null).then(setDashboard);
   }, [currentDate]);
 
+  const handleDragEnd = (event: any, info: any) => {
+    const threshold = 50;
+    if (info.offset.x < -threshold) {
+      // Swipe Left -> Next Day
+      const nextDay = new Date(currentDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      setCurrentDate(nextDay);
+    } else if (info.offset.x > threshold) {
+      // Swipe Right -> Previous Day
+      const prevDay = new Date(currentDate);
+      prevDay.setDate(prevDay.getDate() - 1);
+      setCurrentDate(prevDay);
+    }
+  };
+
+  const handleApplyDatePicker = () => {
+    const newDate = new Date(draftYear, draftMonth - 1, draftDay);
+    setCurrentDate(newDate);
+    setIsDatePickerOpen(false);
+  };
+
+  const handleGoToToday = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    setIsDatePickerOpen(false);
+  };
+
+  const calendarGrid = useMemo(() => buildCalendarGrid(draftYear, draftMonth), [draftYear, draftMonth]);
+
   return (
-    <div className="px-4 sm:px-6 md:px-8 py-4 pb-20">
-      {/* 헤더 */}
-      <div className="mb-4 sm:mb-6 flex items-start justify-between">
-        <div>
-          <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-300">안녕하세요</p>
-          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold dark:text-white">
-            {user?.nickname || user?.name || '멘티'}
-            {user?.nickname && user?.name && <span className="text-base sm:text-lg font-normal dark:text-gray-300">({user.name})</span>}님
-          </h2>
-        </div>
-        <NotificationBell />
-      </div>
-
-      {/* 오늘 학습 진행율 */}
-      {dashboard && (
-        <div className="mb-4 sm:mb-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white p-4 sm:p-5 md:p-6 rounded-lg">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs sm:text-sm opacity-90">오늘 학습 진행율</span>
-            <span className="text-xl sm:text-2xl md:text-3xl font-bold">{dashboard.todayStats.progressRate}%</span>
-          </div>
-          <div className="w-full bg-blue-400 rounded-full h-2 sm:h-2.5">
-            <div
-              className="bg-white h-2 sm:h-2.5 rounded-full transition-all"
-              style={{ width: `${dashboard.todayStats.progressRate}%` }}
-            />
-          </div>
-          <p className="text-xs sm:text-sm mt-2 opacity-80">
-            {dashboard.todayStats.completed}/{dashboard.todayStats.total} 완료
-          </p>
-        </div>
-      )}
-
-      {/* 오늘의 일일 전체 피드백 */}
-      {dailyFeedback && (
-        <div className="mb-4 bg-blue-50 border border-blue-200 p-4 rounded-lg">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-lg">📝</span>
-            <span className="font-semibold text-blue-800">오늘의 전체 피드백</span>
-            <span className="text-xs text-blue-600">
-              {dailyFeedback.mentor?.nickname || dailyFeedback.mentor?.name} 멘토
-            </span>
-          </div>
-          {dailyFeedback.summary && (
-            <div className="bg-white p-3 rounded border border-blue-100 mb-2">
-              <p className="text-sm font-medium text-blue-900">{dailyFeedback.summary}</p>
-            </div>
-          )}
-          <div className="bg-white p-3 rounded border border-blue-100">
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{dailyFeedback.content}</p>
-          </div>
-          <p className="text-xs text-blue-600 mt-2">
-            작성일: {new Date(dailyFeedback.createdAt).toLocaleString('ko-KR')}
-          </p>
-        </div>
-      )}
-
-      {/* 어제 피드백 요약 */}
-      {dashboard && dashboard.yesterdayFeedbacks.length > 0 && (
-        <div className="mb-4 bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-lg">💬</span>
-            <span className="font-semibold text-yellow-800">어제 받은 피드백</span>
-          </div>
-          <div className="space-y-2">
-            {dashboard.yesterdayFeedbacks.slice(0, 2).map((feedback) => (
-              <div key={feedback.id} className="bg-white p-3 rounded border border-yellow-100">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-xs px-2 py-0.5 rounded ${getSubjectColor(feedback.task.subject)}`}>
-                    {getSubjectLabel(feedback.task.subject)}
-                  </span>
-                  <span className="text-xs text-gray-500">{feedback.mentor.name} 멘토</span>
-                </div>
-                <p className="text-sm font-medium text-gray-800">{feedback.task.title}</p>
-                <p className="text-sm text-gray-600 line-clamp-2 mt-1">
-                  {feedback.summary || feedback.content}
-                </p>
-              </div>
-            ))}
-            {dashboard.yesterdayFeedbacks.length > 2 && (
-              <button
-                onClick={() => router.push('/mentee/feedbacks')}
-                className="text-sm text-yellow-700 hover:underline"
-              >
-                +{dashboard.yesterdayFeedbacks.length - 2}개 더 보기
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* 날짜 */}
-      <div className="mb-4 sm:mb-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-          <h3 className="text-base sm:text-lg md:text-xl font-semibold dark:text-white">{formatDate(currentDate)}</h3>
-          <div className="flex gap-2">
-            <button className="px-3 py-1.5 text-xs sm:text-sm bg-gray-100 dark:bg-gray-700 rounded">일</button>
-            <button
-              onClick={() => router.push('/mentee/planner/weekly')}
-              className="px-3 py-1.5 text-xs sm:text-sm text-gray-900 dark:text-gray-300 rounded hover:bg-gray-100 dark:bg-gray-700"
-            >
-              주
-            </button>
-            <button
-              onClick={() => router.push('/mentee/planner/monthly')}
-              className="px-3 py-1.5 text-xs sm:text-sm text-gray-900 dark:text-gray-300 rounded hover:bg-gray-100 dark:bg-gray-700"
-            >
-              월
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 할 일 목록 - 과목별 그룹화 */}
-      <div className="space-y-3 sm:space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
-          <h3 className="text-base sm:text-lg font-semibold">오늘의 할 일</h3>
-          {plannerData && plannerData.tasks.length > 0 && (
-            <span className="text-xs sm:text-sm text-gray-500">
-              {plannerData.tasks.filter(t => t.isApproved).length}/{plannerData.tasks.length} 승인됨
-            </span>
-          )}
-        </div>
-
-        {isLoading ? (
-          <p className="text-gray-900 dark:text-gray-300">불러오는 중...</p>
-        ) : error ? (
-          <p className="text-red-600">{error}</p>
-        ) : plannerData && plannerData.tasks.length > 0 ? (
-          // 과목별로 그룹화
-          Object.entries(
-            plannerData.tasks.reduce((groups, task) => {
-              const subject = task.subject;
-              if (!groups[subject]) {
-                groups[subject] = [];
-              }
-              groups[subject].push(task);
-              return groups;
-            }, {} as Record<string, Task[]>)
-          ).map(([subject, tasks]) => (
-            <div key={subject} className="space-y-2">
-              {/* 과목 헤더 */}
-              <div className="flex items-center gap-2 sticky top-0 bg-gray-50 dark:bg-gray-900 py-2 -mx-4 px-4">
-                <span className={`text-sm px-3 py-1 rounded-full font-medium ${getSubjectColor(subject)}`}>
-                  {getSubjectLabel(subject)}
-                </span>
-                <span className="text-xs text-gray-500">
-                  {tasks.filter(t => t.isApproved).length}/{tasks.length}
-                </span>
-              </div>
-              {/* 해당 과목의 할 일들 */}
-              {tasks.map((task) => (
-            <div key={task.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg border">
-              <div className="flex items-start gap-3">
-                {/* 자가점검 드롭다운 */}
-                <select
-                  value={task.selfCheck || 'PENDING'}
-                  onChange={(e) => handleSelfCheck(task.id, e.target.value as SelfCheckStatus)}
-                  className={`mt-0.5 text-lg bg-transparent border-none cursor-pointer ${
-                    SELF_CHECK_OPTIONS.find(o => o.value === task.selfCheck)?.color || 'text-gray-400'
-                  }`}
-                  title="자가점검"
-                >
-                  {SELF_CHECK_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.icon} {option.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className={`text-xs px-2 py-0.5 rounded ${getSubjectColor(task.subject)}`}>
-                      {getSubjectLabel(task.subject)}
-                    </span>
-                    {task.isFixed && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400">멘토 지정</span>
-                    )}
-                    {/* 멘토 승인 표시 */}
-                    {task.isApproved ? (
-                      <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700 font-medium">
-                        ✓ 승인됨
-                      </span>
-                    ) : (
-                      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500">
-                        승인 대기
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      const taskDate = new Date(task.date);
-                      taskDate.setHours(0, 0, 0, 0);
-                      if (task.isFixed && taskDate > today) {
-                        alert('아직 시작되지 않은 과제입니다.');
-                        return;
-                      }
-                      router.push(`/mentee/tasks/${task.id}`);
-                    }}
-                    className={`font-medium text-left hover:text-blue-600 hover:underline ${
-                      task.isApproved ? 'line-through text-gray-400' : ''
-                    }`}
-                  >
-                    {task.title}
-                  </button>
-                  {task.description && (
-                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{task.description}</p>
-                  )}
-                  {task.worksheet && (
-                    <button
-                      onClick={() => {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        const taskDate = new Date(task.date);
-                        taskDate.setHours(0, 0, 0, 0);
-                        if (task.isFixed && taskDate > today) {
-                          alert('아직 시작되지 않은 과제입니다.');
-                          return;
-                        }
-                        router.push(`/mentee/tasks/${task.id}`);
-                      }}
-                      className="text-xs text-blue-600 mt-1 hover:underline"
-                    >
-                      📄 {task.worksheet.title}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="mt-3 flex gap-2 flex-wrap">
-                <button
-                  onClick={() => {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const taskDate = new Date(task.date);
-                    taskDate.setHours(0, 0, 0, 0);
-                    if (task.isFixed && taskDate > today) {
-                      alert('아직 시작되지 않은 과제입니다.');
-                      return;
-                    }
-                    router.push(`/mentee/tasks/${task.id}`);
-                  }}
-                  className="text-xs text-blue-600 underline hover:text-blue-800 font-medium"
-                >
-                  상세보기
-                </button>
-                <button
-                  onClick={() => handleRecordStudyTime(task.id)}
-                  className="text-xs text-gray-600 dark:text-gray-300 underline hover:text-black"
-                >
-                  {(() => {
-                    // 오늘 날짜의 studyLog 찾기
-                    const todayDateStr = formatDateForApi(currentDate);
-                    const todayLogs = task.studyLogs.filter((log: any) => {
-                      const logDate = new Date(log.date).toISOString().split('T')[0];
-                      return logDate === todayDateStr && log.startTime && log.endTime;
-                    });
-
-                    if (todayLogs.length > 0) {
-                      // 가장 최근 로그 표시
-                      const latestLog = todayLogs[todayLogs.length - 1];
-                      return `⏱️ ${latestLog.startTime} - ${latestLog.endTime}`;
-                    }
-                    return '공부 시간 기록';
-                  })()}
-                </button>
-                <button
-                  onClick={() => {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const taskDate = new Date(task.date);
-                    taskDate.setHours(0, 0, 0, 0);
-                    if (task.isFixed && taskDate > today) {
-                      alert('아직 시작되지 않은 과제는 제출할 수 없습니다.');
-                      return;
-                    }
-                    openSubmitModal(task);
-                  }}
-                  className="text-xs text-gray-600 dark:text-gray-300 underline hover:text-black"
-                >
-                  빠른 제출
-                </button>
-                {!task.isFixed && (
-                  <>
-                    <button
-                      onClick={() => openEditModal(task)}
-                      className="p-1 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
-                      title="수정"
-                    >
-                      <EditIcon size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteTask(task.id)}
-                      className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
-                      title="삭제"
-                    >
-                      <DeleteIcon size={18} />
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-            </div>
-          ))
-        ) : (
-          <p className="text-gray-900 dark:text-gray-300">오늘 할 일이 없습니다.</p>
-        )}
-
-        {/* 할 일 추가 버튼 */}
-        <button
-          onClick={() => setShowAddTaskModal(true)}
-          className="w-full py-2.5 sm:py-3 md:py-4 border-2 border-dashed rounded-lg text-sm sm:text-base text-gray-900 dark:text-gray-300 hover:border-gray-400 hover:text-gray-700 transition-colors"
+    <div className="w-full relative overflow-x-hidden font-['Pretendard']">
+      {/* 날짜 영역 (Clickable) */}
+      <div className="flex justify-center items-center mt-4">
+        <button 
+          onClick={() => {
+            setDraftYear(currentDate.getFullYear());
+            setDraftMonth(currentDate.getMonth() + 1);
+            setDraftDay(currentDate.getDate());
+            setIsDatePickerOpen(true);
+          }}
+          className="flex items-center gap-1.5 px-4 py-1.5 hover:bg-gray-50 rounded-full transition-colors active:scale-95"
         >
-          + 할 일 추가
+          <span className="text-center text-slate-800 text-base font-bold">
+            {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월 {currentDate.getDate()}일
+          </span>
+          <IoIosArrowDown className="text-slate-400 text-sm" />
         </button>
       </div>
 
-      {/* 일일 타임라인 차트 */}
-      {plannerData && (() => {
-        // 오늘 날짜의 studyLogs 수집 (startTime과 endTime이 있는 것만)
-        const todayStudyLogs = plannerData.tasks
-          .flatMap((task: Task) =>
-            task.studyLogs
-              .filter((log: any) => log.startTime && log.endTime)
-              .map((log: any) => ({
-                id: log.id,
-                subject: task.subject,
-                startTime: log.startTime,
-                endTime: log.endTime,
-                task: {
-                  id: task.id,
-                  title: task.title,
-                },
-              }))
-          );
+      <div className="w-full px-6 py-6 bg-white shadow-[0px_1px_4px_0px_rgba(0,0,0,0.04)] mt-4">
+        <div className="flex justify-between items-center gap-1">
+          {weekDates.map((date, index) => {
+            const isSelected = date.toDateString() === currentDate.toDateString();
+            const isToday = date.toDateString() === new Date().toDateString();
+            return (
+              <button key={index} onClick={() => setCurrentDate(date)} className={`flex-1 h-14 flex flex-col items-center justify-center rounded-[10px] transition-all ${isSelected ? 'bg-blue-200' : 'bg-transparent'}`}>
+                <span className={`text-xs font-medium mb-1 ${isSelected ? 'text-white' : 'text-gray-400'}`}>{WEEKDAYS[index]}</span>
+                <span className={`text-lg font-medium ${isSelected ? 'text-sky-950' : isToday ? 'text-sky-950' : 'text-gray-700'}`}>{date.getDate()}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-        // studyLogs가 있을 때만 차트 표시
-        if (todayStudyLogs.length === 0) return null;
-
-        return (
-          <div className="mt-6">
-            <TimelineChart studyLogs={todayStudyLogs} />
+      <motion.div
+        key={currentDate.toDateString()}
+        initial={{ opacity: 0, x: 10 }}
+        animate={{ opacity: 1, x: 0 }}
+        drag="x"
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={0.2}
+        onDragEnd={handleDragEnd}
+        className="touch-pan-y"
+      >
+        {/* 진행률 (멘토 과제 전용) */}
+        <div className="px-6 mt-8">
+          <div className="flex justify-between items-end mb-2">
+            <span className="text-slate-800 text-xs font-medium">{currentDate.getMonth()+1}/{currentDate.getDate()} 학습 진행률</span>
+            <span className="text-gray-500 text-xs font-medium">{mentorProgress.total === 0 ? '과제 없음' : mentorProgress.completed === 0 ? '미완료' : mentorProgress.completed === mentorProgress.total ? '완료' : `${mentorProgress.completed}/${mentorProgress.total} 완료`}</span>
           </div>
-        );
-      })()}
+          <div className="text-slate-800 text-xl font-semibold mb-2">{mentorProgress.rate}%</div>
+          <div className="w-full h-4 bg-gray-300 rounded-[5px] overflow-hidden"><div className="h-full bg-gray-600 transition-all duration-500" style={{ width: `${mentorProgress.rate}%` }} /></div>
+        </div>
 
-      {/* 할 일 추가 모달 */}
-      {showAddTaskModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">할 일 추가</h3>
+        <div className="w-full h-2 bg-gray-50 mt-8"></div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">제목</label>
-                <input
-                  type="text"
-                  value={newTask.title}
-                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md"
-                  placeholder="할 일 제목"
-                />
-              </div>
+        {/* 데일리 피드백 */}
+        <div className="px-6 mt-8">
+          <div className="flex justify-between items-center mb-4">
+            <span className="text-black text-base font-semibold">{(() => { const d = new Date(currentDate); d.setDate(d.getDate()-1); return `${d.getMonth()+1}/${d.getDate()}`; })()} 데일리 피드백</span>
+            <button onClick={() => setShowFeedbackSummary(true)} className="p-1 hover:bg-gray-100 rounded-full transition-colors"><MdInfoOutline className="text-xl text-gray-600" /></button>
+          </div>
+          <div className="w-full min-h-[80px] px-3.5 py-3 bg-gray-500 rounded-[10px] flex justify-center items-start shadow-sm">
+            <p className="text-white text-sm font-medium whitespace-pre-wrap">{dailyFeedback?.content || '전날의 피드백이 없습니다.'}</p>
+          </div>
+        </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">설명</label>
-                <textarea
-                  value={newTask.description}
-                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md resize-none"
-                  rows={3}
-                  placeholder="상세 설명 (선택)"
-                />
-              </div>
+        {/* 총 학습 시간 */}
+        <div className="px-6 mt-8 flex justify-between items-center">
+          <span className="text-sky-950 text-xl font-medium">총 학습 시간</span>
+          <span className="text-sky-950 text-xl font-semibold">{calculateTotalStudyTime()}</span>
+        </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">과목</label>
-                <select
-                  value={newTask.subject}
-                  onChange={(e) => setNewTask({ ...newTask, subject: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md"
-                >
-                  <option value="KOREAN">국어</option>
-                  <option value="ENGLISH">영어</option>
-                  <option value="MATH">수학</option>
-                  <option value="CUSTOM">기타 (직접 입력)</option>
-                </select>
-              </div>
+        {/* 학습 과제 리스트 */}
+        <div className="px-6 mt-8 pb-20">
+          <div className="flex justify-between items-end mb-5">
+            <span className="text-black text-base font-semibold">나의 학습 과제</span>
+            <button onClick={() => setShowAddTaskModal(true)} className="flex items-center gap-1 group">
+              <span className="text-gray-700 text-xs font-medium group-hover:text-black">학습 추가</span>
+              <div className="w-6 h-6 bg-gray-700 rounded-xl flex items-center justify-center text-white text-sm group-hover:bg-black">+</div>
+            </button>
+          </div>
 
-              {newTask.subject === 'CUSTOM' && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">과목명 입력</label>
-                  <input
-                    type="text"
-                    value={newTask.customSubject}
-                    onChange={(e) => setNewTask({ ...newTask, customSubject: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-md"
-                    placeholder="예: 물리, 화학, 생물 등"
-                  />
-                </div>
-              )}
-
-              {/* 반복 설정 */}
-              <div className="border-t pt-4 mt-4">
-                <label className="block text-sm font-medium mb-2">날짜 설정</label>
-                <div className="flex gap-2 mb-4">
-                  <button
-                    type="button"
-                    onClick={() => setRepeatMode('single')}
-                    className={`flex-1 px-3 py-2 rounded-md text-sm ${
-                      repeatMode === 'single'
-                        ? 'bg-black text-white'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    단일 날짜
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRepeatMode('repeat')}
-                    className={`flex-1 px-3 py-2 rounded-md text-sm ${
-                      repeatMode === 'repeat'
-                        ? 'bg-black text-white'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    반복 설정
-                  </button>
-                </div>
-
-                {repeatMode === 'single' ? (
-                  <div className="text-sm text-gray-900 dark:text-gray-300">
-                    현재 선택된 날짜: {formatDate(currentDate)}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-900 dark:text-gray-300 mb-1">시작일</label>
-                        <input
-                          type="date"
-                          value={repeatSettings.startDate}
-                          onChange={(e) =>
-                            setRepeatSettings({ ...repeatSettings, startDate: e.target.value })
-                          }
-                          className="w-full px-2 py-1.5 text-sm border rounded-md"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-900 dark:text-gray-300 mb-1">종료일</label>
-                        <input
-                          type="date"
-                          value={repeatSettings.endDate}
-                          onChange={(e) =>
-                            setRepeatSettings({ ...repeatSettings, endDate: e.target.value })
-                          }
-                          className="w-full px-2 py-1.5 text-sm border rounded-md"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs text-gray-900 dark:text-gray-300 mb-2">반복 요일 선택</label>
-                      <div className="grid grid-cols-7 gap-1">
-                        {['일', '월', '화', '수', '목', '금', '토'].map((day, index) => (
-                          <button
-                            key={index}
-                            type="button"
-                            onClick={() =>
-                              setRepeatSettings({
-                                ...repeatSettings,
-                                weekdays: {
-                                  ...repeatSettings.weekdays,
-                                  [index]: !repeatSettings.weekdays[index as keyof typeof repeatSettings.weekdays],
-                                },
-                              })
-                            }
-                            className={`py-2 text-xs rounded-md transition-colors ${
-                              repeatSettings.weekdays[index as keyof typeof repeatSettings.weekdays]
-                                ? 'bg-black text-white'
-                                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 hover:bg-gray-200'
+          <div className="flex flex-col gap-5">
+            {[...(plannerData?.tasks || [])]
+              .sort((a, b) => {
+                const aDone = (a.feedbacks?.length || 0) > 0;
+                const bDone = (b.feedbacks?.length || 0) > 0;
+                if (aDone && !bDone) return 1;
+                if (!aDone && bDone) return -1;
+                return 0;
+              })
+              .map((task) => {
+                const status = getTaskStatusInfo(task);
+              return (
+                <div key={task.id} className="w-full flex flex-col gap-2.5 relative border-b border-gray-50 pb-4 last:border-0">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-start gap-3.5 flex-1 overflow-hidden">
+                      <button onClick={() => handleSelfCheck(task.id, task.selfCheck === 'DONE' ? 'PENDING' : 'DONE')} className={`w-7 h-7 mt-0.5 flex-shrink-0 flex items-center justify-center rounded-2xl transition-colors ${task.selfCheck === 'DONE' ? 'bg-sky-950 text-white' : 'bg-gray-100 text-sky-950 text-xs'}`}>{task.selfCheck === 'DONE' ? '✓' : '○'}</button>
+                      <div className="flex flex-col gap-1.5 overflow-hidden flex-1">
+                        <div className="flex items-center gap-2 overflow-hidden flex-wrap">
+                          {task.isFixed ? <PiPushPinFill className="text-blue-500 text-sm flex-shrink-0" /> : <PiPencilLineLight className="text-gray-400 text-sm flex-shrink-0" />}
+                          <span 
+                            onClick={() => router.push(`/mentee/tasks/${task.id}`)} 
+                            className={`text-black text-base font-semibold truncate cursor-pointer hover:text-sky-700 transition-colors ${
+                              (task.feedbacks?.length || 0) > 0 ? 'line-through text-gray-400 opacity-60' : 
+                              task.submissions.length > 0 ? 'opacity-60' : ''
                             }`}
                           >
-                            {day}
-                          </button>
-                        ))}
+                            {task.title}
+                          </span>
+                          <span className={`text-[9px] px-1.5 py-[1px] rounded-full font-bold ${status.color}`}>{status.label}</span>
+                          <div className={`px-1.5 py-[1px] rounded-[5px] outline outline-1 outline-offset-[-1px] flex-shrink-0 ${getSubjectStyles(task.subject)}`}><span className="text-[10px] font-medium">{getSubjectLabel(task.subject)}</span></div>
+                        </div>
+                        {task.learningGoal && task.learningGoal.items.length > 0 && (
+                          <div className="flex flex-col gap-0.5">
+                            {task.learningGoal.items.slice(0, 2).map((item) => (
+                              <div key={item.id} className="flex items-center gap-1.5">
+                                <div className={`w-1 h-1 rounded-full ${item.isCompleted ? 'bg-sky-950' : 'bg-gray-300'}`}></div>
+                                <span className={`text-[10px] truncate ${item.isCompleted ? 'text-sky-950 font-medium' : 'text-gray-400'}`}>{item.title}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!task.isFixed && (
+                        <div className="relative">
+                          <button onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === task.id ? null : task.id); }} className="p-1 hover:bg-gray-100 rounded-full transition-colors"><HiDotsVertical className="text-gray-400" /></button>
+                          {activeMenuId === task.id && (
+                            <div ref={menuRef} className="absolute right-0 mt-1 w-24 bg-white border border-gray-100 shadow-lg rounded-lg z-50 py-1 font-['Pretendard'] animate-in fade-in zoom-in-95 duration-100">
+                              <button onClick={() => openEditModal(task)} className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 text-gray-700 border-b border-gray-50">수정</button>
+                              <button onClick={() => handleDeleteTask(task.id)} className="w-full text-left px-4 py-2 text-xs hover:bg-gray-50 text-red-500">삭제</button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pl-11 flex justify-between items-center">
+                    <button onClick={() => { setTimeRecord({ ...timeRecord, taskId: task.id }); setShowStudyTimeModal(true); }} className="flex items-center gap-1.5 hover:opacity-70 group">
+                      <div className="w-4 h-4 bg-gray-600 rounded-full flex items-center justify-center text-[8px] text-white group-hover:bg-black">⏱</div>
+                      <span className={`text-[11px] font-medium ${task.studyLogs.length > 0 ? 'text-gray-600' : 'text-sky-950'}`}>{task.studyLogs.length > 0 ? `${task.studyLogs[task.studyLogs.length-1].startTime} ~ ${task.studyLogs[task.studyLogs.length-1].endTime}` : '공부 시간 입력'}</span>
+                    </button>
+                    <div className="flex flex-col items-end gap-1.5">
+                      {task.worksheet && task.date <= todayStr && (
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewPdf(task.worksheet!.pdfUrl || (task.worksheet as any).fileUrl);
+                          }}
+                          className="flex items-center gap-1 group hover:opacity-70 transition-opacity"
+                        >
+                          <span className="text-black text-[10px] font-medium font-['Pretendard']">학습파일</span>
+                          <LuDownload className="text-xs text-black" />
+                        </button>
+                      )}
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => router.push(`/mentee/tasks/${task.id}`)} className="text-[10px] text-gray-400 font-medium hover:text-sky-950 underline decoration-gray-200 underline-offset-2">상세보기</button>
+                        <button onClick={() => { setSelectedTask(task); setShowSubmitModal(true); }} className="text-[10px] text-sky-950 underline font-semibold decoration-sky-900 underline-offset-2">빠른 제출</button>
                       </div>
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </motion.div>
 
-            <div className="mt-6 flex gap-2">
-              <button
-                onClick={() => {
-                  setShowAddTaskModal(false);
-                  setNewTask({ title: '', description: '', subject: 'KOREAN', customSubject: '' });
-                  setRepeatMode('single');
-                  setRepeatSettings({
-                    startDate: new Date().toISOString().split('T')[0],
-                    endDate: new Date().toISOString().split('T')[0],
-                    weekdays: { 0: false, 1: false, 2: false, 3: false, 4: false, 5: false, 6: false },
-                  });
-                }}
-                className="flex-1 px-4 py-2 border rounded-md hover:bg-gray-50"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleAddTask}
-                className="flex-1 px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800"
-              >
-                추가
-              </button>
+      {/* 모달 생략 - 동일 로직 */}
+      {showFeedbackSummary && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[70vh] overflow-y-auto shadow-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-bold">어제 과제 피드백 요약</h3>
+              <button onClick={() => setShowFeedbackSummary(false)} className="text-gray-400 hover:text-black text-2xl">&times;</button>
             </div>
+            <div className="space-y-4">
+              {(dashboard?.yesterdayFeedbacks?.length || 0) === 0 ? (
+                <p className="text-center py-10 text-gray-400 text-sm">과제별 피드백이 없습니다.</p>
+              ) : (
+                dashboard?.yesterdayFeedbacks.map((item, idx) => (
+                  <div key={idx} className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${getSubjectStyles(item.subject)}`}>{getSubjectLabel(item.subject)}</span>
+                      <span className="text-[10px] text-gray-400 font-medium">{item.feedback.mentor.name} 멘토</span>
+                    </div>
+                    <h4 className="text-sm font-semibold mb-2 text-gray-800">{item.taskTitle}</h4>
+                    <p className="text-xs text-gray-600 leading-relaxed bg-white p-2.5 rounded-lg border border-gray-50">{item.feedback.summary || item.feedback.content}</p>
+                  </div>
+                ))
+              )}
+            </div>
+            <button onClick={() => setShowFeedbackSummary(false)} className="w-full mt-6 py-3 bg-gray-100 rounded-xl font-bold text-sm text-gray-600 hover:bg-gray-200 transition-colors">닫기</button>
           </div>
         </div>
       )}
 
-      {/* 할 일 수정 모달 */}
-      {showEditTaskModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">할 일 수정</h3>
-
+      {/* 추가/수정 모달 */}
+      {showAddTaskModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 font-['Pretendard']">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold mb-4">학습 추가</h3>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">제목</label>
-                <input
-                  type="text"
-                  value={editTask.title}
-                  onChange={(e) => setEditTask({ ...editTask, title: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md"
-                  placeholder="할 일 제목"
-                />
+              <input type="text" value={newTask.title} onChange={(e) => setNewTask({...newTask, title: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm" placeholder="과제 제목" />
+              <div className="grid grid-cols-2 gap-3">
+                <select value={newTask.subject} onChange={(e) => setNewTask({...newTask, subject: e.target.value})} className="px-4 py-3 bg-gray-50 border-none rounded-xl text-sm">
+                  {DEFAULT_SUBJECTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  <option value="CUSTOM">직접 입력</option>
+                </select>
+                {newTask.subject === 'CUSTOM' && <input type="text" value={newTask.customSubject} onChange={(e) => setNewTask({...newTask, customSubject: e.target.value})} className="px-4 py-3 bg-gray-50 border-none rounded-xl text-sm" placeholder="과목명" />}
               </div>
+              <textarea value={newTask.description} onChange={(e) => setNewTask({...newTask, description: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm min-h-[80px]" placeholder="설명 (선택)" />
+            </div>
+            <div className="mt-6 flex gap-3"><button onClick={() => setShowAddTaskModal(false)} className="flex-1 py-3 bg-gray-100 rounded-xl font-medium">취소</button><button onClick={handleAddTask} className="flex-1 py-3 bg-sky-950 text-white rounded-xl font-medium">추가하기</button></div>
+          </div>
+        </div>
+      )}
 
-              <div>
-                <label className="block text-sm font-medium mb-1">설명</label>
-                <textarea
-                  value={editTask.description}
-                  onChange={(e) => setEditTask({ ...editTask, description: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md resize-none"
-                  rows={3}
-                  placeholder="상세 설명 (선택)"
-                />
+      {showEditTaskModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 font-['Pretendard']">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">과제 수정</h3>
+            <div className="space-y-4">
+              <input type="text" value={editTask.title} onChange={(e) => setEditTask({...editTask, title: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm" placeholder="과제 제목" />
+              <div className="grid grid-cols-2 gap-3">
+                <select value={editTask.subject} onChange={(e) => setEditTask({...editTask, subject: e.target.value})} className="px-4 py-3 bg-gray-50 border-none rounded-xl text-sm">
+                  {DEFAULT_SUBJECTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  <option value="CUSTOM">직접 입력</option>
+                </select>
+                {editTask.subject === 'CUSTOM' && <input type="text" value={editTask.customSubject} onChange={(e) => setEditTask({...editTask, customSubject: e.target.value})} className="px-4 py-3 bg-gray-50 border-none rounded-xl text-sm" placeholder="과목명" />}
               </div>
+              <textarea value={editTask.description} onChange={(e) => setEditTask({...editTask, description: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm min-h-[80px]" placeholder="설명 (선택)" />
+            </div>
+            <div className="mt-6 flex gap-3"><button onClick={() => setShowEditTaskModal(false)} className="flex-1 py-3 bg-gray-100 rounded-xl font-medium">취소</button><button onClick={handleEditTask} className="flex-1 py-3 bg-sky-950 text-white rounded-xl font-medium">수정 완료</button></div>
+          </div>
+        </div>
+      )}
 
-              <div>
-                <label className="block text-sm font-medium mb-1">과목</label>
-                <select
-                  value={editTask.subject}
-                  onChange={(e) => setEditTask({ ...editTask, subject: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md"
+      {showStudyTimeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 font-['Pretendard']">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold mb-4">공부 시간 기록</h3>
+            <div className="space-y-4">
+              <div><label className="text-xs text-gray-500 mb-1 block ml-1">시작 시간</label><input type="time" value={timeRecord.startTime} onChange={(e) => setTimeRecord({ ...timeRecord, startTime: e.target.value })} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm" /></div>
+              <div><label className="text-xs text-gray-500 mb-1 block ml-1">종료 시간</label><input type="time" value={timeRecord.endTime} onChange={(e) => setTimeRecord({ ...timeRecord, endTime: e.target.value })} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm" /></div>
+            </div>
+            <div className="mt-6 flex gap-3"><button onClick={() => { setShowStudyTimeModal(false); setTimeRecord({ taskId: '', startTime: '', endTime: '' }); }} className="flex-1 py-3 bg-gray-100 rounded-xl font-medium">취소</button><button onClick={handleSubmitStudyTime} className="flex-1 py-3 bg-sky-950 text-white rounded-xl font-medium">기록완료</button></div>
+          </div>
+        </div>
+      )}
+
+      {showSubmitModal && selectedTask && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4 font-['Pretendard']">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-bold mb-1">과제 제출</h3>
+            <p className="text-xs text-gray-500 mb-6">{selectedTask.title}</p>
+            <div className="space-y-5">
+              <div className="flex flex-col gap-2"><label className="text-sm font-semibold">사진 첨부</label><input type="file" multiple onChange={(e) => e.target.files && handleImageUpload(Array.from(e.target.files))} className="text-xs w-full" /></div>
+              {uploadedImageUrls.length > 0 && <div className="grid grid-cols-3 gap-2">{uploadedImageUrls.map((url, i) => <img key={i} src={url} className="w-full h-20 object-cover rounded-lg border" />)}</div>}
+              <textarea value={submitComment} onChange={(e) => setSubmitComment(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm min-h-[100px]" placeholder="멘토에게 한마디" />
+            </div>
+            <div className="mt-6 flex gap-3"><button onClick={() => setShowSubmitModal(false)} className="flex-1 py-3 bg-gray-100 rounded-xl font-medium">취소</button><button onClick={handleSubmitTask} disabled={isUploading} className="flex-1 py-3 bg-sky-950 text-white rounded-xl font-medium disabled:opacity-50">{isUploading ? '업로드 중' : '제출하기'}</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* 플로팅 버튼 */}
+      <button onClick={() => setShowAddTaskModal(true)} className="fixed right-6 bottom-28 w-16 h-16 bg-gradient-to-br from-indigo-50 to-blue-200 rounded-[31px] outline outline-[1.22px] outline-blue-200 shadow-lg flex items-center justify-center z-50 transition-transform active:scale-95 shadow-blue-100 shadow-lg"><div className="w-10 h-10 bg-sky-950 rounded-full flex items-center justify-center text-white text-2xl font-bold">+</div></button>
+
+      {/* Date Picker Modal */}
+      <AnimatePresence>
+        {isDatePickerOpen && (
+          <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/40" onClick={() => setIsDatePickerOpen(false)}>
+            <motion.div 
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-[390px] bg-white rounded-t-[32px] p-6 pb-10 shadow-2xl"
+            >
+              {/* Handle Bar */}
+              <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-6" />
+
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-gray-900">날짜 선택</h2>
+                <button 
+                  onClick={handleGoToToday}
+                  className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-bold active:scale-95 transition-transform"
                 >
-                  <option value="KOREAN">국어</option>
-                  <option value="ENGLISH">영어</option>
-                  <option value="MATH">수학</option>
-                  <option value="CUSTOM">기타 (직접 입력)</option>
+                  오늘로 가기
+                </button>
+              </div>
+              
+              {/* Year/Month Selectors */}
+              <div className="flex gap-3 mb-6">
+                <select 
+                  value={draftYear} 
+                  onChange={(e) => setDraftYear(Number(e.target.value))}
+                  className="flex-1 p-3 bg-gray-50 border-none rounded-2xl font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  {Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 5 + i).map(y => <option key={y} value={y}>{y}년</option>)}
+                </select>
+                <select 
+                  value={draftMonth} 
+                  onChange={(e) => setDraftMonth(Number(e.target.value))}
+                  className="flex-1 p-3 bg-gray-50 border-none rounded-2xl font-bold text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-100"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => <option key={m} value={m}>{m}월</option>)}
                 </select>
               </div>
 
-              {editTask.subject === 'CUSTOM' && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">과목명 입력</label>
-                  <input
-                    type="text"
-                    value={editTask.customSubject}
-                    onChange={(e) => setEditTask({ ...editTask, customSubject: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-md"
-                    placeholder="예: 물리, 화학, 생물 등"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium mb-1">날짜</label>
-                <input
-                  type="date"
-                  value={editTask.date}
-                  onChange={(e) => setEditTask({ ...editTask, date: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-md"
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 flex gap-2">
-              <button
-                onClick={() => {
-                  setShowEditTaskModal(false);
-                }}
-                className="flex-1 px-4 py-2 border rounded-md hover:bg-gray-50"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleEditTask}
-                className="flex-1 px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800"
-              >
-                수정
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 과제 제출 모달 */}
-      {showSubmitModal && selectedTask && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold mb-2">과제 제출</h3>
-            {selectedTask.isFixed ? (
-              <p className="text-sm text-gray-600 mb-4">
-                멘토 지정 과제 - 이미지 업로드 필수
-              </p>
-            ) : (
-              <p className="text-sm text-gray-600 mb-4">
-                내가 만든 과제 - 이미지 또는 코멘트 중 하나는 필수
-              </p>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  이미지 업로드 {uploadedImageUrls.length > 0 && `(${uploadedImageUrls.length}개)`}
-                  {selectedTask.isFixed && <span className="text-red-500"> *</span>}
-                </label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                  multiple
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (files.length > 0) {
-                      setSelectedImages(files);
-                      handleImageUpload(files);
-                    }
-                  }}
-                  className="w-full px-3 py-2 border rounded-md"
-                  disabled={isUploading}
-                />
-                {isUploading && (
-                  <p className="text-sm text-gray-900 dark:text-gray-300 mt-1">업로드 중...</p>
-                )}
-              </div>
-
-              {uploadedImageUrls.length > 0 && (
-                <div className="grid grid-cols-2 gap-2">
-                  {uploadedImageUrls.map((url, idx) => (
-                    <div key={idx} className="relative">
-                      <img
-                        src={url}
-                        alt={`업로드 ${idx + 1}`}
-                        className="w-full h-32 object-cover rounded border"
-                      />
-                      <button
-                        onClick={() => {
-                          setUploadedImageUrls(uploadedImageUrls.filter((_, i) => i !== idx));
-                        }}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
-                      >
-                        ×
-                      </button>
-                    </div>
+              {/* Calendar Grid */}
+              <div className="mb-8">
+                <div className="grid grid-cols-7 mb-2">
+                  {['월', '화', '수', '목', '금', '토', '일'].map(d => (
+                    <div key={d} className="text-center text-[10px] font-bold text-gray-400 py-1">{d}</div>
                   ))}
                 </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  코멘트
-                  {!selectedTask.isFixed && uploadedImageUrls.length === 0 && (
-                    <span className="text-red-500"> * (이미지가 없으면 필수)</span>
-                  )}
-                </label>
-                <textarea
-                  value={submitComment}
-                  onChange={(e) => setSubmitComment(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md resize-none"
-                  rows={3}
-                  placeholder="제출 관련 코멘트를 입력하세요..."
-                />
-              </div>
-            </div>
-
-            <div className="mt-6 flex gap-2">
-              <button
-                onClick={() => {
-                  setShowSubmitModal(false);
-                  setSubmitComment('');
-                  setSelectedImages([]);
-                  setUploadedImageUrls([]);
-                  setIsUploading(false);
-                }}
-                className="flex-1 px-4 py-2 border rounded-md hover:bg-gray-50"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleSubmitTask}
-                disabled={isUploading}
-                className="flex-1 px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 disabled:bg-gray-400"
-              >
-                제출
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 공부 시간 기록 모달 */}
-      {showStudyTimeModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">공부 시간 기록</h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  시작 시간 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="time"
-                  value={timeRecord.startTime}
-                  onChange={(e) =>
-                    setTimeRecord({ ...timeRecord, startTime: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border rounded-md"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  종료 시간 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="time"
-                  value={timeRecord.endTime}
-                  onChange={(e) =>
-                    setTimeRecord({ ...timeRecord, endTime: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border rounded-md"
-                  required
-                />
-              </div>
-
-              {/* 자동 계산된 시간 표시 */}
-              {timeRecord.startTime && timeRecord.endTime && (
-                <div className="bg-blue-50 dark:bg-blue-900 p-3 rounded-md">
-                  <p className="text-sm text-blue-700 dark:text-blue-200">
-                    총 공부 시간:{' '}
-                    {(() => {
-                      const start = parseTime(timeRecord.startTime);
-                      const end = parseTime(timeRecord.endTime);
-                      if (start >= end) {
-                        return '종료 시간이 시작 시간보다 늦어야 합니다';
-                      }
-                      return formatDuration(end - start);
-                    })()}
-                  </p>
+                <div className="grid grid-cols-7 gap-1">
+                  {calendarGrid.map((cell, i) => {
+                    const isSelected = cell.inMonth && cell.day === draftDay && cell.month === draftMonth && cell.year === draftYear;
+                    const isToday = cell.inMonth && cell.day === new Date().getDate() && cell.month === (new Date().getMonth() + 1) && cell.year === new Date().getFullYear();
+                    
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          if (cell.inMonth) {
+                            setDraftDay(cell.day);
+                          } else {
+                            setDraftYear(cell.year);
+                            setDraftMonth(cell.month);
+                            setDraftDay(cell.day);
+                          }
+                        }}
+                        className={`
+                          aspect-square flex items-center justify-center text-sm font-bold rounded-xl transition-all
+                          ${cell.inMonth ? 'text-gray-800' : 'text-gray-200'}
+                          ${isSelected ? 'bg-[#00265A] text-white shadow-md' : isToday ? 'text-blue-600 bg-blue-50' : 'hover:bg-gray-50'}
+                        `}
+                      >
+                        {cell.day}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
+              </div>
 
-            <div className="mt-6 flex gap-2">
-              <button
-                onClick={() => {
-                  setShowStudyTimeModal(false);
-                  setTimeRecord({ taskId: '', startTime: '', endTime: '' });
-                }}
-                className="flex-1 px-4 py-2 border rounded-md hover:bg-gray-50"
-              >
-                취소
-              </button>
-              <button
-                onClick={handleSubmitStudyTime}
-                className="flex-1 px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800"
-              >
-                기록하기
-              </button>
-            </div>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setIsDatePickerOpen(false)}
+                  className="flex-1 py-4 bg-gray-50 text-gray-500 rounded-2xl font-bold active:scale-95 transition-transform"
+                >
+                  취소
+                </button>
+                <button 
+                  onClick={handleApplyDatePicker} 
+                  className="flex-[2] py-4 bg-[#00265A] text-white rounded-2xl font-bold shadow-lg shadow-blue-900/20 active:scale-95 transition-transform"
+                >
+                  이동하기
+                </button>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 }

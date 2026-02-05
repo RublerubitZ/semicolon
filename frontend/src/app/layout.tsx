@@ -40,10 +40,6 @@ export default function RootLayout({
           href="https://cdn.jsdelivr.net/gh/moonspam/NanumSquare@2.0/nanumsquare.css"
         />
         <style dangerouslySetInnerHTML={{ __html: `
-          @import url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/S-CoreDream-3Light.woff');
-          @import url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/S-CoreDream-4Regular.woff');
-          @import url('https://fastly.jsdelivr.net/gh/projectnoonnu/noonfonts_six@1.2/S-CoreDream-6Bold.woff');
-
           @font-face {
             font-family: 'S-Core Dream';
             font-weight: 300;

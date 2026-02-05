@@ -9,6 +9,7 @@ export const createNotification = async (params: {
   type: NotificationType;
   title: string;
   content?: string;
+  relatedId?: string;
 }) => {
   try {
     const notification = await prisma.notification.create({
@@ -17,6 +18,7 @@ export const createNotification = async (params: {
         type: params.type,
         title: params.title,
         content: params.content,
+        relatedId: params.relatedId,
       },
     });
     return notification;
@@ -44,6 +46,7 @@ export const notifyTaskSubmitted = async (params: {
     type: 'TASK_SUBMITTED',
     title: `${params.menteeName}님이 과제를 제출했습니다`,
     content: `과제: ${params.taskTitle}`,
+    relatedId: params.taskId,
   });
 };
 
@@ -54,13 +57,14 @@ export const notifyNewFeedback = async (params: {
   menteeId: string;
   mentorName: string;
   taskTitle: string;
-  feedbackId: string;
+  taskId: string;
 }) => {
   return createNotification({
     userId: params.menteeId,
     type: 'NEW_FEEDBACK',
     title: `${params.mentorName}님이 피드백을 작성했습니다`,
     content: `과제: ${params.taskTitle}`,
+    relatedId: params.taskId,
   });
 };
 
@@ -78,6 +82,7 @@ export const notifyNewTask = async (params: {
     type: 'NEW_TASK',
     title: `${params.mentorName}님이 새로운 과제를 등록했습니다`,
     content: `과제: ${params.taskTitle}`,
+    relatedId: params.taskId,
   });
 };
 
@@ -95,5 +100,6 @@ export const notifyTaskApproved = async (params: {
     type: 'TASK_APPROVED',
     title: `${params.mentorName}님이 과제를 승인했습니다`,
     content: `과제: ${params.taskTitle}`,
+    relatedId: params.taskId,
   });
 };

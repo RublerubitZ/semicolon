@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Menu, X } from 'lucide-react'; // Using lucide-react for icons if available, otherwise simple SVG
+import Image from 'next/image';
 
 export default function MentorLayout({
   children,
@@ -40,6 +40,8 @@ export default function MentorLayout({
     { name: '멘티관리', path: '/mentor' },
     { name: '학습 과제 등록', path: '/mentor/tasks/new' },
     { name: '피드백', path: '/mentor/feedbacks' },
+    { name: '학습지 관리', path: '/mentor/worksheets' },
+    { name: '학습 리포트', path: '/mentor/reports' },
   ];
 
   const handleLogout = () => {
@@ -54,7 +56,7 @@ export default function MentorLayout({
       {/* Mobile Header */}
       <div className="md:hidden flex items-center justify-between p-4 border-b bg-white sticky top-0 z-20">
         <div className="flex items-center gap-2">
-           <div className="w-8 h-8 bg-gray-200 rounded-md flex-shrink-0" />
+           <Image src="/logo.svg" alt="설스터디 로고" width={32} height={26} className="flex-shrink-0" />
            <span className="text-zinc-800 text-xl font-bold font-['S-Core_Dream']">설스터디</span>
         </div>
         <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2">
@@ -74,7 +76,7 @@ export default function MentorLayout({
         <div>
           {/* Logo (Desktop only) */}
           <div className="hidden md:flex mb-[60px] items-center gap-3">
-            <div className="w-11 h-9 bg-gray-200 rounded-md flex-shrink-0" /> 
+            <Image src="/logo.svg" alt="설스터디 로고" width={44} height={36} className="flex-shrink-0" />
             <span className="text-zinc-800 text-4xl font-bold font-['S-Core_Dream'] leading-none">설스터디</span>
           </div>
 

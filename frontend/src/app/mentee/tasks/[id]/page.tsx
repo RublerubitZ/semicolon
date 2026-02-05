@@ -1,5 +1,8 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
+import ImageModal from '@/components/ImageModal';
+import FeedbackChatUI, { Message } from '@/components/FeedbackChatUI';
+import FeedbackLegacyUI from '@/components/FeedbackLegacyUI';
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -29,6 +32,21 @@ interface Submission {
   imageUrls: string[];
   comment?: string;
   createdAt: string;
+}
+
+interface FeedbackComment {
+  id: string;
+  taskId: string;
+  userId: string;
+  content: string;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    nickname?: string;
+    profileImage?: string;
+    role: string;
+  };
 }
 
 interface LearningGoalItem {
@@ -106,6 +124,14 @@ export default function TaskDetailPage() {
   const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 이미지 모달 상태
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [imageModalIndex, setImageModalIndex] = useState(0);
+
+  // 피드백 댓글 상태
+  const [comments, setComments] = useState<FeedbackComment[]>([]);
+  const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
 
   // 과제 상세 조회
   const fetchTaskDetail = async () => {
@@ -326,6 +352,79 @@ export default function TaskDetailPage() {
     }
   };
 
+  // 댓글 조회
+  const fetchComments = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${getApiUrl()}/api/tasks/${taskId}/comments`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setComments(data.comments || []);
+      }
+    } catch (error) {
+      console.error('댓글 조회 오류:', error);
+    }
+  };
+
+  // 댓글 전송
+  const handleSendComment = async (content: string) => {
+    const token = localStorage.getItem('token');
+    const res = await fetch(`${getApiUrl()}/api/tasks/${taskId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ content }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.error || '댓글 전송에 실패했습니다.');
+    }
+
+    await fetchComments();
+  };
+
+  // 피드백 + 댓글을 메시지로 변환
+  const formatMessages = (feedbacks: Feedback[], comments: FeedbackComment[]): Message[] => {
+    const messages: Message[] = [];
+
+    // 피드백을 메시지로 변환
+    feedbacks.forEach((fb) => {
+      messages.push({
+        id: fb.id,
+        userId: (fb.mentor as any).id || fb.mentor.name, // ID가 있으면 ID 사용, 없으면 이름 사용
+        userName: fb.mentor.name,
+        userRole: 'MENTOR',
+        content: fb.content,
+        createdAt: fb.feedbackDate,
+        profileImage: undefined,
+      });
+    });
+
+    // 댓글을 메시지로 변환
+    comments.forEach((cm) => {
+      messages.push({
+        id: cm.id,
+        userId: cm.userId,
+        userName: cm.user.nickname || cm.user.name,
+        userRole: cm.user.role as 'MENTOR' | 'MENTEE',
+        content: cm.content,
+        createdAt: cm.createdAt,
+        profileImage: cm.user.profileImage,
+      });
+    });
+
+    // 시간순 정렬
+    return messages.sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+  };
+
   // 날짜 포맷팅
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('ko-KR', {
@@ -341,6 +440,26 @@ export default function TaskDetailPage() {
       fetchTaskDetail();
     }
   }, [taskId]);
+
+  // 현재 사용자 정보 로드
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const userData = JSON.parse(userStr);
+        setCurrentUser({ id: userData.id, role: userData.role });
+      } catch (error) {
+        console.error('사용자 정보 파싱 오류:', error);
+      }
+    }
+  }, []);
+
+  // 과제 로드 시 댓글 조회
+  useEffect(() => {
+    if (task) {
+      fetchComments();
+    }
+  }, [task]);
 
   if (isLoading) {
     return (
@@ -389,7 +508,7 @@ export default function TaskDetailPage() {
             <span className="text-xs px-2 py-1 bg-gray-100 text-gray-500 rounded">
               미제출
             </span>
-          ) : task.isApproved || task.feedbacks.length > 0 ? (
+          ) : task.isApproved || (task.feedbacks?.length || 0) > 0 ? (
             <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded font-medium">
               ✓ 피드백 완료
             </span>
@@ -505,10 +624,10 @@ export default function TaskDetailPage() {
           {task.worksheet.type === 'PDF' && task.worksheet.pdfUrl && (
             <div className="mb-4">
               <a
-                href={task.worksheet.pdfUrl}
+                href={task.worksheet.pdfUrl.startsWith('http') ? task.worksheet.pdfUrl : `${getApiUrl().replace(/\/$/, '')}${task.worksheet.pdfUrl.startsWith('/') ? '' : '/'}${task.worksheet.pdfUrl}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold"
               >
                 <span>📄</span>
                 <span>PDF 보기</span>
@@ -561,72 +680,105 @@ export default function TaskDetailPage() {
         </div>
       )}
 
-      {/* 피드백 */}
-      {task.feedbacks.length > 0 && (
-        <div className="bg-white mb-2">
-          <div className="p-4">
-          <h3 className="text-lg font-bold mb-3">💬 피드백</h3>
-          {task.feedbacks.map((feedback) => (
-            <div key={feedback.id} className="border rounded-lg p-3 mb-3 last:mb-0">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-semibold text-gray-900">
-                  {feedback.mentor.name} 멘토
-                </span>
-                <span className="text-xs text-gray-900">
-                  {formatDate(feedback.feedbackDate)}
-                </span>
-              </div>
-
-              {feedback.summary && (
-                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-2 mb-2">
-                  <p className="text-sm font-semibold text-yellow-900">요약</p>
-                  <p className="text-sm text-yellow-800">{feedback.summary}</p>
-                </div>
-              )}
-
-              <p className="text-gray-700 whitespace-pre-wrap">{feedback.content}</p>
-            </div>
-          ))}
-          </div>
+      {/* 피드백 - UI 분기 */}
+      {task.feedbacks.length === 0 ? (
+        <div className="bg-gray-50 dark:bg-gray-800 mb-2 p-4 rounded-lg border dark:border-gray-700 text-center">
+          <p className="text-gray-600 dark:text-gray-400">아직 피드백이 없습니다.</p>
         </div>
+      ) : (
+        // 피드백 1개 이상: 최초 피드백 요약 + 채팅 UI (멘티가 질문 가능)
+        <>
+          {/* 최초 피드백 요약 (강조) */}
+          {task.feedbacks[0].summary && (
+            <div className="bg-gradient-to-r from-amber-100 to-yellow-100 dark:from-amber-900/40 dark:to-yellow-900/40 rounded-lg p-4 mb-4 border-l-4 border-amber-400 dark:border-amber-600 shadow-sm mx-2">
+              <div className="flex items-start gap-2">
+                <span className="text-xl">✨</span>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-amber-900 dark:text-amber-200 mb-1">
+                    핵심 요약
+                  </p>
+                  <p className="text-sm sm:text-base leading-relaxed text-amber-800 dark:text-amber-300 font-medium">
+                    {task.feedbacks[0].summary}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 채팅 UI */}
+          <div className="bg-white dark:bg-gray-800 mb-2">
+            <div className="p-4">
+              <h3 className="text-lg font-bold mb-3 dark:text-white">💬 피드백 대화</h3>
+              {currentUser && (
+                <FeedbackChatUI
+                  taskId={task.id}
+                  messages={formatMessages(task.feedbacks, comments)}
+                  currentUserId={currentUser.id}
+                  onSendMessage={handleSendComment}
+                />
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {/* 제출 내역 */}
       {task.submissions.length > 0 && (
-        <div className="bg-white mb-2">
+        <div className="bg-white dark:bg-gray-800 mb-2">
           <div className="p-4">
-          <h3 className="text-lg font-bold mb-3">📤 제출 내역</h3>
-          {task.submissions.map((submission) => (
-            <div key={submission.id} className="border rounded-lg p-3 mb-3 last:mb-0">
-              <p className="text-xs text-gray-900 mb-2">
-                제출일: {new Date(submission.createdAt).toLocaleString('ko-KR')}
-              </p>
-
-              {submission.comment && (
-                <p className="text-sm text-gray-700 mb-2 p-2 bg-gray-50 rounded">
-                  {submission.comment}
-                </p>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold dark:text-white">📤 제출 내역</h3>
+              {task.submissions[0]?.imageUrls && task.submissions[0].imageUrls.length > 0 && (
+                <button
+                  onClick={() => {
+                    setImageModalOpen(true);
+                    setImageModalIndex(0);
+                  }}
+                  className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  📷 사진 보기 ({task.submissions[0].imageUrls.length})
+                </button>
               )}
-
-              <div className="grid grid-cols-2 gap-2">
-                {submission.imageUrls.map((url, idx) => (
-                  <a
-                    key={idx}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="aspect-square bg-gray-100 rounded-lg overflow-hidden"
-                  >
-                    <img
-                      src={url}
-                      alt={`제출 이미지 ${idx + 1}`}
-                      className="w-full h-full object-cover hover:opacity-90"
-                    />
-                  </a>
-                ))}
-              </div>
             </div>
-          ))}
+            {task.submissions.map((submission) => (
+              <div key={submission.id} className="border dark:border-gray-700 rounded-lg p-3 mb-3 last:mb-0">
+                <p className="text-xs text-gray-900 dark:text-gray-300 mb-2">
+                  제출일: {new Date(submission.createdAt).toLocaleString('ko-KR')}
+                </p>
+
+                {submission.comment && (
+                  <p className="text-sm text-gray-700 dark:text-gray-300 mb-2 p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                    {submission.comment}
+                  </p>
+                )}
+
+                <div className="grid grid-cols-2 gap-2">
+                  {submission.imageUrls.slice(0, 4).map((url, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => {
+                        setImageModalOpen(true);
+                        setImageModalIndex(idx);
+                      }}
+                      className="relative aspect-square bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+                    >
+                      <img
+                        src={url}
+                        alt={`제출 이미지 ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                      {idx === 3 && submission.imageUrls.length > 4 && (
+                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                          <span className="text-white text-xl font-bold">
+                            +{submission.imageUrls.length - 4}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -756,6 +908,15 @@ export default function TaskDetailPage() {
           </div>
           </div>
         </div>
+      )}
+
+      {/* 이미지 모달 */}
+      {imageModalOpen && task && task.submissions.length > 0 && task.submissions[0].imageUrls.length > 0 && (
+        <ImageModal
+          images={task.submissions[0].imageUrls}
+          initialIndex={imageModalIndex}
+          onClose={() => setImageModalOpen(false)}
+        />
       )}
     </div>
   );

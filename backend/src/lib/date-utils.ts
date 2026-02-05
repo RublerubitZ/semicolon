@@ -3,6 +3,17 @@
  * YYYY-MM-DD 형식의 문자열을 UTC 기준으로 파싱하여 타임존 문제 해결
  */
 
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * YYYY-MM-DD 형식 검증
+ */
+export const isValidDateStr = (dateStr: string): boolean => {
+  if (!DATE_REGEX.test(dateStr)) return false;
+  const d = new Date(dateStr + 'T00:00:00.000Z');
+  return !isNaN(d.getTime());
+};
+
 /**
  * YYYY-MM-DD 형식의 날짜 문자열을 UTC 기준 Date 객체로 변환
  * 예: "2026-02-04" -> UTC 2026-02-04 00:00:00

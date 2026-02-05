@@ -9,6 +9,7 @@ import menteeRoutes from './routes/mentee';
 import mentorRoutes from './routes/mentor';
 import uploadRoutes from './routes/upload';
 import notificationRoutes from './routes/notification';
+import tasksRoutes from './routes/tasks';
 import { startScheduler } from './lib/scheduler';
 
 const app = express();
@@ -24,17 +25,21 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// 정적 파일 서빙 (업로드된 이미지, PDF 등)
+app.use('/uploads', express.static('uploads'));
+
+// Health check (인증 불필요 - 반드시 다른 라우트보다 먼저 등록)
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: '설스터디 API 서버 정상 작동 중' });
+});
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/mentee', menteeRoutes);
 app.use('/api/mentor', mentorRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: '설스터디 API 서버 정상 작동 중' });
-});
+app.use('/api', tasksRoutes);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`서버가 포트 ${PORT}에서 실행 중입니다.`);

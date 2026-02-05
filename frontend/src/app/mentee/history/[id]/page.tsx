@@ -177,7 +177,7 @@ export default function FeedbackDetail() {
       )}
 
       {/* 피드백 */}
-      {task.feedbacks.length > 0 ? (
+      {(task.feedbacks?.length || 0) > 0 ? (
         <div className="space-y-4">
           {task.feedbacks.map((feedback) => (
             <div key={feedback.id} className="bg-white dark:bg-gray-800 p-4 rounded-lg border dark:border-gray-700">

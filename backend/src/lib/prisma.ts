@@ -24,7 +24,7 @@ export const prisma =
   });
 
 // 에러 로깅 개선
-prisma.$on('error' as any, (e: any) => {
+(prisma.$on as any)('error', (e: any) => {
   console.error('[Prisma Error]', {
     timestamp: new Date().toISOString(),
     message: e.message,
@@ -33,7 +33,7 @@ prisma.$on('error' as any, (e: any) => {
   });
 });
 
-prisma.$on('warn' as any, (e: any) => {
+(prisma.$on as any)('warn', (e: any) => {
   console.warn('[Prisma Warning]', {
     timestamp: new Date().toISOString(),
     message: e.message,
@@ -42,7 +42,7 @@ prisma.$on('warn' as any, (e: any) => {
 });
 
 if (process.env.NODE_ENV === 'development') {
-  prisma.$on('query' as any, (e: any) => {
+  (prisma.$on as any)('query', (e: any) => {
     console.log('[Prisma Query]', {
       query: e.query,
       duration: `${e.duration}ms`,
@@ -53,6 +53,29 @@ if (process.env.NODE_ENV === 'development') {
 if (process.env.NODE_ENV !== 'production') {
   global.prisma = prisma;
 }
+
+// 연결 상태 확인 및 자동 재연결
+let lastHealthCheck = Date.now();
+const HEALTH_CHECK_INTERVAL = 60000; // 1분
+
+setInterval(async () => {
+  try {
+    if (!isShuttingDown && Date.now() - lastHealthCheck > HEALTH_CHECK_INTERVAL) {
+      await prisma.$queryRaw`SELECT 1`;
+      lastHealthCheck = Date.now();
+    }
+  } catch (error) {
+    console.error('[Prisma] Connection health check failed, attempting reconnect...');
+    try {
+      await prisma.$disconnect();
+      await prisma.$connect();
+      console.log('[Prisma] Reconnected successfully');
+      lastHealthCheck = Date.now();
+    } catch (reconnectError) {
+      console.error('[Prisma] Reconnection failed:', reconnectError);
+    }
+  }
+}, HEALTH_CHECK_INTERVAL);
 
 // Graceful shutdown (shutdown 상태일 때만 disconnect)
 process.on('beforeExit', async () => {

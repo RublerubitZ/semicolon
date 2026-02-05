@@ -67,6 +67,42 @@ export default function MentorDashboard() {
         <NotificationBell />
       </div>
 
+      {/* Quick Actions */}
+      <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <button
+          onClick={() => router.push('/mentor/worksheets')}
+          className="bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-[10px] p-4 md:p-5 shadow-[0px_4px_20px_0px_rgba(0,0,0,0.05)] hover:shadow-lg transition-shadow flex items-center justify-between group"
+        >
+          <div className="text-left">
+            <p className="text-sm font-medium opacity-90 mb-1">학습 자료</p>
+            <p className="text-lg md:text-xl font-bold font-['Pretendard']">학습지 관리</p>
+          </div>
+          <div className="text-3xl group-hover:translate-x-1 transition-transform">📚</div>
+        </button>
+
+        <button
+          onClick={() => router.push('/mentor/feedbacks')}
+          className="bg-gradient-to-r from-purple-600 to-purple-500 text-white rounded-[10px] p-4 md:p-5 shadow-[0px_4px_20px_0px_rgba(0,0,0,0.05)] hover:shadow-lg transition-shadow flex items-center justify-between group"
+        >
+          <div className="text-left">
+            <p className="text-sm font-medium opacity-90 mb-1">학습 지도</p>
+            <p className="text-lg md:text-xl font-bold font-['Pretendard']">피드백 관리</p>
+          </div>
+          <div className="text-3xl group-hover:translate-x-1 transition-transform">💬</div>
+        </button>
+
+        <button
+          onClick={() => router.push('/mentor/tasks/new')}
+          className="bg-gradient-to-r from-green-600 to-green-500 text-white rounded-[10px] p-4 md:p-5 shadow-[0px_4px_20px_0px_rgba(0,0,0,0.05)] hover:shadow-lg transition-shadow flex items-center justify-between group"
+        >
+          <div className="text-left">
+            <p className="text-sm font-medium opacity-90 mb-1">과제 출제</p>
+            <p className="text-lg md:text-xl font-bold font-['Pretendard']">과제 등록</p>
+          </div>
+          <div className="text-3xl group-hover:translate-x-1 transition-transform">✏️</div>
+        </button>
+      </div>
+
       {/* Mentee List Grid */}
       {isLoading ? (
         <p className="text-gray-500">로딩 중...</p>

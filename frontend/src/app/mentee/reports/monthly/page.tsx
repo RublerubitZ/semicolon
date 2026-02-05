@@ -48,9 +48,32 @@ const getSubjectColor = (subject: string) => {
   return colors[subject] || 'bg-gray-100 text-gray-800 border-gray-200';
 };
 
+interface MonthlyFeedback {
+  id: string;
+  overallComment: string;
+  strengths: string;
+  improvements: string;
+  nextMonthGoals: string;
+  updatedAt: string;
+  mentor: { id: string; name: string; nickname?: string };
+}
+
+interface WeeklyFeedback {
+  id: string;
+  weekNumber: number;
+  overallComment: string;
+  strengths: string;
+  improvements: string;
+  nextWeekGoals: string;
+  updatedAt: string;
+  mentor: { id: string; name: string; nickname?: string };
+}
+
 export default function MonthlyReportPage() {
   const router = useRouter();
   const [report, setReport] = useState<MonthlyReport | null>(null);
+  const [monthlyFeedback, setMonthlyFeedback] = useState<MonthlyFeedback | null>(null);
+  const [weeklyFeedbacks, setWeeklyFeedbacks] = useState<WeeklyFeedback[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // 현재 날짜 기준으로 초기 년/월 설정
@@ -63,17 +86,36 @@ export default function MonthlyReportPage() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(
-        `${getApiUrl()}/api/mentee/reports/monthly?year=${selectedYear}&month=${selectedMonth}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+      const headers = { Authorization: `Bearer ${token}` };
 
-      if (!res.ok) throw new Error('리포트를 불러오는데 실패했습니다.');
+      const [reportRes, feedbackRes, weeklyRes] = await Promise.all([
+        fetch(
+          `${getApiUrl()}/api/mentee/reports/monthly?year=${selectedYear}&month=${selectedMonth}`,
+          { headers }
+        ),
+        fetch(
+          `${getApiUrl()}/api/mentee/monthly-feedbacks?year=${selectedYear}&month=${selectedMonth}`,
+          { headers }
+        ),
+        fetch(
+          `${getApiUrl()}/api/mentee/weekly-feedbacks?year=${selectedYear}&month=${selectedMonth}`,
+          { headers }
+        ),
+      ]);
 
-      const data = await res.json();
+      if (!reportRes.ok) throw new Error('리포트를 불러오는데 실패했습니다.');
+      const data = await reportRes.json();
       setReport(data);
+
+      if (feedbackRes.ok) {
+        const fbData = await feedbackRes.json();
+        setMonthlyFeedback(fbData);
+      }
+
+      if (weeklyRes.ok) {
+        const wfData = await weeklyRes.json();
+        setWeeklyFeedbacks(Array.isArray(wfData) ? wfData : []);
+      }
     } catch (err) {
       console.error('Fetch report error:', err);
       alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
@@ -273,6 +315,71 @@ export default function MonthlyReportPage() {
             {report.dailyProgress.filter((day) => day.totalTasks > 0).length === 0 && (
               <p className="text-center text-gray-500 py-4">해당 월에 과제가 없습니다.</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 멘토 주간 총평 */}
+      {weeklyFeedbacks.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-3">멘토 주간 총평</h3>
+          <div className="space-y-4">
+            {weeklyFeedbacks.map((wf) => (
+              <div key={wf.id} className="bg-white rounded-lg border overflow-hidden">
+                <div className="bg-gray-50 px-4 py-2 border-b flex items-center justify-between">
+                  <span className="text-sm font-semibold text-gray-700">{wf.weekNumber}주차</span>
+                  <span className="text-xs text-gray-400">
+                    {wf.mentor.name} 멘토 | {new Date(wf.updatedAt).toLocaleDateString('ko-KR')}
+                  </span>
+                </div>
+                <div className="p-4 space-y-3">
+                  <div className="border-l-4 border-l-blue-500 pl-3">
+                    <p className="text-xs font-semibold text-blue-700 mb-1">이번주 총평</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{wf.overallComment}</p>
+                  </div>
+                  <div className="border-l-4 border-l-green-500 pl-3">
+                    <p className="text-xs font-semibold text-green-700 mb-1">잘한 점</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{wf.strengths}</p>
+                  </div>
+                  <div className="border-l-4 border-l-orange-500 pl-3">
+                    <p className="text-xs font-semibold text-orange-700 mb-1">개선할 점</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{wf.improvements}</p>
+                  </div>
+                  <div className="border-l-4 border-l-purple-500 pl-3">
+                    <p className="text-xs font-semibold text-purple-700 mb-1">다음주 목표</p>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{wf.nextWeekGoals}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 멘토 월간 총평 */}
+      {monthlyFeedback && (
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-3">멘토 월간 총평</h3>
+          <p className="text-xs text-gray-400 mb-3">
+            {monthlyFeedback.mentor.name} 멘토 | {new Date(monthlyFeedback.updatedAt).toLocaleDateString('ko-KR')} 작성
+          </p>
+          <div className="space-y-3">
+            <div className="bg-white rounded-lg p-4 border border-l-4 border-l-blue-500">
+              <h4 className="font-semibold text-sm text-blue-700 mb-2">이번달 총평</h4>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{monthlyFeedback.overallComment}</p>
+            </div>
+            <div className="bg-white rounded-lg p-4 border border-l-4 border-l-green-500">
+              <h4 className="font-semibold text-sm text-green-700 mb-2">잘한 점</h4>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{monthlyFeedback.strengths}</p>
+            </div>
+            <div className="bg-white rounded-lg p-4 border border-l-4 border-l-orange-500">
+              <h4 className="font-semibold text-sm text-orange-700 mb-2">개선할 점</h4>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{monthlyFeedback.improvements}</p>
+            </div>
+            <div className="bg-white rounded-lg p-4 border border-l-4 border-l-purple-500">
+              <h4 className="font-semibold text-sm text-purple-700 mb-2">다음달 목표</h4>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{monthlyFeedback.nextMonthGoals}</p>
+            </div>
           </div>
         </div>
       )}

@@ -19,22 +19,31 @@ model User {
   role         Role     @default(MENTEE)
   grade        String?  // 학년 (고1, 고2, 고3, 재수생 등)
   profileImage String?
+  gender       String?  // 성별
+  birthDate    String?  // 생년월일 (예: "2008.06.05")
+  goal         String?  // 목표 (예: "수능 준비")
+  phone        String?  // 휴대폰번호 (예: "010-1234-5678")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   // Relations
-  menteeTasks            Task[]           @relation("MenteeTasks")
-  mentorTasks            Task[]           @relation("MentorTasks")
+  menteeTasks            Task[]            @relation("MenteeTasks")
+  mentorTasks            Task[]            @relation("MentorTasks")
   submissions            TaskSubmission[]
-  feedbacksGiven         Feedback[]       @relation("FeedbacksMentor")
+  feedbacksGiven         Feedback[]        @relation("FeedbacksMentor")
+  feedbackComments       FeedbackComment[]
   worksheets             Worksheet[]
   studyTimeLogs          StudyTimeLog[]
   plannerComments        PlannerComment[]
   notifications          Notification[]
-  mentorRelation         MentorMentee[]   @relation("Mentor")
-  menteeRelation         MentorMentee[]   @relation("Mentee")
-  dailyFeedbacksGiven    DailyFeedback[]  @relation("DailyFeedbacksMentor")
-  dailyFeedbacksReceived DailyFeedback[]  @relation("DailyFeedbacksMentee")
+  mentorRelation         MentorMentee[]    @relation("Mentor")
+  menteeRelation         MentorMentee[]    @relation("Mentee")
+  dailyFeedbacksGiven    DailyFeedback[]   @relation("DailyFeedbacksMentor")
+  dailyFeedbacksReceived DailyFeedback[]   @relation("DailyFeedbacksMentee")
+  monthlyFeedbacksGiven    MonthlyFeedback[] @relation("MonthlyFeedbacksMentor")
+  monthlyFeedbacksReceived MonthlyFeedback[] @relation("MonthlyFeedbacksMentee")
+  weeklyFeedbacksGiven     WeeklyFeedback[]  @relation("WeeklyFeedbacksMentor")
+  weeklyFeedbacksReceived  WeeklyFeedback[]  @relation("WeeklyFeedbacksMentee")
 }
 
 enum Role {
@@ -92,13 +101,14 @@ model Task {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  mentee       User             @relation("MenteeTasks", fields: [menteeId], references: [id])
-  mentor       User?            @relation("MentorTasks", fields: [mentorId], references: [id])
-  worksheet    Worksheet?       @relation(fields: [worksheetId], references: [id])
-  submissions  TaskSubmission[]
-  feedbacks    Feedback[]
-  studyLogs    StudyTimeLog[]
-  learningGoal LearningGoal?    // 학습 목표 (선택)
+  mentee           User               @relation("MenteeTasks", fields: [menteeId], references: [id])
+  mentor           User?              @relation("MentorTasks", fields: [mentorId], references: [id])
+  worksheet        Worksheet?         @relation(fields: [worksheetId], references: [id])
+  submissions      TaskSubmission[]
+  feedbacks        Feedback[]
+  feedbackComments FeedbackComment[]
+  studyLogs        StudyTimeLog[]
+  learningGoal     LearningGoal?      // 학습 목표 (선택)
 
   @@index([menteeId, date])
   @@index([mentorId, date])
@@ -158,6 +168,23 @@ model Feedback {
 
   task   Task @relation(fields: [taskId], references: [id])
   mentor User @relation("FeedbacksMentor", fields: [mentorId], references: [id])
+}
+
+// 피드백 댓글 (채팅 형식)
+model FeedbackComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String   // 멘토 또는 멘티
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([taskId])
+  @@index([userId])
+  @@map("feedback_comments")
 }
 
 // 학습지
@@ -224,6 +251,7 @@ model Notification {
   title     String
   content   String?
   isRead    Boolean          @default(false)
+  relatedId String?          // taskId, feedbackId 등 관련 리소스 ID
   createdAt DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id])
@@ -254,4 +282,47 @@ model DailyFeedback {
 
   @@unique([menteeId, date]) // 멘티당 날짜별로 하나만
   @@index([menteeId, date])
+}
+
+// 월간 총평
+model MonthlyFeedback {
+  id              String   @id @default(cuid())
+  menteeId        String
+  mentorId        String
+  year            Int
+  month           Int
+  overallComment  String   // 이번달 총평
+  strengths       String   // 잘한점
+  improvements    String   // 개선할점
+  nextMonthGoals  String   // 다음달 목표
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  mentee User @relation("MonthlyFeedbacksMentee", fields: [menteeId], references: [id])
+  mentor User @relation("MonthlyFeedbacksMentor", fields: [mentorId], references: [id])
+
+  @@unique([menteeId, year, month]) // 멘티당 월별로 하나만
+  @@index([menteeId, year, month])
+}
+
+// 주간 총평
+model WeeklyFeedback {
+  id              String   @id @default(cuid())
+  menteeId        String
+  mentorId        String
+  year            Int
+  month           Int
+  weekNumber      Int      // 1~5주차
+  overallComment  String   // 이번주 총평
+  strengths       String   // 잘한점
+  improvements    String   // 개선할점
+  nextWeekGoals   String   // 다음주 목표
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  mentee User @relation("WeeklyFeedbacksMentee", fields: [menteeId], references: [id])
+  mentor User @relation("WeeklyFeedbacksMentor", fields: [mentorId], references: [id])
+
+  @@unique([menteeId, year, month, weekNumber]) // 멘티당 주별로 하나만
+  @@index([menteeId, year, month])
 }
