@@ -71,7 +71,7 @@ const handleMulterError = (err: unknown, req: AuthRequest, res: Response, next: 
   }
   if (err) {
     return res.status(400).json({
-      error: err.message || '파일 업로드에 실패했습니다.',
+      error: err instanceof Error ? err.message : '파일 업로드에 실패했습니다.',
     });
   }
   next();
