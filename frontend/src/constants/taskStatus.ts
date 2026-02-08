@@ -31,8 +31,8 @@ export const TASK_STATUS_CONFIG: Record<TaskStatus, TaskStatusInfo> = {
  */
 export function getTaskStatus(task: {
   date: string | Date;
-  submissions?: any[];
-  feedbacks?: any[];
+  submissions?: { id: string }[];
+  feedbacks?: { id: string }[];
 }): TaskStatus {
   // 1. 피드백 완료 여부 우선 확인
   if (task.feedbacks && task.feedbacks.length > 0) {
@@ -65,8 +65,8 @@ export function getTaskStatus(task: {
  */
 export function getTaskStatusInfo(task: {
   date: string | Date;
-  submissions?: any[];
-  feedbacks?: any[];
+  submissions?: { id: string }[];
+  feedbacks?: { id: string }[];
 }): TaskStatusInfo {
   const status = getTaskStatus(task);
   return TASK_STATUS_CONFIG[status];

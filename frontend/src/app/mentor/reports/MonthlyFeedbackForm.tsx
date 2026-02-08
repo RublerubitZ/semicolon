@@ -3,6 +3,7 @@ import { getApiUrl } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { AiOutlineSave } from 'react-icons/ai';
 import { toast } from '@/stores/useToastStore';
+import { CONTENT_LIMITS } from '@/constants/contentLimits';
 
 interface MonthlyFeedback {
   id: string;
@@ -61,6 +62,7 @@ export default function MonthlyFeedbackForm({ menteeId }: { menteeId: string }) 
         }
       } catch (err) {
         console.error('데이터 로딩 실패:', err);
+        toast.error('월간 피드백 데이터를 불러오는데 실패했습니다.');
       } finally {
         setIsLoading(false);
       }
@@ -160,7 +162,7 @@ export default function MonthlyFeedbackForm({ menteeId }: { menteeId: string }) 
           <div className="relative">
             <textarea
               value={overallComment}
-              onChange={(e) => setOverallComment(e.target.value.slice(0, 1000))}
+              onChange={(e) => setOverallComment(e.target.value.slice(0, CONTENT_LIMITS.FEEDBACK_COMMENT))}
               placeholder="이번 달 전반적인 학습 상황에 대한 총평을 작성해주세요."
               className="w-full h-[180px] resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-[12px] leading-6 text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all"
             />

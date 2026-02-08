@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Image from "next/image";
 import Link from 'next/link';
 import { getApiUrl } from '@/lib/api';
+import { TIMEOUTS } from '@/constants/timeouts';
 import { setRefreshToken } from '@/lib/auth';
 import { IoEye, IoEyeOff } from "react-icons/io5";
 
@@ -52,7 +53,7 @@ function LoginContent() {
     if (reason && LOGOUT_REASONS[reason]) {
       setLogoutReason(reason);
       // 5초 후 이유 메시지 숨기기
-      const timer = setTimeout(() => setLogoutReason(null), 5000);
+      const timer = setTimeout(() => setLogoutReason(null), TIMEOUTS.TOAST_DURATION);
       return () => clearTimeout(timer);
     }
 

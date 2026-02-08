@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { getApiUrl } from '@/lib/api';
+import { apiGet, apiPatch } from '@/lib/api';
+import { getUser } from '@/lib/auth';
 import { IoIosNotifications, IoIosArrowBack } from "react-icons/io";
-import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useOverlayStore } from '@/stores/useOverlayStore';
 import { Z_INDEX } from '@/constants/zIndex';
+import { TIMEOUTS } from '@/constants/timeouts';
 
 interface Notification {
   id: string;
@@ -34,14 +35,7 @@ export default function NotificationBell() {
   // 알림 목록 조회
   const fetchNotifications = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const response = await fetch(`${getApiUrl()}/api/notifications`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiGet('/api/notifications');
 
       if (response.ok) {
         const data = await response.json();
@@ -49,7 +43,7 @@ export default function NotificationBell() {
       }
     } catch (error) {
       // 서버가 꺼져있을 때는 에러 메시지를 조용히 처리
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      if (error instanceof TypeError && (error.message === 'Failed to fetch' || error.message === 'NetworkError when attempting to fetch resource.')) {
         return;
       }
       console.error('Failed to fetch notifications:', error);
@@ -59,14 +53,7 @@ export default function NotificationBell() {
   // 읽지 않은 알림 개수 조회
   const fetchUnreadCount = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const response = await fetch(`${getApiUrl()}/api/notifications/unread-count`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiGet('/api/notifications/unread-count');
 
       if (response.ok) {
         const data = await response.json();
@@ -74,7 +61,7 @@ export default function NotificationBell() {
       }
     } catch (error) {
       // 서버가 꺼져있을 때는 에러 메시지를 조용히 처리
-      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      if (error instanceof TypeError && (error.message === 'Failed to fetch' || error.message === 'NetworkError when attempting to fetch resource.')) {
         return;
       }
       console.error('Failed to fetch unread count:', error);
@@ -84,13 +71,7 @@ export default function NotificationBell() {
   // 알림 읽음 처리
   const markAsRead = async (id: string) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${getApiUrl()}/api/notifications/${id}/read`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiPatch(`/api/notifications/${id}/read`);
 
       if (response.ok) {
         await fetchNotifications();
@@ -104,13 +85,7 @@ export default function NotificationBell() {
   // 모든 알림 읽음 처리
   const markAllAsRead = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${getApiUrl()}/api/notifications/read-all`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await apiPatch('/api/notifications/read-all');
 
       if (response.ok) {
         await fetchNotifications();
@@ -129,9 +104,8 @@ export default function NotificationBell() {
     setIsOpen(false);
     if (!notification.relatedId) return;
 
-    const userStr = localStorage.getItem('user');
-    if (!userStr) return;
-    const user = JSON.parse(userStr);
+    const user = getUser();
+    if (!user) return;
     const userRole = user.role;
 
     switch (notification.type) {
@@ -165,7 +139,7 @@ export default function NotificationBell() {
     fetchUnreadCount();
     const interval = setInterval(() => {
       fetchUnreadCount();
-    }, 30000);
+    }, TIMEOUTS.AUTO_REFRESH);
     return () => clearInterval(interval);
   }, []);
 

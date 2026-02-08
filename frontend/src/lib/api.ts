@@ -1,7 +1,8 @@
 // API URL을 동적으로 생성하는 함수
 // 로컬 개발 환경에서는 로컬 백엔드를 확인하고, 프로덕션에서는 Railway 사용
 
-const RAILWAY_URL = 'https://semicolon-production.up.railway.app';
+const PRODUCTION_API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://semicolon-production.up.railway.app';
+const LOCAL_API_PORT = process.env.NEXT_PUBLIC_LOCAL_API_PORT || '4000';
 
 function isProduction(): boolean {
   if (typeof window === 'undefined') return false;
@@ -12,10 +13,10 @@ function isProduction(): boolean {
 // 동적 로컬 URL 생성 함수
 function getLocalUrl(): string {
   if (typeof window === 'undefined') {
-    return 'http://localhost:4000';
+    return `http://localhost:${LOCAL_API_PORT}`;
   }
   const hostname = window.location.hostname;
-  return `http://${hostname}:4000`;
+  return `http://${hostname}:${LOCAL_API_PORT}`;
 }
 
 let cachedApiUrl: string | null = null;
@@ -52,10 +53,10 @@ export function getApiUrl(): string {
     return cachedApiUrl;
   }
 
-  // 프로덕션에서는 항상 Railway 사용
+  // 프로덕션에서는 항상 프로덕션 API 사용
   if (isProduction()) {
-    cachedApiUrl = RAILWAY_URL;
-    return cachedApiUrl;
+    cachedApiUrl = PRODUCTION_API_URL;
+    return PRODUCTION_API_URL;
   }
 
   return getLocalUrl();
@@ -69,18 +70,19 @@ export async function initializeApiUrl(): Promise<string> {
     return getLocalUrl();
   }
 
-  // 프로덕션에서는 로컬 체크 없이 바로 Railway 사용
+  // 프로덕션에서는 로컬 체크 없이 바로 프로덕션 API 사용
   if (isProduction()) {
-    cachedApiUrl = RAILWAY_URL;
-    console.log(`[API] Initialized: ${cachedApiUrl}`);
-    return cachedApiUrl;
+    cachedApiUrl = PRODUCTION_API_URL;
+    console.log(`[API] Initialized: ${PRODUCTION_API_URL}`);
+    return PRODUCTION_API_URL;
   }
 
   const isLocalAvailable = await checkLocalBackend();
-  cachedApiUrl = isLocalAvailable ? getLocalUrl() : RAILWAY_URL;
+  const url = isLocalAvailable ? getLocalUrl() : PRODUCTION_API_URL;
+  cachedApiUrl = url;
 
-  console.log(`[API] Initialized: ${cachedApiUrl}`);
-  return cachedApiUrl;
+  console.log(`[API] Initialized: ${url}`);
+  return url;
 }
 
 /**

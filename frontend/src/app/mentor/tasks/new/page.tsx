@@ -3,6 +3,7 @@ import { getApiUrl } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FILE_LIMITS } from '@/constants/fileLimits';
+import { CONTENT_LIMITS } from '@/constants/contentLimits';
 import { toast } from '@/stores/useToastStore';
 
 type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
@@ -632,7 +633,7 @@ export default function NewTaskPage() {
             </div>
             <input
               value={taskName}
-              onChange={(e) => setTaskName(e.target.value.slice(0, 50))}
+              onChange={(e) => setTaskName(e.target.value.slice(0, CONTENT_LIMITS.WORKSHEET_TITLE))}
               placeholder="과제명을 작성해 주세요."
               className="mt-2 h-10 w-full rounded-md bg-white px-3 text-[12px] text-gray-700 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-blue-200"
             />
@@ -646,7 +647,7 @@ export default function NewTaskPage() {
             </div>
             <textarea
               value={goal}
-              onChange={(e) => setGoal(e.target.value.slice(0, 500))}
+              onChange={(e) => setGoal(e.target.value.slice(0, CONTENT_LIMITS.LEARNING_GOAL))}
               placeholder="학습 목표를 작성해 주세요."
               className="mt-2 h-[120px] w-full resize-none rounded-md bg-white px-3 py-3 text-[12px] text-gray-700 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-blue-200"
             />
@@ -777,7 +778,7 @@ export default function NewTaskPage() {
                     <div>
                       <input
                         value={material.columnTitle || ''}
-                        onChange={(e) => updateMaterial(index, 'columnTitle', e.target.value.slice(0, 50))}
+                        onChange={(e) => updateMaterial(index, 'columnTitle', e.target.value.slice(0, CONTENT_LIMITS.WORKSHEET_TITLE))}
                         placeholder="제목 작성"
                         className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-200"
                       />
@@ -788,7 +789,7 @@ export default function NewTaskPage() {
                     <div>
                       <textarea
                         value={material.columnContent || ''}
-                        onChange={(e) => updateMaterial(index, 'columnContent', e.target.value.slice(0, 1000))}
+                        onChange={(e) => updateMaterial(index, 'columnContent', e.target.value.slice(0, CONTENT_LIMITS.COLUMN_CONTENT))}
                         placeholder="내용 입력"
                         className="h-[120px] w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-3 text-[12px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-200"
                       />

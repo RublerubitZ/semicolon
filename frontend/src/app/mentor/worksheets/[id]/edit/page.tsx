@@ -6,6 +6,7 @@ import { FiChevronDown } from "react-icons/fi";
 import { CgFileDocument } from "react-icons/cg";
 import { getApiUrl } from "@/lib/api";
 import { toast } from '@/stores/useToastStore';
+import { CONTENT_LIMITS } from '@/constants/contentLimits';
 
 type SubjectUI = "국어" | "영어" | "수학";
 type SubjectType = "KOREAN" | "ENGLISH" | "MATH";
@@ -305,7 +306,7 @@ export default function LibraryEditPage() {
             <div className="mt-2 relative">
                 <input
                     value={name}
-                    onChange={(e) => setName(e.target.value.slice(0, 50))}
+                    onChange={(e) => setName(e.target.value.slice(0, CONTENT_LIMITS.WORKSHEET_NAME))}
                     placeholder="학습지명을 작성해 주세요."
                     className="h-11 w-full rounded-lg border border-gray-200 bg-white px-4 pr-14 text-[12px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-200"
                 />
@@ -331,7 +332,7 @@ export default function LibraryEditPage() {
                     <div className="rounded-md bg-white p-3">
                         <input
                             value={title}
-                            onChange={(e) => setTitle(e.target.value.slice(0, 50))}
+                            onChange={(e) => setTitle(e.target.value.slice(0, CONTENT_LIMITS.WORKSHEET_NAME))}
                             placeholder="제목 작성"
                             className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-200"
                         />
@@ -339,7 +340,7 @@ export default function LibraryEditPage() {
 
                         <textarea
                             value={content}
-                            onChange={(e) => setContent(e.target.value.slice(0, 1000))}
+                            onChange={(e) => setContent(e.target.value.slice(0, CONTENT_LIMITS.COLUMN_CONTENT))}
                             placeholder="내용 입력"
                             className="mt-3 h-[260px] w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-3 text-[12px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-200"
                         />

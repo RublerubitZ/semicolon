@@ -3,12 +3,14 @@
 import Image from 'next/image';
 import { useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getApiUrl } from '@/lib/api';
+import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
+import { getUser, User } from '@/lib/auth';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { getSubjectLabel, getSubjectBadgeColor } from '@/constants/subjects';
 import { getTaskStatusInfo } from '@/constants/taskStatus';
 import { toast } from '@/stores/useToastStore';
+import type { TaskSubmission, Feedback, DailyFeedback } from '@/types';
 
 import { RiUserFill } from 'react-icons/ri';
 import { FaBook } from 'react-icons/fa';
@@ -35,8 +37,8 @@ interface Task {
   subject: string;
   date: string;
   isFixed: boolean;
-  submissions: any[];
-  feedbacks: any[];
+  submissions: TaskSubmission[];
+  feedbacks: Feedback[];
 }
 
 function SubjectPill({ subject }: { subject: string }) {
@@ -47,7 +49,7 @@ function SubjectPill({ subject }: { subject: string }) {
   );
 }
 
-function TaskStatusBadge({ task }: { task: any }) {
+function TaskStatusBadge({ task }: { task: Task }) {
   const { label, style } = getTaskStatusInfo(task);
 
   return (
@@ -147,7 +149,7 @@ function SummaryChip({
 
 export default function MentorPage() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [mentees, setMentees] = useState<Mentee[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [view, setView] = useState<'list' | 'detail'>('list');
@@ -161,7 +163,7 @@ export default function MentorPage() {
 
   // 데일리 피드백 관련 상태
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [dailyFeedback, setDailyFeedback] = useState<any>(null);
+  const [dailyFeedback, setDailyFeedback] = useState<DailyFeedback | null>(null);
   const [feedbackSummary, setFeedbackSummary] = useState<'GOOD' | 'PRACTICE' | 'RECHECK'>('GOOD');
   const [feedbackText, setFeedbackText] = useState('');
 
@@ -171,22 +173,15 @@ export default function MentorPage() {
   const fetchMentees = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-      const res = await fetch(`${getApiUrl()}/api/mentor/mentees`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet('/api/mentor/mentees');
       if (!res.ok) {
-        if (res.status === 401) router.push('/login');
         throw new Error('멘티 목록을 불러오는데 실패했습니다.');
       }
       const data = await res.json();
       setMentees(data);
     } catch (err) {
       console.error('Fetch mentees error:', err);
+      toast.error('멘티 목록을 불러오는데 실패했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -194,10 +189,7 @@ export default function MentorPage() {
 
   const fetchTasks = async (menteeId: string) => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}/tasks`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/mentor/mentees/${menteeId}/tasks`);
       if (!res.ok) {
         setTasks([]);
         return;
@@ -206,16 +198,14 @@ export default function MentorPage() {
       setTasks(data);
     } catch (err) {
       console.error('Fetch tasks error:', err);
+      toast.error('과제 목록을 불러오는데 실패했습니다.');
       setTasks([]);
     }
   };
 
   const fetchDailyFeedback = async (menteeId: string, date: string) => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}/daily-feedbacks?date=${date}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/mentor/mentees/${menteeId}/daily-feedbacks?date=${date}`);
       if (res.ok) {
         const data = await res.json();
         setDailyFeedback(data);
@@ -236,12 +226,13 @@ export default function MentorPage() {
       }
     } catch (err) {
       console.error('Fetch daily feedback error:', err);
+      toast.error('데일리 피드백을 불러오는데 실패했습니다.');
     }
   };
 
   useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) setUser(JSON.parse(userStr));
+    const savedUser = getUser();
+    if (savedUser) setUser(savedUser);
     fetchMentees();
   }, []);
 
@@ -260,7 +251,7 @@ export default function MentorPage() {
   }, [tasks, currentDate]);
 
   const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<any>(null);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editFormData, setEditFormData] = useState({ title: '', subject: '', date: '', isFixed: false });
 
   const handleEditClick = (task: Task) => {
@@ -278,12 +269,7 @@ export default function MentorPage() {
     e.preventDefault();
     if (!editingTask) return;
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/tasks/${editingTask.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(editFormData),
-      });
+      const res = await apiPut(`/api/mentor/tasks/${editingTask.id}`, editFormData);
       if (!res.ok) throw new Error('과제 수정 실패');
       toast.success('수정되었습니다.');
       setEditModalOpen(false);
@@ -299,11 +285,7 @@ export default function MentorPage() {
   const confirmDeleteTask = async () => {
     if (!taskToDelete) return;
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/tasks/${taskToDelete}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiDelete(`/api/mentor/tasks/${taskToDelete}`);
       if (!res.ok) throw new Error('과제 삭제 실패');
       toast.success('과제가 삭제되었습니다.');
       if (selectedId) fetchTasks(selectedId);
@@ -317,24 +299,15 @@ export default function MentorPage() {
   const handleFeedbackSubmit = async () => {
     if (!selectedMentee) return;
     try {
-      const token = localStorage.getItem('token');
       const dateStr = format(currentDate, 'yyyy-MM-dd');
       const summary = feedbackSummary === 'GOOD' ? '잘 이해했어요.' : feedbackSummary === 'PRACTICE' ? '조금 더 연습해요.' : '다시 확인해요.';
       
-      const method = dailyFeedback ? 'PUT' : 'POST';
-      const url = dailyFeedback 
-        ? `${getApiUrl()}/api/mentor/daily-feedbacks/${dailyFeedback.id}`
-        : `${getApiUrl()}/api/mentor/daily-feedbacks`;
-      
-      const body = dailyFeedback 
-        ? { content: feedbackText, summary }
-        : { menteeId: selectedMentee.id, date: dateStr, summary, content: feedbackText };
-
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
+      let res;
+      if (dailyFeedback) {
+        res = await apiPut(`/api/mentor/daily-feedbacks/${dailyFeedback.id}`, { content: feedbackText, summary });
+      } else {
+        res = await apiPost('/api/mentor/daily-feedbacks', { menteeId: selectedMentee.id, date: dateStr, summary, content: feedbackText });
+      }
 
       if (!res.ok) throw new Error('피드백 저장 실패');
       toast.success(dailyFeedback ? '데일리 종합 피드백이 수정되었습니다.' : '데일리 종합 피드백이 전송되었습니다.');

@@ -4,7 +4,7 @@
  * 2. Token Refresh: 주기적으로 Access Token 갱신
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { logout, getToken } from '@/lib/auth';
 import { refreshAccessToken } from '@/lib/api';
@@ -24,44 +24,37 @@ export function useAutoLogout(options: AutoLogoutOptions = {}) {
   } = options;
 
   const router = useRouter();
-  const idleTimerRef = useRef<NodeJS.Timeout>(null);
-  const warningTimerRef = useRef<NodeJS.Timeout>(null);
-  const refreshTimerRef = useRef<NodeJS.Timeout>(null);
+  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showWarning, setShowWarning] = useState(false);
 
-  // 로그아웃 처리
-  const handleLogout = (reason: string) => {
+  const handleLogout = useCallback((reason: string) => {
     logout();
     router.push(`/login?reason=${reason}`);
-  };
+  }, [router]);
 
-  // Idle 타이머 리셋
-  const resetIdleTimer = () => {
+  const resetIdleTimer = useCallback(() => {
     if (!enableIdleTimeout) return;
 
-    // 기존 타이머 클리어
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
 
-    // 경고 숨기기
     setShowWarning(false);
 
-    // 경고 타이머 (로그아웃 5분 전)
     warningTimerRef.current = setTimeout(() => {
       setShowWarning(true);
       if (onWarning) onWarning();
     }, TIMEOUTS.AUTO_LOGOUT_IDLE - TIMEOUTS.AUTO_LOGOUT_WARNING);
 
-    // 로그아웃 타이머
     idleTimerRef.current = setTimeout(() => {
       handleLogout('idle');
     }, TIMEOUTS.AUTO_LOGOUT_IDLE);
-  };
+  }, [enableIdleTimeout, onWarning, handleLogout]);
 
-  // 토큰 갱신
-  const scheduleTokenRefresh = () => {
+  const scheduleTokenRefresh = useCallback(() => {
     if (!enableTokenRefresh) return;
-    if (!getToken()) return; // 토큰이 없으면 갱신하지 않음
+    if (!getToken()) return;
 
     if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
 
@@ -69,38 +62,27 @@ export function useAutoLogout(options: AutoLogoutOptions = {}) {
       try {
         const newToken = await refreshAccessToken();
         if (newToken) {
-          // 성공 시 다음 갱신 예약
           console.log('[AutoLogout] Token refreshed, scheduling next refresh');
           scheduleTokenRefresh();
         } else {
-          // 갱신 실패 - refresh token이 만료되었을 수 있음
-          // 하지만 바로 로그아웃하지 않고, 다음 API 요청에서 처리하도록 함
-          console.warn('[AutoLogout] Token refresh failed, will retry on next API call');
-          // 5분 후 다시 시도
-          setTimeout(() => {
-            if (getToken()) {
-              scheduleTokenRefresh();
-            }
-          }, 5 * 60 * 1000);
+          console.error('[AutoLogout] Token refresh failed, redirecting to login');
+          handleLogout('expired');
         }
       } catch (error) {
         console.error('[AutoLogout] Token refresh error:', error);
-        // 에러 발생 시에도 바로 로그아웃하지 않음
-        // API 요청 시 자동으로 처리됨
+        handleLogout('expired');
       }
     }, TIMEOUTS.TOKEN_REFRESH_INTERVAL);
-  };
+  }, [enableTokenRefresh, handleLogout]);
 
-  // 경고 연장 (계속 사용)
-  const extendSession = () => {
+  const extendSession = useCallback(() => {
     resetIdleTimer();
     setShowWarning(false);
-  };
+  }, [resetIdleTimer]);
 
   useEffect(() => {
-    if (!getToken()) return; // 로그인 상태가 아니면 작동하지 않음
+    if (!getToken()) return;
 
-    // 1. Idle Timeout 설정
     if (enableIdleTimeout) {
       const events = [
         'mousedown',
@@ -115,15 +97,13 @@ export function useAutoLogout(options: AutoLogoutOptions = {}) {
         document.addEventListener(event, resetIdleTimer);
       });
 
-      resetIdleTimer(); // 초기 타이머 시작
+      resetIdleTimer();
     }
 
-    // 2. Token Refresh 설정
     if (enableTokenRefresh) {
       scheduleTokenRefresh();
     }
 
-    // Cleanup
     return () => {
       if (enableIdleTimeout) {
         const events = [
@@ -144,7 +124,7 @@ export function useAutoLogout(options: AutoLogoutOptions = {}) {
       if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
     };
-  }, [enableIdleTimeout, enableTokenRefresh]);
+  }, [enableIdleTimeout, enableTokenRefresh, resetIdleTimer, scheduleTokenRefresh]);
 
   return {
     showWarning,

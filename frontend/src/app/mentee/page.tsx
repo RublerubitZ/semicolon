@@ -1,18 +1,19 @@
 'use client';
-import { getApiUrl } from '@/lib/api';
+import { getApiUrl, apiGet, apiPost, apiPatch, apiPut, apiDelete } from '@/lib/api';
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { HiDotsVertical } from 'react-icons/hi';
-import { MdOutlineFileDownload, MdInfoOutline, MdTimeline } from 'react-icons/md';
+import { MdInfoOutline, MdTimeline } from 'react-icons/md';
 
-import { PiPushPinFill } from "react-icons/pi";
+import { PiPushPinFill, PiFilePdf } from "react-icons/pi";
 import { PiPencilLineLight } from 'react-icons/pi';
 import { LuDownload } from "react-icons/lu";
-import { IoIosNotifications, IoIosArrowDown, IoIosArrowBack } from "react-icons/io";
+import { IoIosArrowDown, IoIosArrowBack, IoMdBook } from "react-icons/io";
 import { IoTime } from "react-icons/io5";
 import { RiUserFill } from "react-icons/ri";
 import { AiFillMessage } from "react-icons/ai";
-import { motion, AnimatePresence } from 'framer-motion';
+import { TbBrandDatabricks } from "react-icons/tb";
+import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import { DEFAULT_SUBJECTS, getSubjectStyles, getSubjectLabel } from '@/constants/subjects';
 import { getTaskStatusInfo } from '@/constants/taskStatus';
 import { TimeTable, type TimelineItem } from '@/components/mentee/main/TimeTable';
@@ -24,7 +25,8 @@ import { TIMEOUTS } from '@/constants/timeouts';
 import { formatDateForApi } from '@/lib/dateUtils';
 import { AlertModal } from '@/components/AlertModal';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { Toast, type ToastType } from '@/components/Toast';
+import { toast } from '@/stores/useToastStore';
+import type { TaskSubmission, StudyTimeLog, Feedback, DailyFeedback } from '@/types';
 
 interface TaskMaterial {
   id: string;
@@ -58,9 +60,9 @@ interface Task {
     content?: string;
   };
   materials?: TaskMaterial[]; // 새로운 필드
-  submissions: any[];
-  studyLogs: any[];
-  feedbacks: any[];
+  submissions: TaskSubmission[];
+  studyLogs: StudyTimeLog[];
+  feedbacks: Feedback[];
   learningGoal?: {
     id: string;
     items: { id: string; title: string; isCompleted: boolean }[];
@@ -127,7 +129,7 @@ export default function MenteeDashboard() {
   const [plannerData, setPlannerData] = useState<PlannerData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
-  const [dailyFeedback, setDailyFeedback] = useState<any>(null);
+  const [dailyFeedback, setDailyFeedback] = useState<DailyFeedback | null>(null);
 
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showEditTaskModal, setShowEditTaskModal] = useState(false);
@@ -148,14 +150,8 @@ export default function MenteeDashboard() {
     title: '',
     message: ''
   });
-  const [toast, setToast] = useState<{ show: boolean; message: string; type: ToastType }>({
-    show: false,
-    message: '',
-    type: 'success'
-  });
-
-  const showToast = (message: string, type: ToastType = 'success') => {
-    setToast({ show: true, message, type });
+  const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
+    toast[type](message);
   };
 
   const showAlert = (message: string, title: string = '알림') => {
@@ -164,7 +160,7 @@ export default function MenteeDashboard() {
   const { setOverlay } = useOverlayStore();
 
   // Data Cache to prevent lag during swiping
-  const dataCache = useRef<Record<string, { planner: any, dashboard: any, feedback: any }>>({});
+  const dataCache = useRef<Record<string, { planner: PlannerData | null, dashboard: DashboardData | null, feedback: DailyFeedback | null }>>({});
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Date Picker States
@@ -251,31 +247,34 @@ export default function MenteeDashboard() {
   const fetchPlannerData = async (date: Date) => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentee/planner?date=${formatDateForApi(date)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setPlannerData(await res.json());
-    } catch (err) { console.error(err); }
-    finally { setIsLoading(false); }
+      const res = await apiGet(`/api/mentee/planner?date=${formatDateForApi(date)}`);
+      if (res.ok) {
+        setPlannerData(await res.json());
+      } else if (res.status === 401) {
+        // fetchWithAuth에서 이미 리다이렉트했을 것이지만 안전을 위해 추가
+        router.push('/login?reason=expired');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('데이터를 불러오는데 실패했습니다.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSelfCheck = async (taskId: string, newStatus: SelfCheckStatus, task: Task) => {
-    // 이미 제출된 과제 수정 제한
+    // ... (기존 유효성 검사 로직 동일)
     if (task.submissions.length > 0) {
       showToast('이미 제출된 과제는 자가점검 상태를 변경할 수 없습니다.', 'info');
       return;
     }
-
-    // 미래 과제 자가점검 제한
     const taskDateOnly = task.date.split('T')[0];
     if (taskDateOnly > todayStr) {
       showToast('미래의 과제는 해당 날짜가 되어야 체크할 수 있습니다.', 'info');
       return;
     }
-
-    // 완료로 체크하면서 시간 기록이 없으면 시간 입력 모달 표시
     if (newStatus === 'DONE' && task.studyLogs.length === 0) {
+      setSelectedTask(task);
       setTimeRecord({ taskId, startTime: '', endTime: '' });
       setShowStudyTimeModal(true);
       return;
@@ -287,13 +286,11 @@ export default function MenteeDashboard() {
         t.id === taskId ? { 
           ...t, 
           selfCheck: newStatus,
-          studyLogs: newStatus === 'PENDING' ? [] : t.studyLogs // 체크 해제 시 즉시 UI 비움
+          studyLogs: newStatus === 'PENDING' ? [] : t.studyLogs 
         } : t
       );
       const updatedData = { ...plannerData, tasks: updatedTasks };
       setPlannerData(updatedData);
-      
-      // 캐시도 함께 업데이트하여 스와이프 시에도 유지되게 함
       const dateStr = formatDateForApi(currentDate);
       if (dataCache.current[dateStr]) {
         dataCache.current[dateStr].planner = updatedData;
@@ -301,31 +298,19 @@ export default function MenteeDashboard() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}/self-check`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ selfCheck: newStatus }),
-      });
+      const res = await apiPatch(`/api/mentee/tasks/${taskId}/self-check`, { selfCheck: newStatus });
       
       if (res.ok) {
-        // 성공 시 백그라운드에서 최신 데이터 한 번 더 가져와서 정합성 확인
-        const freshData = await res.json();
-        // 전체 플래너 데이터를 다시 가져오는 것이 가장 확실함
-        const plannerRes = await fetch(`${getApiUrl()}/api/mentee/planner?date=${formatDateForApi(currentDate)}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const plannerRes = await apiGet(`/api/mentee/planner?date=${formatDateForApi(currentDate)}`);
         if (plannerRes.ok) {
           const latestPlanner = await plannerRes.json();
           setPlannerData(latestPlanner);
-          // 캐시 업데이트
           const dateStr = formatDateForApi(currentDate);
           if (dataCache.current[dateStr]) {
             dataCache.current[dateStr].planner = latestPlanner;
           }
         }
       } else {
-        // 에러 시 롤백
         fetchPlannerData(currentDate);
       }
     } catch (err) { 
@@ -336,58 +321,42 @@ export default function MenteeDashboard() {
 
   const handleAddTask = async () => {
     if (!newTask.title.trim()) return;
-
-    // 과거 날짜 학습 추가 제한
     const selectedDateStr = formatDateForApi(currentDate);
     if (selectedDateStr < todayStr) {
       showToast('과거 날짜에는 학습을 추가할 수 없습니다.', 'error');
       return;
     }
-
     const finalSubject = newTask.subject === 'CUSTOM' ? newTask.customSubject : newTask.subject;
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title: newTask.title, description: newTask.description, subject: finalSubject, date: selectedDateStr }),
-      });
+      const res = await apiPost('/api/mentee/tasks', { title: newTask.title, description: newTask.description, subject: finalSubject, date: selectedDateStr });
       if (res.ok) {
         setShowAddTaskModal(false);
         setNewTask({ title: '', description: '', subject: 'KOREAN', customSubject: '' });
         fetchPlannerData(currentDate);
         showToast('학습이 추가되었습니다.');
       }
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); showToast('학습 추가에 실패했습니다.', 'error'); }
   };
 
   const handleEditTask = async () => {
     const finalSubject = editTask.subject === 'CUSTOM' ? editTask.customSubject : editTask.subject;
-    
-    // 날짜 이동 유효성 검사 (과거 날짜로 이동 방지)
     if (editTask.date < todayStr) {
       showToast('과거 날짜로는 학습을 이동할 수 없습니다.', 'error');
       return;
     }
-
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${editTask.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ 
-          title: editTask.title, 
-          description: editTask.description, 
-          subject: finalSubject,
-          date: editTask.date // 날짜 필드 추가
-        }),
+      const res = await apiPut(`/api/mentee/tasks/${editTask.id}`, { 
+        title: editTask.title, 
+        description: editTask.description, 
+        subject: finalSubject,
+        date: editTask.date 
       });
       if (res.ok) { 
         setShowEditTaskModal(false); 
         fetchPlannerData(currentDate); 
         showToast('학습이 수정되었습니다.');
       }
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); showToast('학습 수정에 실패했습니다.', 'error'); }
   };
 
   const handleDeleteTask = (taskId: string) => {
@@ -398,11 +367,7 @@ export default function MenteeDashboard() {
   const performDeleteTask = async () => {
     if (!taskIdToDelete) return;
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskIdToDelete}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiDelete(`/api/mentee/tasks/${taskIdToDelete}`);
       if (res.ok) { 
         fetchPlannerData(currentDate); 
         setActiveMenuId(null); 
@@ -485,6 +450,19 @@ export default function MenteeDashboard() {
     }
   };
 
+  const adjustTime = (type: 'startTime' | 'endTime', minutes: number) => {
+    let current = timeRecord[type];
+    if (!current) {
+      const now = new Date();
+      current = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    }
+    const [h, m] = current.split(':').map(Number);
+    const date = new Date();
+    date.setHours(h, m + minutes);
+    const newTime = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    handleTimeChange(type, newTime);
+  };
+
   const handleSubmitStudyTime = async () => {
     if (!timeRecord.startTime || !timeRecord.endTime || timeOverlapError) return;
 
@@ -501,21 +479,26 @@ export default function MenteeDashboard() {
       });
       if (res.ok) {
         setShowStudyTimeModal(false);
+        
+        // Toast 메시지
+        const isUpdate = (selectedTask?.studyLogs?.length || 0) > 0;
+        showToast(isUpdate ? '공부 시간이 수정되었습니다.' : '공부 시간이 기록되었습니다.');
+
         setTimeRecord({ taskId: '', startTime: '', endTime: '' });
         setTimeOverlapError(null);
-        fetchPlannerData(currentDate);
 
-        // 자가점검도 완료로 업데이트
-        const task = plannerData?.tasks.find(t => t.id === timeRecord.taskId);
-        if (task && task.selfCheck !== 'DONE') {
+        // 자가점검도 완료로 업데이트 (API 호출 후 리스트 갱신)
+        if (selectedTask && selectedTask.selfCheck !== 'DONE') {
           await fetch(`${getApiUrl()}/api/mentee/tasks/${timeRecord.taskId}/self-check`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
             body: JSON.stringify({ selfCheck: 'DONE' }),
           });
         }
+        
+        fetchPlannerData(currentDate);
       }
-    } catch (err) { console.error(err); }
+    } catch (err) { console.error(err); showToast('학습 시간 저장에 실패했습니다.', 'error'); }
   };
 
   const handleImageUpload = async (files: File[]) => {
@@ -741,7 +724,7 @@ export default function MenteeDashboard() {
     setShowWorksheetModal(true);
   };
 
-  const handleViewPdf = (worksheetOrUrl: any) => {
+  const handleViewPdf = (worksheetOrUrl: string | { pdfUrl?: string; fileUrl?: string; title?: string }) => {
     if (!worksheetOrUrl) return;
 
     let pdfUrl = "";
@@ -750,7 +733,7 @@ export default function MenteeDashboard() {
     if (typeof worksheetOrUrl === 'string') {
       pdfUrl = worksheetOrUrl;
     } else {
-      pdfUrl = worksheetOrUrl.pdfUrl || worksheetOrUrl.fileUrl;
+      pdfUrl = worksheetOrUrl.pdfUrl || worksheetOrUrl.fileUrl || '';
       title = worksheetOrUrl.title || "학습파일";
     }
 
@@ -806,7 +789,7 @@ export default function MenteeDashboard() {
     window.addEventListener('focus', handleFocus);
 
     // 1분마다 날짜 체크
-    const interval = setInterval(checkDate, 60000);
+    const interval = setInterval(checkDate, TIMEOUTS.POLLING_INTERVAL);
 
     return () => {
       window.removeEventListener('focus', handleFocus);
@@ -832,8 +815,6 @@ export default function MenteeDashboard() {
     if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
     
     fetchTimeoutRef.current = setTimeout(async () => {
-      const token = localStorage.getItem('token');
-      
       const fetchData = async (targetDate: Date) => {
         const dStr = formatDateForApi(targetDate);
         const prevD = new Date(targetDate); prevD.setDate(prevD.getDate()-1);
@@ -841,9 +822,9 @@ export default function MenteeDashboard() {
 
         try {
           const [plannerRes, feedbackRes, dashboardRes] = await Promise.all([
-            fetch(`${getApiUrl()}/api/mentee/planner?date=${dStr}`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`${getApiUrl()}/api/mentee/daily-feedbacks?date=${prevDStr}`, { headers: { Authorization: `Bearer ${token}` } }),
-            fetch(`${getApiUrl()}/api/mentee/dashboard?date=${dStr}`, { headers: { Authorization: `Bearer ${token}` } })
+            apiGet(`/api/mentee/planner?date=${dStr}`),
+            apiGet(`/api/mentee/daily-feedbacks?date=${prevDStr}`),
+            apiGet(`/api/mentee/dashboard?date=${dStr}`)
           ]);
 
           const [planner, feedback, dashboardData] = await Promise.all([
@@ -888,7 +869,7 @@ export default function MenteeDashboard() {
     };
   }, [currentDate]);
 
-  const handleDragEnd = (event: any, info: any) => {
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const threshold = 50;
     if (info.offset.x < -threshold) {
       // Swipe Left -> Next Day
@@ -901,6 +882,23 @@ export default function MenteeDashboard() {
       prevDay.setDate(prevDay.getDate() - 1);
       setCurrentDate(prevDay);
     }
+  };
+
+  const formatTimeRange = (task: Task) => {
+    if (task.studyLogs && task.studyLogs.length > 0) {
+      const log = task.studyLogs[task.studyLogs.length - 1];
+      if (log.startTime && log.endTime) {
+        const formatTime = (time: string) => {
+          const [hour, minute] = time.split(':');
+          const h = parseInt(hour);
+          const period = h < 12 ? '오전' : '오후';
+          const hour12 = h % 12 || 12;
+          return `${period} ${hour12}시${minute !== '00' ? ` ${parseInt(minute)}분` : ''}`;
+        };
+        return `${formatTime(log.startTime)} ~ ${formatTime(log.endTime)}`;
+      }
+    }
+    return '공부 시간 미설정';
   };
 
   const handleApplyDatePicker = () => {
@@ -1158,9 +1156,9 @@ export default function MenteeDashboard() {
                                                               }} 
                                                               className="flex items-center gap-1.5 hover:opacity-70 group active:scale-95 transition-transform"
                                                             >
-                                                              <IoTime className={`text-lg ${task.studyLogs.length > 0 ? 'text-blue-500' : 'text-gray-300'}`} />
-                                                              <span className={`text-[11px] font-medium ${task.studyLogs.length > 0 ? 'text-gray-600' : 'text-gray-400'}`}>
-                                                                {task.studyLogs.length > 0 ? `${task.studyLogs[task.studyLogs.length-1].startTime} ~ ${task.studyLogs[task.studyLogs.length-1].endTime}` : '공부 시간 미설정'}
+                                                              <IoTime className={`text-lg ${task.studyLogs.length > 0 ? 'text-[#4B5563]' : 'text-gray-300'}`} />
+                                                              <span className={`text-[11px] font-medium ${task.studyLogs.length > 0 ? 'text-[#4B5563]' : 'text-gray-400'}`}>
+                                                                {formatTimeRange(task)}
                                                               </span>
                                                             </motion.button>                                        <div className="flex flex-col items-end gap-1.5">
                                           {(() => {
@@ -1176,16 +1174,16 @@ export default function MenteeDashboard() {
 
                                             // 버튼 텍스트와 아이콘 결정
                                             let buttonText = "학습자료";
-                                            let buttonIcon = "📚";
+                                            let buttonIcon = <TbBrandDatabricks className="text-blue-500 text-sm" />;
 
                                             if (hasMaterials && task.materials!.length === 1) {
                                               const material = task.materials![0];
                                               if (material.type === 'PDF') {
                                                 buttonText = "학습파일";
-                                                buttonIcon = "📄";
+                                                buttonIcon = <PiFilePdf className="text-rose-500 text-sm" />;
                                               } else if (material.type === 'COLUMN') {
                                                 buttonText = "칼럼";
-                                                buttonIcon = "📝";
+                                                buttonIcon = <IoMdBook className="text-teal-600 text-sm" />;
                                               }
                                             } else if (hasMaterials && task.materials!.length > 1) {
                                               // 혼합된 경우
@@ -1193,10 +1191,10 @@ export default function MenteeDashboard() {
                                               const hasColumn = task.materials!.some(m => m.type === 'COLUMN');
                                               if (hasPdf && !hasColumn) {
                                                 buttonText = "학습파일";
-                                                buttonIcon = "📄";
+                                                buttonIcon = <PiFilePdf className="text-rose-500 text-sm" />;
                                               } else if (!hasPdf && hasColumn) {
                                                 buttonText = "칼럼";
-                                                buttonIcon = "📝";
+                                                buttonIcon = <IoMdBook className="text-teal-600 text-sm" />;
                                               }
                                             }
 
@@ -1207,8 +1205,11 @@ export default function MenteeDashboard() {
                                                 }}
                                                 className="flex items-center gap-1 group hover:opacity-70 transition-opacity active:scale-95"
                                               >
-                                                <span className="text-black text-[10px] font-medium font-['Pretendard']">{buttonIcon} {buttonText}</span>
-                                                <LuDownload className="text-xs text-black" />
+                                                <span className="flex items-center gap-1 text-slate-600 text-[10px] font-semibold font-['Pretendard']">
+                                                  {buttonIcon}
+                                                  {buttonText}
+                                                </span>
+                                                <LuDownload className="text-[10px] text-slate-400" />
                                               </motion.button>
                                             );
                                           })()}
@@ -1347,62 +1348,90 @@ export default function MenteeDashboard() {
         </div>
       )}
 
-      {showStudyTimeModal && (
+      {showStudyTimeModal && selectedTask && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 font-['Pretendard']" style={{ zIndex: Z_INDEX.MODAL_BACKDROP }}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-bold mb-4">공부 시간 기록</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block ml-1">시작 시간</label>
-                <input 
-                  type="time" 
-                  value={timeRecord.startTime} 
-                  onChange={(e) => handleTimeChange('startTime', e.target.value)} 
-                  className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm" 
-                />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white rounded-[32px] p-8 w-full max-w-sm shadow-2xl overflow-hidden"
+          >
+            <h3 className="text-xl font-bold text-slate-800 mb-6">공부 시간 기록</h3>
+            
+            {/* Task Info Card */}
+            <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-2xl mb-8 border border-gray-100">
+              <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center flex-shrink-0">
+                <IoTime className="text-xl text-sky-950" />
               </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block ml-1">종료 시간</label>
-                <input 
-                  type="time" 
-                  value={timeRecord.endTime} 
-                  onChange={(e) => handleTimeChange('endTime', e.target.value)} 
-                  className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl text-sm" 
-                />
+              <div className="flex items-center gap-2 overflow-hidden flex-1">
+                <span className="text-sm font-bold text-slate-800 truncate">{selectedTask.title}</span>
+                <div className={`px-1.5 py-0.5 rounded-[5px] outline outline-1 outline-offset-[-1px] flex-shrink-0 flex justify-center items-center ${getSubjectStyles(selectedTask.subject)}`}>
+                  <span className="text-[9px] font-bold leading-none">{getSubjectLabel(selectedTask.subject)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {/* 시작 시간 */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 ml-1">시작 시간</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="time" 
+                    value={timeRecord.startTime} 
+                    onChange={(e) => handleTimeChange('startTime', e.target.value)} 
+                    className="flex-1 h-12 px-4 bg-gray-50 border-none rounded-2xl text-base font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 transition-all outline-none" 
+                  />
+                  <div className="flex gap-1">
+                    <button onClick={() => adjustTime('startTime', -10)} className="w-10 h-10 bg-gray-50 hover:bg-gray-100 rounded-xl text-slate-600 text-[10px] font-bold active:scale-90 transition-all border border-gray-100 shadow-sm">-10m</button>
+                    <button onClick={() => adjustTime('startTime', 10)} className="w-10 h-10 bg-gray-50 hover:bg-gray-100 rounded-xl text-slate-600 text-[10px] font-bold active:scale-90 transition-all border border-gray-100 shadow-sm">+10m</button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 종료 시간 */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-400 ml-1">종료 시간</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="time" 
+                    value={timeRecord.endTime} 
+                    onChange={(e) => handleTimeChange('endTime', e.target.value)} 
+                    className="flex-1 h-12 px-4 bg-gray-50 border-none rounded-2xl text-base font-bold text-slate-700 focus:ring-2 focus:ring-blue-100 transition-all outline-none" 
+                  />
+                  <div className="flex gap-1">
+                    <button onClick={() => adjustTime('endTime', -10)} className="w-10 h-10 bg-gray-50 hover:bg-gray-100 rounded-xl text-slate-600 text-[10px] font-bold active:scale-90 transition-all border border-gray-100 shadow-sm">-10m</button>
+                    <button onClick={() => adjustTime('endTime', 10)} className="w-10 h-10 bg-gray-50 hover:bg-gray-100 rounded-xl text-slate-600 text-[10px] font-bold active:scale-90 transition-all border border-gray-100 shadow-sm">+10m</button>
+                  </div>
+                </div>
               </div>
               
               {timeOverlapError && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-3 bg-red-50 rounded-xl border border-red-100"
-                >
-                  <p className="text-xs text-red-600 font-medium leading-relaxed">
-                    {timeOverlapError}
-                  </p>
-                </motion.div>
+                <div className="p-3 bg-red-50 rounded-xl border border-red-100">
+                  <p className="text-[11px] text-red-600 font-medium leading-relaxed">{timeOverlapError}</p>
+                </div>
               )}
             </div>
-            <div className="mt-6 flex gap-3">
+
+            <div className="mt-8 flex gap-3">
               <button 
                 onClick={() => { 
                   setShowStudyTimeModal(false); 
                   setTimeRecord({ taskId: '', startTime: '', endTime: '' }); 
                   setTimeOverlapError(null);
-                }} 
-                className="flex-1 py-3 bg-gray-100 rounded-xl font-medium"
+                }}
+                className="flex-1 py-4 bg-gray-50 text-gray-500 rounded-2xl font-bold active:scale-95 transition-transform"
               >
                 취소
               </button>
               <button 
-                onClick={handleSubmitStudyTime} 
-                disabled={!!timeOverlapError}
-                className="flex-1 py-3 bg-sky-950 text-white rounded-xl font-medium disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                onClick={handleSubmitStudyTime}
+                disabled={!!timeOverlapError || !timeRecord.startTime || !timeRecord.endTime}
+                className="flex-[2] py-4 bg-[#B0D4FF] text-sky-950 rounded-2xl font-bold shadow-lg shadow-blue-200/50 active:scale-95 transition-all disabled:bg-gray-200 disabled:shadow-none disabled:text-gray-400"
               >
-                기록완료
+                기록 완료
               </button>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
 
@@ -1803,12 +1832,6 @@ export default function MenteeDashboard() {
         cancelText="취소"
       />
 
-      <Toast 
-        show={toast.show} 
-        message={toast.message} 
-        type={toast.type} 
-        onClose={() => setToast(prev => ({ ...prev, show: false }))} 
-      />
     </div>
   );
 }

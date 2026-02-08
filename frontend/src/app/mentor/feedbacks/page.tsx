@@ -113,6 +113,7 @@ function FeedbackContent() {
         setFeedbacks(data);
       } catch (err) {
         console.error('Fetch feedbacks error:', err);
+        toast.error('피드백 목록을 불러오는데 실패했습니다.');
       } finally {
         setIsLoading(false);
       }
@@ -160,6 +161,7 @@ function FeedbackContent() {
       }
     } catch (error) {
       console.error('Send message error:', error);
+      toast.error('메시지 전송에 실패했습니다.');
     }
   };
 

@@ -116,6 +116,7 @@ export default function MentorTaskDetailPage() {
       setTask(data);
     } catch (err) {
       console.error('Fetch task error:', err);
+      toast.error('과제 정보를 불러오는데 실패했습니다.');
       router.back();
     }
   };
@@ -132,6 +133,7 @@ export default function MentorTaskDetailPage() {
       }
     } catch (error) {
       console.error('Fetch comments error:', error);
+      toast.error('댓글을 불러오는데 실패했습니다.');
     }
   };
 
@@ -153,6 +155,7 @@ export default function MentorTaskDetailPage() {
       }
     } catch (err) {
       console.error('Send comment error:', err);
+      toast.error('댓글 전송에 실패했습니다.');
     }
   };
 
