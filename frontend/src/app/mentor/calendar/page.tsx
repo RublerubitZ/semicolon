@@ -163,14 +163,9 @@ export default function MentorCalendarPage() {
       // 일일 피드백 데이터는 별도로 가져와야 하거나 백엔드 수정이 필요할 수 있음
       // 우선 tasksByDate와 함께 일일 피드백이 있는지 확인하기 위해 개별 날짜별로 체크하는 대신
       // 백엔드에서 멘티의 일일 피드백 목록을 가져오는 API가 있다면 그것을 활용
-      const [plannerRes, feedbacksRes] = await Promise.all([
-        fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}/planner/monthly?year=${y}&month=${m}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        // 특정 월의 일일 피드백 목록을 가져오는 API가 있다고 가정 (없으면 추가 구현 필요)
-        // 현재 backend/src/routes/mentor.ts에는 특정 월의 일일 피드백 목록 조회 API가 명시적으로 안보임
-        // 하지만 상세보기 시 해당 날짜의 피드백을 가져오도록 구현 가능
-      ]);
+      const plannerRes = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}/planner/monthly?year=${y}&month=${m}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       if (plannerRes.ok) {
         const data = await plannerRes.json();
