@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { getApiUrl } from '@/lib/api';
 
@@ -95,6 +95,14 @@ function buildMonthCells(year: number, month1to12: number, tasksByDate: Record<s
 }
 
 export default function MentorCalendarPage() {
+  return (
+    <Suspense>
+      <MentorCalendarContent />
+    </Suspense>
+  );
+}
+
+function MentorCalendarContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const menteeId = sp.get('menteeId');

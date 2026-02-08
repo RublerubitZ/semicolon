@@ -339,6 +339,14 @@ function FeedbackForm() {
 
 export default function NewFeedbackPage() {
   return (
+    <Suspense>
+      <NewFeedbackContent />
+    </Suspense>
+  );
+}
+
+function NewFeedbackContent() {
+  return (
     <Suspense fallback={<div className="flex justify-center items-center h-64"><p className="text-gray-900">로딩 중...</p></div>}>
       <FeedbackForm />
     </Suspense>

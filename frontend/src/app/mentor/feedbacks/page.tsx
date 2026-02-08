@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { getApiUrl } from '@/lib/api';
 import { FaCommentAlt, FaCalendar, FaRegComments, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
@@ -59,6 +59,14 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function FeedbackPage() {
+  return (
+    <Suspense>
+      <FeedbackContent />
+    </Suspense>
+  );
+}
+
+function FeedbackContent() {
   const sp = useSearchParams();
   const menteeId = sp.get('menteeId');
 
