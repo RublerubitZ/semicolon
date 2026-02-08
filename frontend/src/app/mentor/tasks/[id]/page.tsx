@@ -1,15 +1,30 @@
 'use client';
 
 import { getApiUrl } from '@/lib/api';
-import { useEffect, useState } from 'react';
+import { getSubjectLabel } from '@/constants/subjects';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import ImageModal from '@/components/ImageModal';
-import FeedbackChatUI, { Message } from '@/components/FeedbackChatUI';
-import FeedbackLegacyUI from '@/components/FeedbackLegacyUI';
+import { 
+  MdChevronLeft, 
+  MdPushPin, 
+  MdAccessTime, 
+  MdSend,
+  MdPhotoLibrary,
+  MdChatBubbleOutline,
+  MdAssignment
+} from 'react-icons/md';
 
 type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
+
+const SUBJECT_STYLES: Record<string, string> = {
+  'KOREAN': 'bg-pink-50 border-pink-200 text-pink-600',
+  'ENGLISH': 'bg-amber-50 border-amber-200 text-amber-600',
+  'MATH': 'bg-blue-50 border-blue-200 text-blue-600',
+  'DEFAULT': 'bg-gray-50 border-gray-200 text-gray-600',
+};
 
 interface Task {
   id: string;
@@ -20,7 +35,6 @@ interface Task {
   mentee: {
     id: string;
     name: string;
-    nickname?: string;
     profileImage?: string;
   };
   submissions: {
@@ -39,7 +53,6 @@ interface Task {
     mentor: {
       id: string;
       name: string;
-      nickname?: string;
       profileImage?: string;
     };
   }[];
@@ -54,17 +67,19 @@ interface FeedbackComment {
   user: {
     id: string;
     name: string;
-    nickname?: string;
     profileImage?: string;
     role: string;
   };
 }
 
-interface CurrentUser {
+interface ChatMessage {
   id: string;
-  name: string;
-  nickname?: string;
-  role: string;
+  userId: string;
+  userName: string;
+  userRole: 'MENTOR' | 'MENTEE';
+  content: string;
+  createdAt: string;
+  profileImage?: string;
 }
 
 export default function MentorTaskDetailPage() {
@@ -74,64 +89,55 @@ export default function MentorTaskDetailPage() {
 
   const [task, setTask] = useState<Task | null>(null);
   const [comments, setComments] = useState<FeedbackComment[]>([]);
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 이미지 모달
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [imageModalIndex, setImageModalIndex] = useState(0);
 
-  // 첫 피드백 작성 폼
   const [feedbackForm, setFeedbackForm] = useState({
     summary: '',
     content: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [chatInput, setChatInput] = useState('');
 
-  // 과제 정보 가져오기
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   const fetchTask = async () => {
     try {
       const token = localStorage.getItem('token');
-
       const res = await fetch(`${getApiUrl()}/api/mentor/tasks/${taskId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       if (!res.ok) throw new Error('과제 정보를 불러오는데 실패했습니다.');
-
       const data = await res.json();
       setTask(data);
     } catch (err) {
       console.error('Fetch task error:', err);
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
       router.back();
     }
   };
 
-  // 댓글 조회
   const fetchComments = async () => {
     try {
       const token = localStorage.getItem('token');
-
       const res = await fetch(`${getApiUrl()}/api/tasks/${taskId}/comments`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!res.ok) throw new Error('댓글을 불러오는데 실패했습니다.');
-
-      const data = await res.json();
-      setComments(data.comments || []);
-    } catch (err) {
-      console.error('Fetch comments error:', err);
-      setComments([]);
+      if (res.ok) {
+        const data = await res.json();
+        setComments(data.comments || []);
+      }
+    } catch (error) {
+      console.error('Fetch comments error:', error);
     }
   };
 
-  // 댓글 전송
   const handleSendComment = async (content: string) => {
+    if (!content.trim()) return;
     try {
       const token = localStorage.getItem('token');
-
       const res = await fetch(`${getApiUrl()}/api/tasks/${taskId}/comments`, {
         method: 'POST',
         headers: {
@@ -140,34 +146,26 @@ export default function MentorTaskDetailPage() {
         },
         body: JSON.stringify({ content }),
       });
-
-      if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.error || '댓글 전송에 실패했습니다.');
-    }
-
-      await fetchComments();
+      if (res.ok) {
+        setChatInput('');
+        fetchComments();
+      }
     } catch (err) {
       console.error('Send comment error:', err);
-      throw err;
     }
   };
 
-  // 첫 피드백 제출
   const handleSubmitFeedback = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!feedbackForm.summary || !feedbackForm.content) {
       alert('요약과 상세 피드백을 모두 입력해주세요.');
       return;
     }
-
     if (!task) return;
 
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('token');
-
       const res = await fetch(`${getApiUrl()}/api/mentor/feedbacks`, {
         method: 'POST',
         headers: {
@@ -182,10 +180,7 @@ export default function MentorTaskDetailPage() {
           feedbackDate: new Date().toISOString().split('T')[0],
         }),
       });
-
       if (!res.ok) throw new Error('피드백 작성에 실패했습니다.');
-
-      alert('피드백이 작성되었습니다.');
       setFeedbackForm({ summary: '', content: '' });
       await fetchTask();
       await fetchComments();
@@ -196,50 +191,37 @@ export default function MentorTaskDetailPage() {
     }
   };
 
-  // 피드백 + 댓글을 메시지로 변환
-  const formatMessages = (): Message[] => {
+  const formatMessages = (): ChatMessage[] => {
     if (!task) return [];
-
-    const messages: Message[] = [];
-
-    // 피드백을 메시지로 변환
+    const messages: ChatMessage[] = [];
     task.feedbacks.forEach((fb) => {
       messages.push({
         id: fb.id,
         userId: fb.mentor.id,
-        userName: fb.mentor.nickname || fb.mentor.name,
+        userName: fb.mentor.name,
         userRole: 'MENTOR',
         content: fb.content,
         createdAt: fb.createdAt,
         profileImage: fb.mentor.profileImage,
       });
     });
-
-    // 댓글을 메시지로 변환
     comments.forEach((cm) => {
       messages.push({
         id: cm.id,
         userId: cm.userId,
-        userName: cm.user.nickname || cm.user.name,
+        userName: cm.user.name,
         userRole: cm.user.role as 'MENTOR' | 'MENTEE',
         content: cm.content,
         createdAt: cm.createdAt,
         profileImage: cm.user.profileImage,
       });
     });
-
-    // 시간순 정렬
-    return messages.sort(
-      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
+    return messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   };
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
-    if (userStr) {
-      setCurrentUser(JSON.parse(userStr));
-    }
-
+    if (userStr) setCurrentUser(JSON.parse(userStr));
     fetchTask();
   }, [taskId]);
 
@@ -250,223 +232,231 @@ export default function MentorTaskDetailPage() {
     }
   }, [task]);
 
-  const getSubjectLabel = (subject: Subject) => {
-    const labels = { KOREAN: '국어', ENGLISH: '영어', MATH: '수학' };
-    return labels[subject];
-  };
-
-  const getSubjectColor = (subject: Subject) => {
-    const colors = {
-      KOREAN: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200',
-      ENGLISH: 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200',
-      MATH: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-200',
-    };
-    return colors[subject];
-  };
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [comments, task?.feedbacks]);
 
   if (isLoading || !task || !currentUser) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <p className="text-gray-900 dark:text-gray-100">로딩 중...</p>
-      </div>
-    );
+    return <div className="flex justify-center items-center h-screen bg-slate-50">로딩 중...</div>;
   }
 
+  const subjectStyle = SUBJECT_STYLES[task.subject] || SUBJECT_STYLES['DEFAULT'];
+  const hasFeedback = task.feedbacks.length > 0;
+  const messages = formatMessages();
+  const currentSubmission = task.submissions[0];
+
   return (
-    <div className="max-w-4xl mx-auto pb-20">
-      {/* 헤더 */}
-      <div className="mb-6">
-        <button
-          onClick={() => router.back()}
-          className="text-sm text-gray-900 dark:text-gray-100 hover:text-gray-700 dark:hover:text-gray-300 mb-2"
-        >
-          ← 뒤로가기
-        </button>
-        <h2 className="text-2xl font-bold mb-2 dark:text-white">과제 피드백</h2>
-        <p className="text-gray-600 dark:text-gray-400">
-          멘티: {task.mentee ? (task.mentee.nickname || task.mentee.name) : '알 수 없음'}
-        </p>
-      </div>
-
-      {/* 과제 정보 */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6 mb-4">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <span className={`text-xs px-2 py-1 rounded ${getSubjectColor(task.subject)}`}>
-                {getSubjectLabel(task.subject)}
-              </span>
-              <span className="text-xs text-gray-500 dark:text-gray-400">
-                {format(new Date(task.date), 'yyyy년 M월 d일', { locale: ko })}
-              </span>
-            </div>
-            <h3 className="text-lg font-semibold mb-1 dark:text-white">{task.title}</h3>
-            {task.description && (
-              <p className="text-sm text-gray-600 dark:text-gray-400">{task.description}</p>
-            )}
+    <div className="flex flex-col h-screen bg-slate-50 font-['Pretendard'] overflow-hidden">
+      {/* 상단 헤더 */}
+      <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between z-30 shrink-0">
+        <div className="flex items-center gap-4">
+          <button onClick={() => router.back()} className="p-2 hover:bg-slate-50 rounded-full transition-colors">
+            <MdChevronLeft className="w-6 h-6 text-slate-600" />
+          </button>
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-bold text-slate-800">과제 상세 피드백</h1>
+            <span className={`px-3 py-1 text-[11px] font-bold rounded-lg border ${subjectStyle}`}>
+              {getSubjectLabel(task.subject)}
+            </span>
           </div>
         </div>
-      </div>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <MdAccessTime className="w-4 h-4" />
+            <span>{format(new Date(task.date), 'yyyy년 M월 d일 (E)', { locale: ko })}</span>
+          </div>
+          <div className="h-4 w-[1px] bg-slate-200" />
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold text-slate-700">{task.mentee.name} 멘티</span>
+          </div>
+        </div>
+      </header>
 
-      {/* 제출 내용 */}
-      {task.submissions.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold dark:text-white">제출 내용</h3>
-            {task.submissions[0].imageUrls.length > 0 && (
-              <button
-                onClick={() => {
-                  setImageModalOpen(true);
-                  setImageModalIndex(0);
-                }}
-                className="px-3 py-1 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600"
-              >
-                📷 사진 보기 ({task.submissions[0].imageUrls.length})
-              </button>
+      {/* 메인 컨텐츠 영역: 2컬럼 레이아웃 */}
+      <main className="flex-1 flex overflow-hidden">
+        
+        {/* 왼쪽 컬럼: 제출 내용 (이미지 & 코멘트) */}
+        <section className="flex-1 flex flex-col bg-slate-100 border-r border-slate-200 overflow-hidden">
+          <div className="h-14 px-6 flex items-center justify-between bg-white/50 border-b border-slate-200 shrink-0">
+            <div className="flex items-center gap-2 text-slate-800">
+              <MdPhotoLibrary className="w-5 h-5 text-slate-500" />
+              <h2 className="font-bold">멘티 제출 내용</h2>
+            </div>
+            {currentSubmission && (
+              <span className="text-[11px] font-bold text-slate-400 bg-slate-200/50 px-2 py-1 rounded-md">
+                {format(new Date(currentSubmission.createdAt), 'HH:mm 제출')}
+              </span>
             )}
           </div>
 
-          {/* 멘티 코멘트 */}
-          {task.submissions[0].comment && (
-            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 mb-3">
-              <p className="text-xs text-gray-600 dark:text-gray-400 font-medium mb-1">
-                멘티 코멘트:
-              </p>
-              <p className="text-sm dark:text-gray-200">{task.submissions[0].comment}</p>
-            </div>
-          )}
+          <div className="flex-1 overflow-y-auto p-8">
+            {currentSubmission ? (
+              <div className="max-w-4xl mx-auto space-y-8">
+                {/* 멘티 코멘트 */}
+                {currentSubmission.comment && (
+                  <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
+                    <p className="text-[10px] font-black text-blue-500 mb-3 uppercase tracking-widest">Mentee's Note</p>
+                    <p className="text-base text-slate-700 leading-relaxed whitespace-pre-wrap">{currentSubmission.comment}</p>
+                  </div>
+                )}
 
-          {/* 제출 시간 */}
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            제출일: {new Date(task.submissions[0].createdAt).toLocaleString('ko-KR')}
-          </p>
-
-          {/* 이미지 미리보기 */}
-          {task.submissions[0].imageUrls.length > 0 && (
-            <div className="grid grid-cols-2 gap-2 mt-3">
-              {task.submissions[0].imageUrls.slice(0, 4).map((url, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => {
-                    setImageModalOpen(true);
-                    setImageModalIndex(idx);
-                  }}
-                  className="relative aspect-square cursor-pointer hover:opacity-80 transition-opacity"
-                >
-                  <img
-                    src={url}
-                    alt={`제출 ${idx + 1}`}
-                    className="w-full h-full object-cover rounded"
-                  />
-                  {idx === 3 && task.submissions[0].imageUrls.length > 4 && (
-                    <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded">
-                      <span className="text-white text-xl font-bold">
-                        +{task.submissions[0].imageUrls.length - 4}
-                      </span>
+                {/* 이미지 그리드 */}
+                <div className="grid grid-cols-1 gap-6">
+                  {currentSubmission.imageUrls.map((url, idx) => (
+                    <div 
+                      key={idx} 
+                      className="group relative bg-white rounded-3xl overflow-hidden shadow-md border border-slate-200 cursor-zoom-in transition-transform hover:scale-[1.01]"
+                      onClick={() => { setImageModalOpen(true); setImageModalIndex(idx); }}
+                    >
+                      <img 
+                        src={url} 
+                        alt={`Submission ${idx + 1}`} 
+                        className="w-full h-auto object-contain max-h-[800px] block mx-auto"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <span className="bg-white/90 px-4 py-2 rounded-full text-xs font-bold text-slate-800 shadow-xl">클릭하여 확대</span>
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400">
+                <MdAssignment className="w-16 h-16 mb-4 opacity-20" />
+                <p className="font-bold">아직 제출된 내용이 없습니다.</p>
+              </div>
+            )}
+          </div>
+        </section>
 
-      {/* 피드백/댓글 영역 */}
-      {task.feedbacks.length === 0 ? (
-        // 첫 피드백 작성 폼
-        <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-6">
-          <h3 className="font-semibold mb-4 dark:text-white">피드백 작성</h3>
-          <form onSubmit={handleSubmitFeedback} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2 dark:text-gray-200">
-                피드백 요약 <span className="text-red-600">*</span>
-              </label>
-              <input
-                type="text"
-                value={feedbackForm.summary}
-                onChange={(e) => setFeedbackForm({ ...feedbackForm, summary: e.target.value })}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                placeholder="예: 전반적으로 우수한 결과입니다"
-                required
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                멘티가 한눈에 볼 수 있는 짧은 요약을 작성하세요
-              </p>
+        {/* 오른쪽 컬럼: 피드백 & 대화 */}
+        <section className="w-[450px] flex flex-col bg-white overflow-hidden shadow-[-10px_0_30px_rgba(0,0,0,0.02)] z-10">
+          <div className="h-14 px-6 flex items-center justify-between border-b border-slate-100 shrink-0">
+            <div className="flex items-center gap-2 text-slate-800">
+              <MdChatBubbleOutline className="w-5 h-5 text-blue-500" />
+              <h2 className="font-bold">피드백 대화</h2>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+              <h4 className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-tighter">과제명</h4>
+              <p className="text-sm font-bold text-slate-800">{task.title}</p>
+              {task.description && <p className="text-xs text-slate-500 mt-1">{task.description}</p>}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2 dark:text-gray-200">
-                상세 피드백 <span className="text-red-600">*</span>
-              </label>
-              <textarea
-                value={feedbackForm.content}
-                onChange={(e) => setFeedbackForm({ ...feedbackForm, content: e.target.value })}
-                className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
-                rows={10}
-                placeholder="구체적인 피드백을 작성하세요.&#10;&#10;잘한 점:&#10;- &#10;&#10;개선할 점:&#10;- &#10;&#10;다음 학습 방향:&#10;- "
-                required
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                잘한 점, 개선할 점, 다음 학습 방향 등을 구체적으로 작성하세요
-              </p>
-            </div>
+            {!hasFeedback ? (
+              /* 첫 피드백 작성 폼 (PC 최적화) */
+              <form onSubmit={handleSubmitFeedback} className="space-y-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">피드백 핵심 요약</label>
+                    <input
+                      type="text"
+                      value={feedbackForm.summary}
+                      onChange={(e) => setFeedbackForm({ ...feedbackForm, summary: e.target.value })}
+                      className="w-full px-5 py-3.5 rounded-xl bg-slate-50 border-slate-200 text-sm font-medium placeholder:text-slate-300 focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+                      placeholder="멘티를 위한 따뜻한 한 줄 평"
+                      required
+                    />
+                  </div>
 
-            <div className="flex gap-3 pt-4">
-              <button
-                type="button"
-                onClick={() => router.back()}
-                className="flex-1 px-4 py-2 border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 dark:text-white"
-              >
-                취소
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 dark:disabled:bg-gray-600"
-              >
-                {isSubmitting ? '작성 중...' : '피드백 제출'}
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : (
-        // 피드백 1개 이상: 최초 피드백 요약 + 채팅 UI
-        <>
-          {/* 최초 피드백 요약 (강조) */}
-          {task.feedbacks[0].summary && (
-            <div className="bg-gradient-to-r from-amber-100 to-yellow-100 dark:from-amber-900/40 dark:to-yellow-900/40 rounded-lg p-4 mb-4 border-l-4 border-amber-400 dark:border-amber-600 shadow-sm">
-              <div className="flex items-start gap-2">
-                <span className="text-xl">✨</span>
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-amber-900 dark:text-amber-200 mb-1">
-                    핵심 요약
-                  </p>
-                  <p className="text-sm sm:text-base leading-relaxed text-amber-800 dark:text-amber-300 font-medium">
-                    {task.feedbacks[0].summary}
-                  </p>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">상세 피드백</label>
+                    <textarea
+                      value={feedbackForm.content}
+                      onChange={(e) => setFeedbackForm({ ...feedbackForm, content: e.target.value })}
+                      className="w-full px-5 py-4 rounded-xl bg-slate-50 border-slate-200 text-sm font-medium placeholder:text-slate-300 focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all h-[300px] resize-none leading-relaxed"
+                      placeholder="학습 내용에 대해 구체적이고 전문적인 피드백을 남겨주세요."
+                      required
+                    />
+                  </div>
                 </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl hover:bg-blue-600 disabled:bg-slate-200 transition-all shadow-lg shadow-slate-200"
+                >
+                  {isSubmitting ? '전송 중...' : '첫 피드백 전송하기'}
+                </button>
+              </form>
+            ) : (
+              /* 채팅 인터페이스 (PC 최적화) */
+              <div className="space-y-5">
+                {task.feedbacks[0].summary && (
+                  <div className="flex justify-start">
+                    <div className="w-full bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex items-start gap-3 shadow-sm">
+                      <span className="text-lg">✨</span>
+                      <div>
+                        <p className="text-[10px] font-bold text-amber-800 mb-1 uppercase tracking-wider">핵심 요약</p>
+                        <p className="text-sm text-amber-900 leading-relaxed font-bold">{task.feedbacks[0].summary}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-4 pb-4">
+                  {messages.map((m) => {
+                    const isMe = m.userId === currentUser.id;
+                    return (
+                      <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] space-y-1 ${isMe ? 'items-end' : 'items-start'}`}>
+                          {!isMe && <span className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block">{m.userName}</span>}
+                          <div className={`rounded-2xl px-4 py-2.5 shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${
+                            isMe 
+                              ? 'bg-slate-800 text-white rounded-tr-none' 
+                              : 'bg-slate-100 text-slate-800 rounded-tl-none'
+                          }`}>
+                            {m.content}
+                          </div>
+                          <span className="text-[9px] text-slate-400 px-2">
+                            {format(new Date(m.createdAt), 'HH:mm')}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div ref={messagesEndRef} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 하단 입력바 (피드백이 있을 때만 활성화) */}
+          {hasFeedback && (
+            <div className="p-4 bg-white border-t border-slate-100 shrink-0">
+              <div className="relative flex items-end gap-2">
+                <textarea
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendComment(chatInput);
+                    }
+                  }}
+                  placeholder="메시지를 입력하세요..."
+                  className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl resize-none outline-none text-sm font-medium focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all max-h-32"
+                  rows={1}
+                />
+                <button
+                  onClick={() => handleSendComment(chatInput)}
+                  disabled={!chatInput.trim()}
+                  className="w-12 h-12 bg-slate-900 text-white flex items-center justify-center rounded-xl disabled:bg-slate-100 disabled:text-slate-300 hover:bg-blue-600 transition-all shrink-0"
+                >
+                  <MdSend className="w-5 h-5" />
+                </button>
               </div>
             </div>
           )}
+        </section>
+      </main>
 
-          {/* 채팅 UI */}
-          <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 mb-4">
-            <h3 className="font-semibold mb-3 dark:text-white">피드백 대화</h3>
-            <FeedbackChatUI
-              taskId={task.id}
-              messages={formatMessages()}
-              currentUserId={currentUser.id}
-              onSendMessage={handleSendComment}
-            />
-          </div>
-        </>
-      )}
-
-      {/* 이미지 모달 */}
-      {imageModalOpen && task.submissions.length > 0 && (
+      {/* 이미지 모달 (확대용으로 유지) */}
+      {imageModalOpen && currentSubmission && (
         <ImageModal
-          images={task.submissions[0].imageUrls}
+          images={currentSubmission.imageUrls}
           initialIndex={imageModalIndex}
           onClose={() => setImageModalOpen(false)}
         />

@@ -1,6 +1,7 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
 import { formatDate } from '@/lib/dateUtils';
+import { getSubjectLabel, getSubjectBadgeColor, DEFAULT_SUBJECT_VALUES } from '@/constants/subjects';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -24,12 +25,6 @@ interface Task {
   date: string;
   feedbacks: Feedback[];
 }
-
-const SUBJECT_LABELS: Record<string, { label: string; color: string }> = {
-  KOREAN: { label: '국어', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300' },
-  ENGLISH: { label: '영어', color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' },
-  MATH: { label: '수학', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300' },
-};
 
 type SubjectFilter = 'ALL' | 'KOREAN' | 'ENGLISH' | 'MATH';
 
@@ -76,19 +71,27 @@ export default function FeedbackListPage() {
 
       {/* 과목 필터 */}
       <div className="flex gap-2 mb-6 overflow-x-auto">
-        {(['ALL', 'KOREAN', 'ENGLISH', 'MATH'] as SubjectFilter[]).map((subject) => (
+        <button
+          onClick={() => setSelectedSubject('ALL')}
+          className={`px-4 py-2 rounded-lg whitespace-nowrap ${
+            selectedSubject === 'ALL'
+              ? 'bg-black dark:bg-white text-white dark:text-black'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
+          }`}
+        >
+          전체
+        </button>
+        {DEFAULT_SUBJECT_VALUES.map((subject) => (
           <button
             key={subject}
             onClick={() => setSelectedSubject(subject)}
             className={`px-4 py-2 rounded-lg whitespace-nowrap ${
               selectedSubject === subject
-                ? subject === 'ALL'
-                  ? 'bg-black dark:bg-white text-white dark:text-black'
-                  : SUBJECT_LABELS[subject].color
+                ? getSubjectBadgeColor(subject)
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
             }`}
           >
-            {subject === 'ALL' ? '전체' : SUBJECT_LABELS[subject].label}
+            {getSubjectLabel(subject)}
           </button>
         ))}
       </div>
@@ -128,10 +131,8 @@ export default function FeedbackListPage() {
               >
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      SUBJECT_LABELS[task.subject]?.color || 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-                    }`}>
-                      {SUBJECT_LABELS[task.subject]?.label || task.subject}
+                    <span className={`text-xs px-2 py-1 rounded ${getSubjectBadgeColor(task.subject)}`}>
+                      {getSubjectLabel(task.subject)}
                     </span>
                     <span className="text-sm text-gray-500 dark:text-gray-400">
                       {formatDate(feedback.feedbackDate)}

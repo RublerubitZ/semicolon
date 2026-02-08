@@ -6,6 +6,8 @@ import { getApiUrl } from '@/lib/api';
 import { IoIosNotifications, IoIosArrowBack } from "react-icons/io";
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useOverlayStore } from '@/stores/useOverlayStore';
+import { Z_INDEX } from '@/constants/zIndex';
 
 interface Notification {
   id: string;
@@ -23,11 +25,18 @@ export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { setOverlay } = useOverlayStore();
+
+  useEffect(() => {
+    setOverlay('notifications', isOpen);
+  }, [isOpen, setOverlay]);
 
   // 알림 목록 조회
   const fetchNotifications = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) return;
+
       const response = await fetch(`${getApiUrl()}/api/notifications`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -39,6 +48,10 @@ export default function NotificationBell() {
         setNotifications(data);
       }
     } catch (error) {
+      // 서버가 꺼져있을 때는 에러 메시지를 조용히 처리
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        return;
+      }
       console.error('Failed to fetch notifications:', error);
     }
   };
@@ -47,6 +60,8 @@ export default function NotificationBell() {
   const fetchUnreadCount = async () => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) return;
+
       const response = await fetch(`${getApiUrl()}/api/notifications/unread-count`, {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -58,6 +73,10 @@ export default function NotificationBell() {
         setUnreadCount(data.count);
       }
     } catch (error) {
+      // 서버가 꺼져있을 때는 에러 메시지를 조용히 처리
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        return;
+      }
       console.error('Failed to fetch unread count:', error);
     }
   };
@@ -199,7 +218,7 @@ export default function NotificationBell() {
       {/* 알림 오버레이 */}
       <AnimatePresence>
         {isOpen && (
-          <div className="fixed inset-0 z-[100] flex justify-center md:justify-end items-center md:items-start md:pt-20 md:pr-10 pointer-events-none">
+          <div className="fixed inset-0 flex justify-center md:justify-end items-center md:items-start md:pt-20 md:pr-10 pointer-events-none" style={{ zIndex: Z_INDEX.OVERLAY_BACKDROP }}>
             {/* 배경 오버레이 (PC) */}
             <motion.div 
               initial={{ opacity: 0 }}

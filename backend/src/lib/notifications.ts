@@ -25,8 +25,11 @@ export const createNotification = async (params: {
   } catch (error) {
     console.error('[Notification Error]', {
       timestamp: new Date().toISOString(),
-      error,
-      params,
+      error: error instanceof Error ? error.message : String(error),
+      type: params.type,
+      userId: params.userId.substring(0, 8) + '...', // 일부만 로깅
+      hasRelatedId: !!params.relatedId,
+      // content는 개인정보 포함 가능성으로 로깅하지 않음
     });
     throw error;
   }
@@ -101,5 +104,24 @@ export const notifyTaskApproved = async (params: {
     title: `${params.mentorName}님이 과제를 승인했습니다`,
     content: `과제: ${params.taskTitle}`,
     relatedId: params.taskId,
+  });
+};
+
+/**
+ * 스트릭 깨짐 시 멘토에게 알림 전송
+ */
+export const notifyStreakBroken = async (params: {
+  mentorId: string;
+  menteeName: string;
+  streakDays: number;
+  lastStudyDate: string;
+  menteeId: string;
+}) => {
+  return createNotification({
+    userId: params.mentorId,
+    type: 'STREAK_BROKEN',
+    title: `${params.menteeName}님의 ${params.streakDays}일 연속 학습이 끊어졌습니다`,
+    content: `마지막 학습일: ${params.lastStudyDate}`,
+    relatedId: params.menteeId,
   });
 };

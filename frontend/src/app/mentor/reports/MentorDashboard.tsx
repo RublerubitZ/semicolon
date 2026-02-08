@@ -1,6 +1,8 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
-import { useEffect, useState } from 'react';
+import { getSubjectLabel, SUBJECT_COLORS } from '@/constants/subjects';
+import { useEffect, useState, useMemo } from 'react';
+import { GrLineChart } from 'react-icons/gr';
 
 interface DashboardData {
   currentMonth: {
@@ -43,20 +45,6 @@ interface DashboardData {
   };
 }
 
-const getSubjectLabel = (subject: string) => {
-  const labels: Record<string, string> = { KOREAN: '국어', ENGLISH: '영어', MATH: '수학' };
-  return labels[subject] || subject;
-};
-
-const getSubjectColor = (subject: string) => {
-  const colors: Record<string, string> = {
-    KOREAN: 'bg-blue-500',
-    ENGLISH: 'bg-green-500',
-    MATH: 'bg-orange-500',
-  };
-  return colors[subject] || 'bg-gray-500';
-};
-
 const formatTime = (minutes: number) => {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
@@ -65,12 +53,13 @@ const formatTime = (minutes: number) => {
   return `${hours}시간 ${mins}분`;
 };
 
-const ChangeIndicator = ({ value, unit = '%p' }: { value: number; unit?: string }) => {
-  if (value === 0) return <span className="text-xs text-gray-400">변동 없음</span>;
+const ChangeIndicator = ({ value, unit = '%', showLabel = false }: { value: number; unit?: string, showLabel?: boolean }) => {
+  if (value === 0) return <span className="text-[10px] text-gray-400">변동 없음</span>;
   const isPositive = value > 0;
   return (
-    <span className={`text-xs font-medium ${isPositive ? 'text-green-600' : 'text-red-500'}`}>
-      {isPositive ? '▲' : '▼'} {Math.abs(value)}{unit}
+    <span className={`text-[12px] font-semibold ${isPositive ? 'text-blue-600' : 'text-red-500'}`}>
+      {showLabel && '지난 달 대비 '}
+      {isPositive ? '+' : '-'} {Math.abs(value)}{unit}
     </span>
   );
 };
@@ -82,25 +71,24 @@ export default function MentorDashboard({ menteeId }: { menteeId: string }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchData = async () => {
-    setIsLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(
-        `${getApiUrl()}/api/mentor/mentees/${menteeId}/stats/dashboard?year=${selectedYear}&month=${selectedMonth}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (!res.ok) throw new Error();
-      const result = await res.json();
-      setData(result);
-    } catch {
-      console.error('통계 로딩 실패');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(
+          `${getApiUrl()}/api/mentor/mentees/${menteeId}/stats/dashboard?year=${selectedYear}&month=${selectedMonth}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (!res.ok) throw new Error();
+        const result = await res.json();
+        setData(result);
+      } catch {
+        console.error('통계 로딩 실패');
+      } finally {
+        setIsLoading(false);
+      }
+    };
     fetchData();
   }, [menteeId, selectedYear, selectedMonth]);
 
@@ -118,157 +106,149 @@ export default function MentorDashboard({ menteeId }: { menteeId: string }) {
     setSelectedMonth(newMonth);
   };
 
+  const subjectStatsList = useMemo(() => {
+    if (!data) return [];
+    return Object.entries(data.currentMonth.subjectStats)
+      .filter(([subject, stat]) => stat.total > 0 && subject) // subject is used implicitly here, but let's keep it clean
+      .sort((a, b) => b[1].studyTime - a[1].studyTime);
+  }, [data]);
+
+  const totalStudyTime = data?.currentMonth.totalStudyTime || 0;
+
   if (isLoading) {
-    return <p className="text-gray-500 py-8 text-center">로딩 중...</p>;
+    return <p className="text-gray-500 py-8 text-center text-[12px]">로딩 중...</p>;
   }
 
   if (!data) {
-    return <p className="text-gray-500 py-8 text-center">통계를 불러올 수 없습니다.</p>;
+    return <p className="text-gray-500 py-8 text-center text-[12px]">통계를 불러올 수 없습니다.</p>;
   }
 
-  const { currentMonth, monthOverMonth, feedbackResponseRate, learningGoalAchievement } = data;
+  const { currentMonth, monthOverMonth } = data;
 
   return (
-    <div>
+    <div className="space-y-6">
       {/* 년/월 선택기 */}
-      <div className="flex items-center justify-between mb-6 bg-white p-4 rounded-lg border">
-        <button onClick={() => changeMonth('prev')} className="p-2 hover:bg-gray-100 rounded text-lg">
+      <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+        <button onClick={() => changeMonth('prev')} className="p-2 hover:bg-gray-50 rounded-lg text-gray-400">
           ←
         </button>
-        <h3 className="text-lg font-semibold">
+        <h3 className="text-[14px] font-bold text-gray-900">
           {selectedYear}년 {selectedMonth}월
         </h3>
-        <button onClick={() => changeMonth('next')} className="p-2 hover:bg-gray-100 rounded text-lg">
+        <button onClick={() => changeMonth('next')} className="p-2 hover:bg-gray-50 rounded-lg text-gray-400">
           →
         </button>
       </div>
 
-      {/* 요약 카드 4개 */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-gradient-to-br from-blue-600 to-blue-500 text-white rounded-lg p-4">
-          <p className="text-xs opacity-90 mb-1">완료율</p>
-          <p className="text-2xl font-bold">{currentMonth.completionRate}%</p>
-          <div className="mt-1">
-            <ChangeIndicator value={monthOverMonth.completionRateChange} />
+      {/* 상단 요약 카드 2개 */}
+      <div className="grid grid-cols-2 gap-4 rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+        <div>
+          <div className="text-[11px] font-semibold text-gray-500">총 학습 시간</div>
+          <div className="mt-1 text-[18px] font-extrabold text-gray-900">
+            {currentMonth.totalStudyTime.toLocaleString()}<span className="text-[12px] font-bold text-gray-700 ml-0.5">분</span>
           </div>
         </div>
 
-        <div className="bg-gradient-to-br from-green-600 to-green-500 text-white rounded-lg p-4">
-          <p className="text-xs opacity-90 mb-1">총 학습시간</p>
-          <p className="text-2xl font-bold">{formatTime(currentMonth.totalStudyTime)}</p>
-          <div className="mt-1">
-            <ChangeIndicator value={monthOverMonth.studyTimeChange} unit="분" />
-          </div>
-        </div>
-
-        <div className="bg-gradient-to-br from-purple-600 to-purple-500 text-white rounded-lg p-4">
-          <p className="text-xs opacity-90 mb-1">피드백 응답률</p>
-          <p className="text-2xl font-bold">{feedbackResponseRate.rate}%</p>
-          <p className="text-xs opacity-75 mt-1">
-            {feedbackResponseRate.feedbacksGiven}/{feedbackResponseRate.tasksSubmitted}
-          </p>
-        </div>
-
-        <div className="bg-gradient-to-br from-orange-600 to-orange-500 text-white rounded-lg p-4">
-          <p className="text-xs opacity-90 mb-1">학습 목표 달성</p>
-          <p className="text-2xl font-bold">{learningGoalAchievement.achievementRate}%</p>
-          <p className="text-xs opacity-75 mt-1">
-            {learningGoalAchievement.completedGoalItems}/{learningGoalAchievement.totalGoalItems}
-          </p>
+        <div>
+          <div className="text-[11px] font-semibold text-gray-500">학습 완료율</div>
+          <div className="mt-1 text-[18px] font-extrabold text-gray-900">{currentMonth.completionRate}%</div>
         </div>
       </div>
 
-      {/* 전월 대비 요약 */}
-      <div className="bg-white rounded-lg p-4 border mb-6">
-        <h4 className="text-sm font-semibold text-gray-700 mb-3">전월 대비 변화</h4>
-        <div className="grid grid-cols-3 gap-4 text-center">
+      {/* 주간 평균 카드 및 차트 */}
+      <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <p className="text-xs text-gray-500 mb-1">완료율</p>
-            <ChangeIndicator value={monthOverMonth.completionRateChange} />
+            <div className="text-[12px] font-bold text-gray-700">주간 학습 추이</div>
+            <div className="mt-2 text-[26px] font-extrabold text-gray-900">
+              {Math.round(currentMonth.totalStudyTime / (currentMonth.weeklyBreakdown.length || 1)).toLocaleString()}분
+              <span className="text-[14px] font-bold text-gray-500 ml-1">/ 주 평균</span>
+            </div>
           </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-1">학습시간</p>
-            <ChangeIndicator value={monthOverMonth.studyTimeChange} unit="분" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-500 mb-1">과제 수</p>
-            <ChangeIndicator value={monthOverMonth.taskCountChange} unit="개" />
+
+          <div className="flex items-center gap-3">
+            <div className="grid h-8 w-8 place-items-center rounded-md bg-[#00265A]">
+              <GrLineChart className="text-[14px] text-white" />
+            </div>
+            <ChangeIndicator value={monthOverMonth.completionRateChange} showLabel={true} />
           </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 과목별 진도율 */}
-        {Object.keys(currentMonth.subjectStats).length > 0 && (
-          <div className="bg-white rounded-lg p-4 border">
-            <h4 className="text-sm font-semibold text-gray-700 mb-4">과목별 진도율</h4>
-            <div className="space-y-4">
-              {Object.entries(currentMonth.subjectStats).map(([subject, stat]) => (
-                <div key={subject}>
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-sm font-medium text-gray-700">{getSubjectLabel(subject)}</span>
-                    <div className="text-right">
-                      <span className="text-sm font-bold">{stat.completionRate}%</span>
-                      <span className="text-xs text-gray-400 ml-2">
-                        ({stat.completed}/{stat.total})
-                      </span>
-                    </div>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+        {/* 바 차트 */}
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <div className="relative h-[180px]">
+            {/* 평균선 */}
+            <div className="absolute left-0 right-0 top-[40%] border-t-2 border-dashed border-blue-100" />
+            
+            <div className="absolute inset-x-6 bottom-4 top-4 flex items-end justify-between">
+              {currentMonth.weeklyBreakdown.map((week) => {
+                const maxTime = Math.max(...currentMonth.weeklyBreakdown.map(w => w.studyTime), 1);
+                const barHeight = (week.studyTime / maxTime) * 140;
+                return (
+                  <div key={week.weekNumber} className="flex flex-col items-center gap-2 flex-1">
                     <div
-                      className={`h-3 rounded-full transition-all ${getSubjectColor(subject)}`}
-                      style={{ width: `${stat.completionRate}%` }}
+                      className="w-10 rounded-md bg-blue-200 transition-all hover:bg-blue-300"
+                      style={{ height: `${Math.max(barHeight, 4)}px` }}
                     />
+                    <div className="text-[11px] font-semibold text-gray-500">{week.weekNumber}주차</div>
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">학습시간: {formatTime(stat.studyTime)}</p>
-                </div>
-              ))}
+                );
+              })}
+            </div>
+
+            <div className="absolute right-[-10px] top-[36%] rounded-full border border-blue-200 bg-white px-2 py-1 text-[9px] font-bold text-blue-500 shadow-sm">
+              평균
             </div>
           </div>
-        )}
+        </div>
+      </div>
 
-        {/* 주차별 추이 */}
-        {currentMonth.weeklyBreakdown.length > 0 && (
-          <div className="bg-white rounded-lg p-4 border">
-            <h4 className="text-sm font-semibold text-gray-700 mb-4">주차별 완료율 추이</h4>
-            <div className="space-y-3">
-              {currentMonth.weeklyBreakdown.map((week) => (
-                <div key={week.weekNumber} className="flex items-center gap-3">
-                  <span className="text-sm font-medium w-14 flex-shrink-0">{week.weekNumber}주차</span>
-                  <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
-                    <div
-                      className={`h-full flex items-center justify-center text-xs font-medium text-white rounded-full ${
-                        week.completionRate === 100
-                          ? 'bg-green-500'
-                          : week.completionRate >= 50
-                          ? 'bg-blue-500'
-                          : week.completionRate > 0
-                          ? 'bg-orange-500'
-                          : 'bg-gray-300'
-                      }`}
-                      style={{ width: `${Math.max(week.completionRate, week.totalTasks > 0 ? 8 : 0)}%` }}
-                    >
-                      {week.completionRate > 0 && `${week.completionRate}%`}
-                    </div>
-                  </div>
-                  <span className="text-xs text-gray-500 w-12 text-right flex-shrink-0">
-                    {week.completedTasks}/{week.totalTasks}
-                  </span>
-                </div>
-              ))}
-            </div>
+      {/* 과목별 공부 시간 */}
+      <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-[14px]">✎</span>
+            <div className="text-[12px] font-bold text-gray-800">과목별 공부 시간</div>
           </div>
-        )}
+          <div className="text-[11px] font-semibold text-gray-400">총 {formatTime(currentMonth.totalStudyTime)}</div>
+        </div>
+
+        {/* 누적 바 */}
+        <div className="mt-4 h-10 w-full overflow-hidden rounded-xl bg-gray-50 flex">
+          {subjectStatsList.map(([subject, stat]) => {
+            const width = totalStudyTime > 0 ? (stat.studyTime / totalStudyTime) * 100 : 0;
+            const color = SUBJECT_COLORS[subject as keyof typeof SUBJECT_COLORS]?.primary || '#CBD5E1';
+            return (
+              <div 
+                key={subject} 
+                className="h-full transition-all"
+                style={{ 
+                  width: `${width}%`,
+                  backgroundColor: color
+                }}
+              />
+            );
+          })}
+        </div>
+
+        {/* 범례 */}
+        <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+          {subjectStatsList.map(([subject, stat]) => {
+            const color = SUBJECT_COLORS[subject as keyof typeof SUBJECT_COLORS]?.primary || '#CBD5E1';
+            return (
+              <div key={subject} className="flex items-start gap-2">
+                <span className="mt-1 h-3 w-3 rounded-sm flex-shrink-0" style={{ backgroundColor: color }} />
+                <div>
+                  <div className="text-[11px] font-bold text-gray-700">{getSubjectLabel(subject)}</div>
+                  <div className="text-[10px] text-gray-400">{formatTime(stat.studyTime)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* 전체 통계 요약 */}
-      <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <p className="text-sm text-blue-800">
-          이번 달 총 <strong>{currentMonth.totalTasks}개</strong> 과제 중{' '}
-          <strong>{currentMonth.completedTasks}개</strong> 완료 |{' '}
-          피드백 <strong>{currentMonth.totalFeedbacks}개</strong> 제공
-        </p>
-      </div>
+      <div className="h-4" />
     </div>
   );
 }

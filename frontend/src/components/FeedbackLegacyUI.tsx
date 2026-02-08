@@ -8,7 +8,6 @@ interface Feedback {
   feedbackDate: string;
   mentor: {
     name: string;
-    nickname?: string;
   };
 }
 
@@ -38,10 +37,10 @@ export default function FeedbackLegacyUI({ feedback }: FeedbackLegacyUIProps) {
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-blue-200 dark:border-gray-600">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-sm">
-                {(feedback.mentor.nickname || feedback.mentor.name)[0]}
+                {feedback.mentor.name[0]}
               </div>
               <span className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100">
-                {feedback.mentor.nickname || feedback.mentor.name} 멘토
+                {feedback.mentor.name} 멘토
               </span>
             </div>
             <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">

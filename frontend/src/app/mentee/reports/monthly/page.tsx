@@ -55,7 +55,7 @@ interface MonthlyFeedback {
   improvements: string;
   nextMonthGoals: string;
   updatedAt: string;
-  mentor: { id: string; name: string; nickname?: string };
+  mentor: { id: string; name: string };
 }
 
 interface WeeklyFeedback {
@@ -66,7 +66,7 @@ interface WeeklyFeedback {
   improvements: string;
   nextWeekGoals: string;
   updatedAt: string;
-  mentor: { id: string; name: string; nickname?: string };
+  mentor: { id: string; name: string };
 }
 
 export default function MonthlyReportPage() {

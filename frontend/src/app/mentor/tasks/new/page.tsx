@@ -1,15 +1,17 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
-
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { FILE_LIMITS } from '@/constants/fileLimits';
 
 type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
+type DateMode = 'single' | 'range';
+type AssignMode = 'one' | 'all';
+type MaterialType = 'PDF' | 'COLUMN';
 
 interface Mentee {
   id: string;
   name: string;
-  nickname?: string;
   email: string;
 }
 
@@ -17,6 +19,105 @@ interface Worksheet {
   id: string;
   title: string;
   subject: Subject;
+  type: 'COLUMN' | 'PDF';
+  content: string | null;
+  pdfUrl: string | null;
+}
+
+interface Material {
+  type: MaterialType;
+  order: number;
+  pdfUrl?: string;
+  pdfFileName?: string; // PDF 원본 파일명
+  columnTitle?: string;
+  columnContent?: string;
+  source?: 'direct' | 'worksheet'; // UI 표시용
+  worksheetTitle?: string; // 학습지에서 불러온 경우 학습지 제목
+}
+
+function todayStr() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function ToggleChip({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'h-8 rounded-md px-4 text-[12px] font-semibold transition',
+        active
+          ? 'border border-blue-300 bg-blue-50 text-blue-700'
+          : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50',
+      ].join(' ')}
+    >
+      {label}
+    </button>
+  );
+}
+
+function RadioRow({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-2 text-left"
+    >
+      <span
+        className={[
+          'h-4 w-4 rounded-[4px] border',
+          active ? 'border-pink-400 bg-pink-200' : 'border-gray-300 bg-white',
+        ].join(' ')}
+      />
+      <span className="text-[12px] font-semibold text-gray-700">{label}</span>
+    </button>
+  );
+}
+
+function DayCircle({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        'h-9 w-9 rounded-full text-[12px] font-semibold transition',
+        active
+          ? 'bg-[#0B2B5B] text-white'
+          : 'bg-gray-200 text-gray-500 hover:bg-gray-300',
+      ].join(' ')}
+      aria-pressed={active}
+    >
+      {label}
+    </button>
+  );
 }
 
 export default function NewTaskPage() {
@@ -25,58 +126,48 @@ export default function NewTaskPage() {
   const [worksheets, setWorksheets] = useState<Worksheet[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 폼 상태
-  const [formData, setFormData] = useState({
-    menteeId: '',
-    title: '',
-    description: '',
-    subject: 'KOREAN' as Subject,
-    date: new Date().toISOString().split('T')[0],
-    worksheetId: '',
-  });
+  const [assignMode, setAssignMode] = useState<AssignMode>('one');
+  const [menteeId, setMenteeId] = useState<string>('');
 
-  // 반복 설정 상태
-  const [repeatMode, setRepeatMode] = useState<'single' | 'repeat'>('single');
-  const [repeatSettings, setRepeatSettings] = useState({
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
-    weekdays: {
-      0: false, // 일요일
-      1: false, // 월요일
-      2: false, // 화요일
-      3: false, // 수요일
-      4: false, // 목요일
-      5: false, // 금요일
-      6: false, // 토요일
-    },
-  });
+  const [dateMode, setDateMode] = useState<DateMode>('single');
+  const [singleDate, setSingleDate] = useState(todayStr());
+  const [startDate, setStartDate] = useState(todayStr());
+  const [endDate, setEndDate] = useState(todayStr());
 
-  // 학습 목표 상태
-  const [learningGoals, setLearningGoals] = useState<string[]>([]);
+  const WEEKDAYS = [
+    { key: '월', label: '월' },
+    { key: '화', label: '화' },
+    { key: '수', label: '수' },
+    { key: '목', label: '목' },
+    { key: '금', label: '금' },
+    { key: '토', label: '토' },
+    { key: '일', label: '일' },
+  ] as const;
 
-  const addGoal = () => setLearningGoals([...learningGoals, '']);
-  const removeGoal = (index: number) => setLearningGoals(learningGoals.filter((_, i) => i !== index));
-  const updateGoal = (index: number, value: string) => {
-    const updated = [...learningGoals];
-    updated[index] = value;
-    setLearningGoals(updated);
-  };
+  const [weekdays, setWeekdays] = useState<string[]>([]);
 
-  // 멘티 목록 가져오기
+  const [taskName, setTaskName] = useState('');
+  const [goal, setGoal] = useState('');
+
+  const [subject, setSubject] = useState<Subject>('KOREAN');
+
+  const [isUploading, setIsUploading] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+
+  // 통합된 materials 배열로 관리
+  const [materials, setMaterials] = useState<Material[]>([]);
+
+  function toggleWeekday(d: string) {
+    setWeekdays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+  }
+
   const fetchMentees = async () => {
     try {
       const token = localStorage.getItem('token');
-
       const res = await fetch(`${getApiUrl()}/api/mentor/mentees`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!res.ok) {
-        throw new Error('멘티 목록을 불러오는데 실패했습니다.');
-      }
-
+      if (!res.ok) throw new Error('멘티 목록을 불러오는데 실패했습니다.');
       const data = await res.json();
       setMentees(data);
     } catch (err) {
@@ -85,30 +176,17 @@ export default function NewTaskPage() {
     }
   };
 
-  // 학습지 목록 가져오기
-  const fetchWorksheets = async (subject?: Subject) => {
+  const fetchWorksheets = async () => {
     try {
       const token = localStorage.getItem('token');
-
-      const url = subject
-        ? `${getApiUrl()}/api/mentor/worksheets?subject=${subject}`
-        : `${getApiUrl()}/api/mentor/worksheets`;
-
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const res = await fetch(`${getApiUrl()}/api/mentor/worksheets`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!res.ok) {
-        throw new Error('학습지 목록을 불러오는데 실패했습니다.');
-      }
-
+      if (!res.ok) throw new Error('학습지 목록을 불러오는데 실패했습니다.');
       const data = await res.json();
       setWorksheets(data);
     } catch (err) {
       console.error('Fetch worksheets error:', err);
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
     }
   };
 
@@ -117,71 +195,263 @@ export default function NewTaskPage() {
     fetchWorksheets();
   }, []);
 
-  // 과목 변경 시 학습지 필터링
-  useEffect(() => {
-    fetchWorksheets(formData.subject);
-    setFormData((prev) => ({ ...prev, worksheetId: '' }));
-  }, [formData.subject]);
+  // PDF URL에서 파일명 추출 함수
+  const extractFileName = (url: string) => {
+    try {
+      const decoded = decodeURIComponent(url);
+      const parts = decoded.split('/');
+      const fileNameWithQuery = parts[parts.length - 1];
+      const fileName = fileNameWithQuery.split('?')[0];
 
-  // 반복 날짜 계산
-  const calculateRepeatDates = () => {
-    const dates: string[] = [];
-    const start = new Date(repeatSettings.startDate);
-    const end = new Date(repeatSettings.endDate);
+      // Cloudinary 형식에서 원본 이름 추출 시도
+      const nameParts = fileName.split('_');
+      if (nameParts.length >= 2) {
+        const extension = fileName.split('.').pop();
+        let cleanName = '';
 
-    // 선택된 요일 확인
-    const selectedWeekdays = Object.entries(repeatSettings.weekdays)
-      .filter(([_, selected]) => selected)
-      .map(([day, _]) => parseInt(day));
+        if (nameParts.length >= 3) {
+          cleanName = nameParts.slice(0, nameParts.length - 2).join('_');
+        } else {
+          cleanName = nameParts.slice(0, nameParts.length - 1).join('_');
+        }
 
-    if (selectedWeekdays.length === 0) {
-      return dates;
-    }
-
-    // 시작일부터 종료일까지 순회
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      if (selectedWeekdays.includes(d.getDay())) {
-        dates.push(new Date(d).toISOString().split('T')[0]);
+        return cleanName ? `${cleanName}.${extension}` : fileName;
       }
+      return fileName;
+    } catch (e) {
+      return '학습 파일.pdf';
     }
-
-    return dates;
   };
 
-  // 할 일 생성
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleWorksheetSelect = (worksheetId: string) => {
+    const worksheet = worksheets.find((w) => w.id === worksheetId);
+    if (!worksheet) return;
 
-    if (!formData.menteeId || !formData.title) {
-      alert('멘티와 제목을 입력해주세요.');
+    const currentCount = materials.length;
+
+    // 학습지 타입에 따라 materials에 추가 (복사 방식)
+    if (worksheet.type === 'COLUMN' && worksheet.content) {
+      try {
+        const parsed = JSON.parse(worksheet.content);
+        const columnItems = parsed.topics || [];
+
+        // 5개 초과 방지
+        if (currentCount + columnItems.length > FILE_LIMITS.MAX_TASK_MATERIALS) {
+          alert(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다. (현재: ${currentCount}개)`);
+          return;
+        }
+
+        // 칼럼 데이터를 materials에 추가 (복사)
+        const newMaterials: Material[] = columnItems.map((topic: any, idx: number) => ({
+          type: 'COLUMN',
+          order: materials.length + idx,
+          columnTitle: topic.title || '',
+          columnContent: topic.description || '',
+          source: 'worksheet',
+          worksheetTitle: worksheet.title,
+        }));
+
+        setMaterials([...materials, ...newMaterials]);
+      } catch (err) {
+        console.error('Content parsing error:', err);
+        alert('학습지 내용을 불러오는데 실패했습니다.');
+        return;
+      }
+    } else if (worksheet.type === 'PDF' && worksheet.pdfUrl) {
+      // 5개 초과 방지
+      if (currentCount >= FILE_LIMITS.MAX_TASK_MATERIALS) {
+        alert(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다.`);
+        return;
+      }
+
+      // PDF URL을 materials에 추가 (복사) - 파일명 추출 포함
+      setMaterials([
+        ...materials,
+        {
+          type: 'PDF',
+          order: materials.length,
+          pdfUrl: worksheet.pdfUrl,
+          pdfFileName: extractFileName(worksheet.pdfUrl), // 파일명 추출
+          source: 'worksheet',
+          worksheetTitle: worksheet.title,
+        },
+      ]);
+    }
+
+    alert(`"${worksheet.title}" 학습지를 불러왔습니다.`);
+  };
+
+  const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const pdfFilesArray = Array.from(files).filter((file) => file.type === 'application/pdf');
+    if (pdfFilesArray.length === 0) {
+      alert('PDF 파일만 업로드 가능합니다.');
       return;
     }
 
-    // 반복 모드일 때 요일 선택 확인
-    if (repeatMode === 'repeat') {
-      const hasSelectedWeekday = Object.values(repeatSettings.weekdays).some((selected) => selected);
-      if (!hasSelectedWeekday) {
-        alert('최소 하나의 요일을 선택해주세요.');
-        return;
+    const currentCount = materials.length;
+    if (currentCount + pdfFilesArray.length > FILE_LIMITS.MAX_TASK_MATERIALS) {
+      alert(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다. (현재: ${currentCount}개)`);
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const uploadedUrls: string[] = [];
+
+      // 다중 PDF 업로드
+      if (pdfFilesArray.length > 1) {
+        const formData = new FormData();
+        pdfFilesArray.forEach((file) => {
+          formData.append('pdfs', file);
+        });
+
+        const res = await fetch(`${getApiUrl()}/api/upload/pdfs`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+
+        if (!res.ok) throw new Error('PDF 업로드에 실패했습니다.');
+        const data = await res.json();
+        uploadedUrls.push(...data.urls);
+      } else {
+        // 단일 PDF 업로드
+        const formData = new FormData();
+        formData.append('pdf', pdfFilesArray[0]);
+
+        const res = await fetch(`${getApiUrl()}/api/upload/pdf`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+
+        if (!res.ok) throw new Error('PDF 업로드에 실패했습니다.');
+        const data = await res.json();
+        uploadedUrls.push(data.url);
       }
+
+      // materials에 추가 (원본 파일명 포함)
+      const newMaterials: Material[] = uploadedUrls.map((url, idx) => ({
+        type: 'PDF',
+        order: materials.length + idx,
+        pdfUrl: url,
+        pdfFileName: pdfFilesArray[idx].name, // 원본 파일명 저장
+        source: 'direct',
+      }));
+
+      setMaterials([...materials, ...newMaterials]);
+      alert(`${pdfFilesArray.length}개의 PDF가 업로드되었습니다.`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'PDF 업로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const addColumn = () => {
+    if (materials.length >= FILE_LIMITS.MAX_TASK_MATERIALS) {
+      alert(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다.`);
+      return;
+    }
+
+    setMaterials([
+      ...materials,
+      {
+        type: 'COLUMN',
+        order: materials.length,
+        columnTitle: '',
+        columnContent: '',
+        source: 'direct',
+      },
+    ]);
+  };
+
+  const removeMaterial = (index: number) => {
+    const newMaterials = materials.filter((_, i) => i !== index);
+    // order 재정렬
+    newMaterials.forEach((m, idx) => {
+      m.order = idx;
+    });
+    setMaterials(newMaterials);
+  };
+
+  const updateMaterial = (index: number, field: 'columnTitle' | 'columnContent', value: string) => {
+    const newMaterials = [...materials];
+    newMaterials[index][field] = value;
+    setMaterials(newMaterials);
+  };
+
+  const calculateRepeatDates = () => {
+    const dates: string[] = [];
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const weekdayMap: Record<string, number> = {
+      일: 0,
+      월: 1,
+      화: 2,
+      수: 3,
+      목: 4,
+      금: 5,
+      토: 6,
+    };
+    const selectedDays = weekdays.map((d) => weekdayMap[d]);
+    if (selectedDays.length === 0) return dates;
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      if (selectedDays.includes(d.getDay())) {
+        dates.push(new Date(d).toISOString().split('T')[0]);
+      }
+    }
+    return dates;
+  };
+
+  const onSubmit = async () => {
+    if (!menteeId || !taskName) {
+      alert('멘티와 과제 이름을 입력해주세요.');
+      return;
+    }
+    if (dateMode === 'range' && weekdays.length === 0) {
+      alert('최소 하나의 요일을 선택해주세요.');
+      return;
+    }
+
+    // 검증: 학습 자료 최소 1개
+    if (materials.length === 0) {
+      alert('최소 1개의 학습 자료를 등록해주세요.');
+      return;
+    }
+
+    // 검증: 학습 자료 최대 5개
+    if (materials.length > FILE_LIMITS.MAX_TASK_MATERIALS) {
+      alert(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다.`);
+      return;
+    }
+
+    // 빈 칼럼 필터링
+    const validMaterials = materials.filter((m) => {
+      if (m.type === 'PDF') return m.pdfUrl;
+      if (m.type === 'COLUMN') return m.columnTitle || m.columnContent;
+      return false;
+    });
+
+    if (validMaterials.length === 0) {
+      alert('유효한 학습 자료가 없습니다.');
+      return;
     }
 
     setIsSubmitting(true);
-
     try {
       const token = localStorage.getItem('token');
-
-      // 날짜 목록 계산
-      const dates =
-        repeatMode === 'repeat' ? calculateRepeatDates() : [formData.date];
-
+      const dates = dateMode === 'single' ? [singleDate] : calculateRepeatDates();
       if (dates.length === 0) {
         alert('선택한 요일에 해당하는 날짜가 없습니다.');
         setIsSubmitting(false);
         return;
       }
 
-      // 각 날짜에 대해 할 일 생성
       for (const dateStr of dates) {
         const res = await fetch(`${getApiUrl()}/api/mentor/tasks`, {
           method: 'POST',
@@ -190,22 +460,19 @@ export default function NewTaskPage() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            ...formData,
+            menteeId: assignMode === 'all' ? undefined : menteeId,
+            title: taskName,
+            description: goal,
+            subject,
             date: dateStr,
-            worksheetId: formData.worksheetId || undefined,
-            learningGoals: learningGoals.filter((g) => g.trim()),
+            materials: validMaterials, // 새로운 materials 배열
           }),
         });
-
-        if (!res.ok) {
-          throw new Error('할 일 생성에 실패했습니다.');
-        }
+        if (!res.ok) throw new Error('할 일 생성에 실패했습니다.');
       }
 
       const successMessage =
-        repeatMode === 'repeat'
-          ? `${dates.length}개의 할 일이 등록되었습니다.`
-          : '할 일이 등록되었습니다.';
+        dateMode === 'range' ? `${dates.length}개의 할 일이 등록되었습니다.` : '할 일이 등록되었습니다.';
       alert(successMessage);
       router.push('/mentor');
     } catch (err) {
@@ -216,259 +483,330 @@ export default function NewTaskPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold mb-2">할 일 등록</h2>
-        <p className="text-gray-900">멘티에게 새로운 할 일을 등록합니다</p>
-      </div>
+    <div className="px-10 py-10">
+      <div className="max-w-[1080px] ml-auto">
+        <div className="text-[16px] font-bold text-gray-900">학습 과제 등록</div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg border p-6 space-y-6">
-        {/* 멘티 선택 */}
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            멘티 선택 <span className="text-red-600">*</span>
-          </label>
+        <div className="mt-5 rounded-xl border border-gray-200 bg-white p-6">
+          {/* 멘티 선택 */}
           <select
-            value={formData.menteeId}
-            onChange={(e) => setFormData({ ...formData, menteeId: e.target.value })}
-            className="w-full px-3 py-2 border rounded-md"
-            required
+            value={menteeId}
+            onChange={(e) => setMenteeId(e.target.value)}
+            className="w-full rounded-lg bg-white px-4 py-3 text-[12px] text-gray-700 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-blue-200"
+            disabled={assignMode === 'all'}
           >
-            <option value="">멘티를 선택하세요</option>
-            {mentees.map((mentee) => (
-              <option key={mentee.id} value={mentee.id}>
-                {mentee.nickname || mentee.name} ({mentee.email})
+            <option value="" disabled>
+              멘티를 선택해 주세요.
+            </option>
+            {mentees.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
               </option>
             ))}
           </select>
-        </div>
 
-        {/* 제목 */}
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            할 일 제목 <span className="text-red-600">*</span>
-          </label>
-          <input
-            type="text"
-            value={formData.title}
-            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-            className="w-full px-3 py-2 border rounded-md"
-            placeholder="예: 비문학 지문 3개 풀기"
-            required
-          />
-        </div>
-
-        {/* 설명 */}
-        <div>
-          <label className="block text-sm font-medium mb-2">설명 (선택)</label>
-          <textarea
-            value={formData.description}
-            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            className="w-full px-3 py-2 border rounded-md resize-none"
-            rows={3}
-            placeholder="할 일에 대한 상세 설명을 입력하세요"
-          />
-        </div>
-
-        {/* 과목 */}
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            과목 <span className="text-red-600">*</span>
-          </label>
-          <select
-            value={formData.subject}
-            onChange={(e) => setFormData({ ...formData, subject: e.target.value as Subject })}
-            className="w-full px-3 py-2 border rounded-md"
-            required
-          >
-            <option value="KOREAN">국어</option>
-            <option value="ENGLISH">영어</option>
-            <option value="MATH">수학</option>
-          </select>
-        </div>
-
-        {/* 날짜 설정 */}
-        <div className="border rounded-lg p-4 bg-gray-50">
-          <label className="block text-sm font-medium mb-3">날짜 설정</label>
-          <div className="flex gap-2 mb-4">
-            <button
-              type="button"
-              onClick={() => setRepeatMode('single')}
-              className={`flex-1 px-3 py-2 rounded-md text-sm ${
-                repeatMode === 'single'
-                  ? 'bg-black text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100 border'
-              }`}
-            >
-              단일 날짜
-            </button>
-            <button
-              type="button"
-              onClick={() => setRepeatMode('repeat')}
-              className={`flex-1 px-3 py-2 rounded-md text-sm ${
-                repeatMode === 'repeat'
-                  ? 'bg-black text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100 border'
-              }`}
-            >
-              반복 설정
-            </button>
+          {/* 대상 모드 */}
+          <div className="mt-3 flex gap-2">
+            <ToggleChip active={assignMode === 'one'} label="선택 멘티" onClick={() => setAssignMode('one')} />
+            <ToggleChip active={assignMode === 'all'} label="전체 멘티" onClick={() => setAssignMode('all')} />
           </div>
 
-          {repeatMode === 'single' ? (
+          {/* 학습 날짜 */}
+          <div className="mt-6 text-[12px] font-bold text-gray-800">학습 날짜</div>
+          <div className="mt-3 space-y-4">
             <div>
-              <label className="block text-xs text-gray-900 mb-1">날짜 선택</label>
-              <input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                className="w-full px-3 py-2 border rounded-md bg-white"
-                required
-              />
-            </div>
-          ) : (
-            <div className="space-y-3 bg-white rounded-md p-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-gray-900 mb-1">
-                    시작일 <span className="text-red-600">*</span>
-                  </label>
+              <RadioRow active={dateMode === 'single'} label="단일 날짜" onClick={() => setDateMode('single')} />
+              {dateMode === 'single' && (
+                <div className="mt-2 flex items-center gap-2">
                   <input
                     type="date"
-                    value={repeatSettings.startDate}
-                    onChange={(e) =>
-                      setRepeatSettings({ ...repeatSettings, startDate: e.target.value })
-                    }
-                    className="w-full px-2 py-1.5 text-sm border rounded-md"
-                    required
+                    value={singleDate}
+                    onChange={(e) => setSingleDate(e.target.value)}
+                    className="h-10 w-[220px] rounded-md bg-gray-100 px-3 text-[12px] text-gray-700 outline-none"
                   />
+                  <span className="text-[12px] text-gray-400">일</span>
                 </div>
-                <div>
-                  <label className="block text-xs text-gray-900 mb-1">
-                    종료일 <span className="text-red-600">*</span>
-                  </label>
+              )}
+            </div>
+
+            <div>
+              <RadioRow active={dateMode === 'range'} label="반복 날짜" onClick={() => setDateMode('range')} />
+              {dateMode === 'range' && (
+                <div className="mt-2 flex items-center gap-2">
                   <input
                     type="date"
-                    value={repeatSettings.endDate}
-                    onChange={(e) =>
-                      setRepeatSettings({ ...repeatSettings, endDate: e.target.value })
-                    }
-                    className="w-full px-2 py-1.5 text-sm border rounded-md"
-                    required
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="h-10 w-[220px] rounded-md bg-gray-100 px-3 text-[12px] text-gray-700 outline-none"
+                  />
+                  <span className="text-[12px] text-gray-400">~</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="h-10 w-[220px] rounded-md bg-gray-100 px-3 text-[12px] text-gray-700 outline-none"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs text-gray-900 mb-2">
-                  반복 요일 선택 <span className="text-red-600">*</span>
-                </label>
-                <div className="grid grid-cols-7 gap-1">
-                  {['일', '월', '화', '수', '목', '금', '토'].map((day, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() =>
-                        setRepeatSettings({
-                          ...repeatSettings,
-                          weekdays: {
-                            ...repeatSettings.weekdays,
-                            [index]: !repeatSettings.weekdays[index as keyof typeof repeatSettings.weekdays],
-                          },
-                        })
-                      }
-                      className={`py-2 text-xs rounded-md transition-colors ${
-                        repeatSettings.weekdays[index as keyof typeof repeatSettings.weekdays]
-                          ? 'bg-black text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {day}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* 학습지 선택 */}
-        <div>
-          <label className="block text-sm font-medium mb-2">학습지 (선택)</label>
-          <select
-            value={formData.worksheetId}
-            onChange={(e) => setFormData({ ...formData, worksheetId: e.target.value })}
-            className="w-full px-3 py-2 border rounded-md"
-          >
-            <option value="">학습지 없음</option>
-            {worksheets
-              .filter((ws) => ws.subject === formData.subject)
-              .map((worksheet) => (
-                <option key={worksheet.id} value={worksheet.id}>
-                  {worksheet.title}
-                </option>
-              ))}
-          </select>
-          <p className="text-xs text-gray-500 mt-1">
-            선택한 과목({formData.subject === 'KOREAN' ? '국어' : formData.subject === 'ENGLISH' ? '영어' : '수학'})의 학습지만 표시됩니다
-          </p>
-        </div>
-
-        {/* 학습 목표 설정 (선택) */}
-        <div className="border rounded-lg p-4 bg-gray-50">
-          <label className="block text-sm font-medium mb-3">
-            학습 목표 (선택)
-            <span className="text-xs text-gray-500 ml-2 font-normal">
-              학생이 달성해야 할 세부 목표를 설정하세요
-            </span>
-          </label>
-
-          {learningGoals.map((goal, index) => (
-            <div key={index} className="flex gap-2 mb-2">
-              <input
-                type="text"
-                value={goal}
-                onChange={(e) => updateGoal(index, e.target.value)}
-                placeholder="예: 주격조사 이해하기"
-                className="flex-1 px-3 py-2 border rounded-md"
+          {/* 요일 선택 */}
+          <div className="mt-6 text-[12px] font-bold text-gray-800">요일 선택</div>
+          <div className="mt-3 flex gap-2">
+            {WEEKDAYS.map((d) => (
+              <DayCircle
+                key={d.key}
+                label={d.label}
+                active={weekdays.includes(d.key)}
+                onClick={() => toggleWeekday(d.key)}
               />
-              <button
-                type="button"
-                onClick={() => removeGoal(index)}
-                className="px-3 py-2 text-red-600 hover:bg-red-50 rounded"
-              >
-                삭제
-              </button>
+            ))}
+          </div>
+
+          {/* 과제 이름 */}
+          <div className="mt-6">
+            <div className="flex items-center justify-between">
+              <div className="text-[12px] font-bold text-gray-800">과제 이름</div>
+              <div className="text-[11px] text-gray-400">{taskName.length}/50</div>
             </div>
-          ))}
+            <input
+              value={taskName}
+              onChange={(e) => setTaskName(e.target.value.slice(0, 50))}
+              placeholder="과제명을 작성해 주세요."
+              className="mt-2 h-10 w-full rounded-md bg-white px-3 text-[12px] text-gray-700 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-blue-200"
+            />
+          </div>
 
-          <button
-            type="button"
-            onClick={addGoal}
-            className="w-full px-3 py-2 border-2 border-dashed rounded-md text-gray-600 hover:bg-gray-100"
-          >
-            + 학습 목표 추가
-          </button>
-        </div>
+          {/* 목표 */}
+          <div className="mt-5">
+            <div className="flex items-center justify-between">
+              <div className="text-[12px] font-bold text-gray-800">목표</div>
+              <div className="text-[11px] text-gray-400">{goal.length}/500</div>
+            </div>
+            <textarea
+              value={goal}
+              onChange={(e) => setGoal(e.target.value.slice(0, 500))}
+              placeholder="학습 목표를 작성해 주세요."
+              className="mt-2 h-[120px] w-full resize-none rounded-md bg-white px-3 py-3 text-[12px] text-gray-700 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-blue-200"
+            />
+          </div>
 
-        {/* 버튼 */}
-        <div className="flex gap-3 pt-4">
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
-          >
-            취소
-          </button>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="flex-1 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:bg-gray-400"
-          >
-            {isSubmitting ? '등록 중...' : '등록하기'}
-          </button>
+          {/* 학습 과목 */}
+          <div className="mt-10 text-[12px] font-bold text-gray-800">학습 과목</div>
+          <div className="mt-3 flex gap-3">
+            {(['KOREAN', 'ENGLISH', 'MATH'] as Subject[]).map((s) => {
+              const active = subject === s;
+              const label = s === 'KOREAN' ? '국어' : s === 'ENGLISH' ? '영어' : '수학';
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setSubject(s)}
+                  className={[
+                    'h-10 w-[110px] rounded-md border text-[12px] font-semibold transition',
+                    active ? 'bg-[#0B2B5B] text-white border-[#0B2B5B]' : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-50',
+                  ].join(' ')}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 학습 자료 등록 */}
+          <div className="mt-8">
+            <div className="text-[12px] font-bold text-gray-800">
+              학습 자료 등록 ({materials.length}/{FILE_LIMITS.MAX_TASK_MATERIALS})
+            </div>
+            <div className="mt-1 text-[10px] text-gray-500">
+              PDF, 칼럼, 학습지를 합쳐 최대 {FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다.
+            </div>
+          </div>
+
+          {/* 자료실에서 불러오기 */}
+          <div className="mt-3 rounded-md bg-gray-200 p-3">
+            <button
+              type="button"
+              onClick={() => setLibraryOpen((v) => !v)}
+              className="flex w-full items-center justify-between rounded-md bg-gray-300 px-4 py-3 text-left"
+            >
+              <span className="text-[12px] font-bold text-gray-800">📚 자료실에서 불러오기</span>
+              <span className="text-[14px] text-gray-700">{libraryOpen ? '▾' : '▸'}</span>
+            </button>
+
+            {libraryOpen && (
+              <div className="mt-3 rounded-md bg-white p-3 max-h-[300px] overflow-y-auto">
+                {worksheets.filter((w) => w.subject === subject).length === 0 ? (
+                  <div className="text-[12px] text-gray-500 text-center py-4">
+                    {subject === 'KOREAN' ? '국어' : subject === 'ENGLISH' ? '영어' : '수학'} 과목의 등록된 학습지가 없습니다.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {worksheets
+                      .filter((w) => w.subject === subject)
+                      .map((worksheet) => {
+                        const subjectLabel =
+                          worksheet.subject === 'KOREAN' ? '국어' :
+                          worksheet.subject === 'ENGLISH' ? '영어' : '수학';
+                        const subjectColor =
+                          worksheet.subject === 'KOREAN' ? 'bg-pink-100 text-pink-600' :
+                          worksheet.subject === 'ENGLISH' ? 'bg-yellow-100 text-yellow-600' :
+                          'bg-blue-100 text-blue-600';
+                        const typeLabel = worksheet.type === 'PDF' ? '📄 PDF' : '📝 칼럼';
+                        const typeColor =
+                          worksheet.type === 'PDF' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600';
+
+                        return (
+                          <button
+                            key={worksheet.id}
+                            type="button"
+                            onClick={() => handleWorksheetSelect(worksheet.id)}
+                            className="w-full flex items-center gap-2 rounded-md p-3 text-left transition bg-gray-50 border border-gray-200 hover:bg-gray-100"
+                          >
+                            <span className={`text-[10px] font-semibold px-2 py-1 rounded ${subjectColor}`}>
+                              {subjectLabel}
+                            </span>
+                            <span className={`text-[10px] font-semibold px-2 py-1 rounded ${typeColor}`}>
+                              {typeLabel}
+                            </span>
+                            <span className="text-[12px] text-gray-700 flex-1">
+                              {worksheet.title}
+                            </span>
+                          </button>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 등록된 학습 자료 목록 */}
+          <div className="mt-4 space-y-2">
+            {materials.map((material, index) => (
+              <div key={index} className="rounded-md bg-gray-100 p-3">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2 flex-1">
+                    <span className="text-[11px] font-semibold text-gray-600">
+                      {material.type === 'PDF' ? '📄 PDF' : '📝 칼럼'}
+                    </span>
+                    {material.source === 'worksheet' && material.worksheetTitle && (
+                      <span className="text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                        학습지: {material.worksheetTitle}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeMaterial(index)}
+                    className="text-[11px] text-red-500 hover:text-red-700"
+                  >
+                    ✕ 삭제
+                  </button>
+                </div>
+
+                {material.type === 'PDF' && material.pdfUrl && (
+                  <div className="text-[11px] text-gray-600 truncate">
+                    {material.pdfFileName || material.pdfUrl.split('/').pop()}
+                  </div>
+                )}
+
+                {material.type === 'COLUMN' && material.source === 'direct' && (
+                  <div className="space-y-2">
+                    <div>
+                      <input
+                        value={material.columnTitle || ''}
+                        onChange={(e) => updateMaterial(index, 'columnTitle', e.target.value.slice(0, 50))}
+                        placeholder="제목 작성"
+                        className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-[12px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-200"
+                      />
+                      <div className="mt-1 text-right text-[10px] text-gray-400">
+                        {(material.columnTitle || '').length}/50
+                      </div>
+                    </div>
+                    <div>
+                      <textarea
+                        value={material.columnContent || ''}
+                        onChange={(e) => updateMaterial(index, 'columnContent', e.target.value.slice(0, 1000))}
+                        placeholder="내용 입력"
+                        className="h-[120px] w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-3 text-[12px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-200"
+                      />
+                      <div className="mt-1 text-right text-[10px] text-gray-400">
+                        {(material.columnContent || '').length}/1000
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {material.type === 'COLUMN' && material.source === 'worksheet' && (
+                  <div className="text-[11px] text-gray-600 space-y-1">
+                    {material.columnTitle && (
+                      <div className="font-semibold">{material.columnTitle}</div>
+                    )}
+                    {material.columnContent && (
+                      <div className="text-gray-500 line-clamp-2">{material.columnContent}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* 자료 추가 버튼들 */}
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={addColumn}
+              disabled={materials.length >= FILE_LIMITS.MAX_TASK_MATERIALS}
+              className="flex-1 rounded-md border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              + 칼럼 추가
+            </button>
+            <label
+              className={[
+                'flex-1 rounded-md border-2 border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-[12px] font-semibold text-gray-600 text-center transition',
+                materials.length >= FILE_LIMITS.MAX_TASK_MATERIALS || isUploading
+                  ? 'opacity-50 cursor-not-allowed'
+                  : 'hover:bg-gray-100 cursor-pointer',
+              ].join(' ')}
+            >
+              {isUploading ? '업로드 중...' : '+ PDF 업로드'}
+              <input
+                type="file"
+                accept="application/pdf"
+                multiple
+                className="hidden"
+                onChange={handlePdfUpload}
+                disabled={materials.length >= FILE_LIMITS.MAX_TASK_MATERIALS || isUploading}
+              />
+            </label>
+          </div>
+
+          {/* 하단 버튼 */}
+          <div className="mt-6 flex gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setMaterials([]);
+                router.back();
+              }}
+              className="h-12 flex-1 rounded-md bg-gray-200 text-[12px] font-semibold text-gray-600 hover:bg-gray-300 transition"
+            >
+              취소
+            </button>
+
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={isSubmitting}
+              className="h-12 flex-[2] rounded-md bg-[#BBD9FF] text-[12px] font-semibold text-[#0B2B5B] hover:bg-[#AFCFFF] transition disabled:opacity-50"
+            >
+              {isSubmitting ? '등록 중...' : '등록'}
+            </button>
+          </div>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

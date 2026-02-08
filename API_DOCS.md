@@ -48,7 +48,7 @@ POST /api/auth/login
     "id": "user-id",
     "email": "user@example.com",
     "name": "홍길동",
-    "nickname": "길동이",
+    
     "role": "MENTEE",
     "profileImage": "https://..."
   }
@@ -69,7 +69,7 @@ GET /api/auth/me
     "id": "user-id",
     "email": "user@example.com",
     "name": "홍길동",
-    "nickname": "길동이",
+    
     "role": "MENTEE",
     "profileImage": "https://..."
   }
@@ -86,7 +86,7 @@ PATCH /api/auth/update-profile
 **Request Body:**
 ```json
 {
-  "nickname": "새로운닉네임",
+  
   "profileImage": "https://cloudinary.com/..."
 }
 ```
@@ -98,7 +98,7 @@ PATCH /api/auth/update-profile
     "id": "user-id",
     "email": "user@example.com",
     "name": "홍길동",
-    "nickname": "새로운닉네임",
+    
     "role": "MENTEE",
     "profileImage": "https://..."
   }
@@ -474,7 +474,7 @@ GET /api/mentee/feedbacks?subject=MATH
     "mentor": {
       "id": "mentor-id",
       "name": "김선생",
-      "nickname": "김쌤"
+      
     }
   }
 ]
@@ -501,7 +501,7 @@ GET /api/mentee/feedbacks/:feedbackId
   "mentor": {
     "id": "mentor-id",
     "name": "김선생",
-    "nickname": "김쌤",
+    
     "profileImage": "https://..."
   }
 }
@@ -567,7 +567,7 @@ GET /api/mentor/mentees
   {
     "id": "mentee-id",
     "name": "홍길동",
-    "nickname": "길동이",
+    
     "email": "student@example.com",
     "profileImage": "https://...",
     "totalTasks": 20,

@@ -2,6 +2,10 @@ import { Router, Response } from 'express';
 import { authMiddleware, mentorOnly, AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { parseUTCDate, getDateRange, getTodayUTC, isValidDateStr } from '../lib/date-utils';
+import { updateStreak, getStreak } from '../lib/streak-manager';
+import { generateHeatmapData } from '../lib/heatmap-generator';
+import { calculateWeeklyRanking } from '../lib/ranking-manager';
+import { isTaskCompleted, countCompletedTasks } from '../lib/task-utils';
 
 const router = Router();
 
@@ -21,7 +25,6 @@ router.get('/mentees', async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
-            nickname: true,
             email: true,
             grade: true,
             profileImage: true,
@@ -32,22 +35,33 @@ router.get('/mentees', async (req: AuthRequest, res: Response) => {
 
     const menteeIds = relations.map(r => r.menteeId);
 
-    // 한 번의 groupBy 쿼리로 전체 과제 수 집계
-    const totalStats = await prisma.task.groupBy({
-      by: ['menteeId'],
+    // 한 번의 쿼리로 모든 과제 조회 후 메모리에서 집계 (N+1 쿼리 방지)
+    const allTasks = await prisma.task.findMany({
       where: { menteeId: { in: menteeIds } },
-      _count: { _all: true },
+      select: {
+        menteeId: true,
+        submissions: { select: { id: true } },
+      },
     });
 
-    // 한 번의 groupBy 쿼리로 제출 완료 과제 수 집계
-    const completedStats = await prisma.task.groupBy({
-      by: ['menteeId'],
-      where: { menteeId: { in: menteeIds }, submissions: { some: {} } },
-      _count: { _all: true },
-    });
+    // 메모리에서 통계 집계
+    const stats = allTasks.reduce((acc, task) => {
+      if (!acc[task.menteeId]) {
+        acc[task.menteeId] = { total: 0, completed: 0 };
+      }
+      acc[task.menteeId].total++;
+      if (isTaskCompleted(task)) {
+        acc[task.menteeId].completed++;
+      }
+      return acc;
+    }, {} as Record<string, { total: number; completed: number }>);
 
-    const totalMap = Object.fromEntries(totalStats.map(s => [s.menteeId, s._count._all]));
-    const completedMap = Object.fromEntries(completedStats.map(s => [s.menteeId, s._count._all]));
+    const totalMap = Object.fromEntries(
+      Object.entries(stats).map(([id, s]) => [id, s.total])
+    );
+    const completedMap = Object.fromEntries(
+      Object.entries(stats).map(([id, s]) => [id, s.completed])
+    );
 
     const mentees = relations.map(r => ({
       ...r.mentee,
@@ -87,7 +101,6 @@ router.get('/mentees/:id', async (req: AuthRequest, res: Response) => {
       select: {
         id: true,
         name: true,
-        nickname: true,
         email: true,
         grade: true,
         profileImage: true,
@@ -114,6 +127,51 @@ router.get('/mentees/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// 멘티의 과제 목록 조회
+router.get('/mentees/:id/tasks', async (req: AuthRequest, res: Response) => {
+  try {
+    const mentorId = req.user!.userId;
+    const { id: menteeId } = req.params as { id: string };
+
+    // 권한 검증: 현재 멘토가 이 멘티를 담당하는지 확인
+    const relation = await prisma.mentorMentee.findUnique({
+      where: {
+        mentorId_menteeId: {
+          mentorId,
+          menteeId,
+        },
+      },
+    });
+
+    if (!relation) {
+      return res.status(403).json({ error: '해당 멘티에 접근할 권한이 없습니다.' });
+    }
+
+    const tasks = await prisma.task.findMany({
+      where: { menteeId },
+      orderBy: { date: 'desc' },
+      include: {
+        submissions: true,
+        feedbacks: true,
+        studyLogs: true,
+        worksheet: {
+          select: {
+            id: true,
+            title: true,
+            subject: true,
+            pdfUrl: true,
+          },
+        },
+      },
+    });
+
+    res.json(tasks);
+  } catch (error) {
+    console.error('Mentee tasks error:', error);
+    res.status(500).json({ error: '과제 목록을 불러오는데 실패했습니다.' });
+  }
+});
+
 // 과제 상세 조회 (멘토용)
 router.get('/tasks/:id', async (req: AuthRequest, res: Response) => {
   try {
@@ -125,7 +183,6 @@ router.get('/tasks/:id', async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
-            nickname: true,
             profileImage: true,
           }
         },
@@ -145,7 +202,6 @@ router.get('/tasks/:id', async (req: AuthRequest, res: Response) => {
               select: { 
                 id: true,
                 name: true, 
-                nickname: true,
                 profileImage: true 
               } 
             } 
@@ -306,7 +362,7 @@ router.get('/mentees/:id/planner/weekly', async (req: AuthRequest, res: Response
     const stats = {
       totalTasks: tasks.length,
       // 과제 제출 기준으로 달성률 계산
-      completedTasks: tasks.filter((t) => t.submissions && t.submissions.length > 0).length,
+      completedTasks: countCompletedTasks(tasks),
       totalStudyTime: 0,
       subjectStats: {} as Record<string, { total: number; completed: number; studyTime: number }>,
     };
@@ -318,11 +374,11 @@ router.get('/mentees/:id/planner/weekly', async (req: AuthRequest, res: Response
       }
       stats.subjectStats[subject].total++;
       // 과제 제출 기준으로 달성률 계산
-      if (task.submissions && task.submissions.length > 0) {
+      if (isTaskCompleted(task)) {
         stats.subjectStats[subject].completed++;
       }
 
-      const studyTime = task.studyLogs.reduce((sum: number, log: any) => sum + log.duration, 0);
+      const studyTime = task.studyLogs.reduce((sum, log) => sum + log.duration, 0);
       stats.subjectStats[subject].studyTime += studyTime;
       stats.totalStudyTime += studyTime;
     });
@@ -365,6 +421,17 @@ router.get('/mentees/:id/planner/monthly', async (req: AuthRequest, res: Respons
       orderBy: { date: 'asc' },
     });
 
+    // 해당 월의 일일 피드백(DailyFeedback)도 함께 조회
+    const dailyFeedbacks = await prisma.dailyFeedback.findMany({
+      where: {
+        menteeId: id as string,
+        date: {
+          gte: start,
+          lte: end,
+        },
+      },
+    });
+
     const tasksByDate: Record<string, any[]> = {};
     tasks.forEach((task) => {
       const dateKey = task.date.toISOString().split('T')[0];
@@ -374,12 +441,18 @@ router.get('/mentees/:id/planner/monthly', async (req: AuthRequest, res: Respons
       tasksByDate[dateKey].push(task);
     });
 
+    const feedbacksByDate: Record<string, any> = {};
+    dailyFeedbacks.forEach((fb) => {
+      const dateKey = fb.date.toISOString().split('T')[0];
+      feedbacksByDate[dateKey] = fb;
+    });
+
     const stats = {
       totalTasks: tasks.length,
       // 과제 제출 기준으로 달성률 계산
-      completedTasks: tasks.filter((t) => t.submissions && t.submissions.length > 0).length,
+      completedTasks: countCompletedTasks(tasks),
       totalStudyTime: tasks.reduce(
-        (sum: number, task) => sum + task.studyLogs.reduce((s: number, log: any) => s + log.duration, 0),
+        (sum, task) => sum + task.studyLogs.reduce((s, log) => s + log.duration, 0),
         0
       ),
       subjectStats: {} as Record<string, { total: number; completed: number; studyTime: number }>,
@@ -392,15 +465,15 @@ router.get('/mentees/:id/planner/monthly', async (req: AuthRequest, res: Respons
       }
       stats.subjectStats[subject].total++;
       // 과제 제출 기준으로 달성률 계산
-      if (task.submissions && task.submissions.length > 0) {
+      if (isTaskCompleted(task)) {
         stats.subjectStats[subject].completed++;
       }
 
-      const studyTime = task.studyLogs.reduce((sum: number, log: any) => sum + log.duration, 0);
+      const studyTime = task.studyLogs.reduce((sum, log) => sum + log.duration, 0);
       stats.subjectStats[subject].studyTime += studyTime;
     });
 
-    res.json({ tasksByDate, stats, year: targetYear, month: targetMonth });
+    res.json({ tasksByDate, feedbacksByDate, stats, year: targetYear, month: targetMonth });
   } catch (error) {
     console.error('월간 플래너를 불러오는데 실패했습니다 오류:', error);
     res.status(500).json({ error: '월간 플래너를 불러오는데 실패했습니다.' });
@@ -411,7 +484,36 @@ router.get('/mentees/:id/planner/monthly', async (req: AuthRequest, res: Respons
 router.post('/tasks', async (req: AuthRequest, res: Response) => {
   try {
     const mentorId = req.user!.userId;
-    const { menteeId, title, description, subject, date, worksheetId, pdfUrl, learningGoals } = req.body;
+    const { menteeId, title, description, subject, date, worksheetId, pdfUrl, learningGoals, materials } = req.body;
+
+    // materials 배열 검증 (새로운 방식)
+    if (materials && Array.isArray(materials)) {
+      const { MAX_TASK_MATERIALS } = await import('../constants/limits');
+
+      // 최소 1개 검증
+      if (materials.length === 0) {
+        return res.status(400).json({ error: '최소 1개의 학습 자료를 등록해주세요.' });
+      }
+
+      // 최대 개수 검증
+      if (materials.length > MAX_TASK_MATERIALS) {
+        return res.status(400).json({
+          error: `학습 자료는 최대 ${MAX_TASK_MATERIALS}개까지 등록 가능합니다.`
+        });
+      }
+
+      // 각 material 타입별 필수 필드 검증
+      for (const material of materials) {
+        if (material.type === 'PDF' && !material.pdfUrl) {
+          return res.status(400).json({ error: 'PDF 타입은 pdfUrl이 필요합니다.' });
+        }
+        if (material.type === 'COLUMN' && !material.columnTitle && !material.columnContent) {
+          return res.status(400).json({
+            error: '칼럼 타입은 제목 또는 내용이 필요합니다.'
+          });
+        }
+      }
+    }
 
     // UTC 기준으로 날짜 파싱 (타임존 문제 해결)
     const taskDate = parseUTCDate(date);
@@ -422,7 +524,7 @@ router.post('/tasks', async (req: AuthRequest, res: Response) => {
       prisma.user.findUnique({ where: { id: mentorId }, select: { name: true } }),
     ]);
 
-    // 트랜잭션으로 Task와 LearningGoal 함께 생성
+    // 트랜잭션으로 Task, TaskMaterial, LearningGoal 함께 생성
     const task = await prisma.$transaction(async (tx) => {
       // 1. Task 생성
       const newTask = await tx.task.create({
@@ -433,13 +535,28 @@ router.post('/tasks', async (req: AuthRequest, res: Response) => {
           description,
           subject,
           date: taskDate,
-          worksheetId,
-          pdfUrl,
+          worksheetId, // 하위 호환성 유지
+          pdfUrl,      // 하위 호환성 유지
           isFixed: true,
         },
       });
 
-      // 2. LearningGoal 생성 (있는 경우)
+      // 2. TaskMaterial 일괄 생성 (새로운 방식)
+      if (materials && Array.isArray(materials) && materials.length > 0) {
+        await tx.taskMaterial.createMany({
+          data: materials.map((m: any, idx: number) => ({
+            taskId: newTask.id,
+            type: m.type,
+            order: m.order !== undefined ? m.order : idx,
+            pdfUrl: m.pdfUrl || null,
+            pdfFileName: m.pdfFileName || null, // PDF 원본 파일명
+            columnTitle: m.columnTitle || null,
+            columnContent: m.columnContent || null,
+          })),
+        });
+      }
+
+      // 3. LearningGoal 생성 (있는 경우)
       if (learningGoals && Array.isArray(learningGoals) && learningGoals.length > 0) {
         await tx.learningGoal.create({
           data: {
@@ -605,6 +722,16 @@ router.patch('/tasks/:id/approve', async (req: AuthRequest, res: Response) => {
       },
     });
 
+    // 스트릭 업데이트 (과제 승인 시)
+    if (isApproved) {
+      try {
+        await updateStreak(task.menteeId, task.date);
+      } catch (streakError) {
+        console.error('[Streak Error] Failed to update streak on task approval:', streakError);
+        // 스트릭 업데이트 실패해도 과제 승인은 계속 진행
+      }
+    }
+
     res.json({
       task,
       message: isApproved ? '과제가 승인되었습니다.' : '승인이 취소되었습니다.'
@@ -664,6 +791,110 @@ router.delete('/tasks/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('할 일 삭제에 실패했습니다. 오류:', error);
     res.status(500).json({ error: '할 일 삭제에 실패했습니다.' });
+  }
+});
+
+// 멘토의 모든 피드백 목록 조회
+router.get('/feedbacks', async (req: AuthRequest, res: Response) => {
+  try {
+    const mentorId = req.user!.userId;
+
+    const feedbacks = await prisma.feedback.findMany({
+      where: { mentorId },
+      include: {
+        task: {
+          include: {
+            mentee: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // 프론트엔드에서 기대하는 형식으로 변환
+    const formattedFeedbacks = feedbacks.map(f => ({
+      id: f.id,
+      menteeId: f.task.menteeId,
+      menteeName: f.task.mentee.name,
+      taskTitle: f.task.title,
+      subject: f.subject,
+      summary: f.summary,
+      content: f.content,
+      createdAt: f.createdAt,
+      taskId: f.taskId,
+    }));
+
+    res.json(formattedFeedbacks);
+  } catch (error) {
+    console.error('피드백 목록 조회 오류:', error);
+    res.status(500).json({ error: '피드백 목록을 불러오는데 실패했습니다.' });
+  }
+});
+
+// 특정 멘티의 피드백 목록 조회
+router.get('/mentees/:menteeId/feedbacks', async (req: AuthRequest, res: Response) => {
+  try {
+    const mentorId = req.user!.userId;
+    const { menteeId } = req.params as { menteeId: string };
+
+    // 권한 검증: 현재 멘토가 이 멘티를 담당하는지 확인
+    const relation = await prisma.mentorMentee.findUnique({
+      where: {
+        mentorId_menteeId: {
+          mentorId,
+          menteeId,
+        },
+      },
+    });
+
+    if (!relation) {
+      return res.status(403).json({ error: '해당 멘티에 접근할 권한이 없습니다.' });
+    }
+
+    const feedbacks = await prisma.feedback.findMany({
+      where: {
+        mentorId,
+        task: {
+          menteeId,
+        },
+      },
+      include: {
+        task: {
+          include: {
+            mentee: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // 프론트엔드에서 기대하는 형식으로 변환
+    const formattedFeedbacks = feedbacks.map(f => ({
+      id: f.id,
+      menteeId: f.task.menteeId,
+      menteeName: f.task.mentee.name,
+      taskTitle: f.task.title,
+      subject: f.subject,
+      summary: f.summary,
+      content: f.content,
+      createdAt: f.createdAt,
+      taskId: f.taskId,
+    }));
+
+    res.json(formattedFeedbacks);
+  } catch (error) {
+    console.error('피드백 목록 조회 오류:', error);
+    res.status(500).json({ error: '피드백 목록을 불러오는데 실패했습니다.' });
   }
 });
 
@@ -754,7 +985,6 @@ router.get('/feedbacks/:id', async (req: AuthRequest, res: Response) => {
               select: {
                 id: true,
                 name: true,
-                nickname: true,
               },
             },
             submissions: {
@@ -817,6 +1047,37 @@ router.put('/feedbacks/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// 피드백 삭제
+router.delete('/feedbacks/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const mentorId = req.user!.userId;
+    const { id } = req.params as { id: string };
+
+    // 권한 검증: 해당 피드백이 존재하고 현재 멘토가 작성자인지 확인
+    const existingFeedback = await prisma.feedback.findUnique({
+      where: { id },
+      select: { mentorId: true },
+    });
+
+    if (!existingFeedback) {
+      return res.status(404).json({ error: '피드백을 찾을 수 없습니다.' });
+    }
+
+    if (existingFeedback.mentorId !== mentorId) {
+      return res.status(403).json({ error: '삭제 권한이 없습니다.' });
+    }
+
+    await prisma.feedback.delete({
+      where: { id },
+    });
+
+    res.json({ message: '피드백이 삭제되었습니다.' });
+  } catch (error) {
+    console.error('피드백 삭제에 실패했습니다. 오류:', error);
+    res.status(500).json({ error: '피드백 삭제에 실패했습니다.' });
+  }
+});
+
 // 학습지 목록
 router.get('/worksheets', async (req: AuthRequest, res: Response) => {
   try {
@@ -844,6 +1105,26 @@ router.post('/worksheets', async (req: AuthRequest, res: Response) => {
     const mentorId = req.user!.userId;
     const { title, subject, content, pdfUrl, type } = req.body;
 
+    // 검증 1: PDF와 칼럼 동시 등록 방지
+    const hasPdf = pdfUrl && pdfUrl.trim();
+    const hasColumn = content && content.trim();
+
+    if (hasPdf && hasColumn) {
+      return res.status(400).json({
+        error: 'PDF와 칼럼을 동시에 등록할 수 없습니다.'
+      });
+    }
+
+    // 검증 2: 둘 다 없는 경우 방지
+    if (!hasPdf && !hasColumn) {
+      return res.status(400).json({
+        error: '학습지 내용(PDF 또는 칼럼)을 등록해주세요.'
+      });
+    }
+
+    // 검증 3: type 자동 결정
+    const finalType = hasColumn ? 'COLUMN' : 'PDF';
+
     const worksheet = await prisma.worksheet.create({
       data: {
         createdById: mentorId,
@@ -851,7 +1132,7 @@ router.post('/worksheets', async (req: AuthRequest, res: Response) => {
         subject,
         content,
         pdfUrl,
-        type,
+        type: finalType,
       },
     });
 
@@ -984,7 +1265,6 @@ router.post('/daily-feedbacks', async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
-            nickname: true,
           },
         },
       },
@@ -1032,7 +1312,6 @@ router.put('/daily-feedbacks/:id', async (req: AuthRequest, res: Response) => {
           select: {
             id: true,
             name: true,
-            nickname: true,
           },
         },
       },
@@ -1138,7 +1417,7 @@ router.post('/monthly-feedbacks', async (req: AuthRequest, res: Response) => {
         nextMonthGoals,
       },
       include: {
-        mentee: { select: { id: true, name: true, nickname: true } },
+        mentee: { select: { id: true, name: true } },
       },
     });
 
@@ -1174,7 +1453,7 @@ router.put('/monthly-feedbacks/:id', async (req: AuthRequest, res: Response) => 
       where: { id },
       data: { overallComment, strengths, improvements, nextMonthGoals },
       include: {
-        mentee: { select: { id: true, name: true, nickname: true } },
+        mentee: { select: { id: true, name: true } },
       },
     });
 
@@ -1273,7 +1552,7 @@ router.post('/weekly-feedbacks', async (req: AuthRequest, res: Response) => {
         nextWeekGoals,
       },
       include: {
-        mentee: { select: { id: true, name: true, nickname: true } },
+        mentee: { select: { id: true, name: true } },
       },
     });
 
@@ -1309,7 +1588,7 @@ router.put('/weekly-feedbacks/:id', async (req: AuthRequest, res: Response) => {
       where: { id },
       data: { overallComment, strengths, improvements, nextWeekGoals },
       include: {
-        mentee: { select: { id: true, name: true, nickname: true } },
+        mentee: { select: { id: true, name: true } },
       },
     });
 
@@ -1426,12 +1705,12 @@ router.get('/mentees/:menteeId/stats/dashboard', async (req: AuthRequest, res: R
         submissions: true,
         feedbacks: true,
         studyLogs: true,
-      },
+      }
     });
 
     // === 현재 월 통계 계산 ===
     const currentTotal = currentTasks.length;
-    const currentCompleted = currentTasks.filter(t => t.isApproved).length;
+    const currentCompleted = countCompletedTasks(currentTasks);
     const currentCompletionRate = currentTotal > 0 ? Math.round((currentCompleted / currentTotal) * 100) : 0;
     const currentStudyTime = currentTasks.reduce((sum, t) =>
       sum + t.studyLogs.reduce((s, log) => s + log.duration, 0), 0);
@@ -1445,7 +1724,7 @@ router.get('/mentees/:menteeId/stats/dashboard', async (req: AuthRequest, res: R
         subjectStats[subject] = { total: 0, completed: 0, completionRate: 0, studyTime: 0 };
       }
       subjectStats[subject].total++;
-      if (task.isApproved) subjectStats[subject].completed++;
+      if (isTaskCompleted(task)) subjectStats[subject].completed++;
       subjectStats[subject].studyTime += task.studyLogs.reduce((s, log) => s + log.duration, 0);
     });
     Object.values(subjectStats).forEach(stat => {
@@ -1474,7 +1753,7 @@ router.get('/mentees/:menteeId/stats/dashboard', async (req: AuthRequest, res: R
       });
 
       const total = weekTasks.length;
-      const completed = weekTasks.filter(t => t.isApproved).length;
+      const completed = countCompletedTasks(weekTasks);
       const studyTime = weekTasks.reduce((sum, t) =>
         sum + t.studyLogs.reduce((s, log) => s + log.duration, 0), 0);
 
@@ -1489,13 +1768,13 @@ router.get('/mentees/:menteeId/stats/dashboard', async (req: AuthRequest, res: R
 
     // === 이전 월 통계 ===
     const prevTotal = prevTasks.length;
-    const prevCompleted = prevTasks.filter(t => t.isApproved).length;
+    const prevCompleted = countCompletedTasks(prevTasks);
     const prevCompletionRate = prevTotal > 0 ? Math.round((prevCompleted / prevTotal) * 100) : 0;
     const prevStudyTime = prevTasks.reduce((sum, t) =>
       sum + t.studyLogs.reduce((s, log) => s + log.duration, 0), 0);
 
     // === 피드백 응답률 ===
-    const tasksSubmitted = currentTasks.filter(t => t.submissions.length > 0).length;
+    const tasksSubmitted = countCompletedTasks(currentTasks);
     const feedbacksGiven = currentTasks.filter(t => t.feedbacks.length > 0).length;
     const feedbackRate = tasksSubmitted > 0 ? Math.round((feedbacksGiven / tasksSubmitted) * 100) : 0;
 
@@ -1547,6 +1826,86 @@ router.get('/mentees/:menteeId/stats/dashboard', async (req: AuthRequest, res: R
   } catch (error) {
     console.error('통계를 불러오는데 실패했습니다. 오류:', error);
     res.status(500).json({ error: '통계를 불러오는데 실패했습니다.' });
+  }
+});
+
+// 특정 멘티의 스트릭 정보 조회
+router.get('/mentees/:id/streak', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id: menteeId } = req.params as { id: string };
+    const mentorId = req.user!.userId;
+
+    // 권한 검증 (본인 멘티인지 확인)
+    const relation = await prisma.mentorMentee.findFirst({
+      where: { mentorId, menteeId },
+    });
+
+    if (!relation) {
+      return res.status(403).json({ error: '권한이 없습니다.' });
+    }
+
+    const streak = await getStreak(menteeId);
+
+    if (!streak) {
+      return res.json({
+        currentStreak: 0,
+        longestStreak: 0,
+        lastStudyDate: null,
+      });
+    }
+
+    res.json(streak);
+  } catch (error) {
+    console.error('스트릭 조회 오류:', error);
+    res.status(500).json({ error: '스트릭 조회 실패' });
+  }
+});
+
+// 특정 멘티의 히트맵 데이터 조회
+router.get('/mentees/:id/heatmap', async (req: AuthRequest, res: Response) => {
+  try {
+    const { id: menteeId } = req.params as { id: string };
+    const mentorId = req.user!.userId;
+    const { year } = req.query;
+
+    // 권한 검증
+    const relation = await prisma.mentorMentee.findFirst({
+      where: { mentorId, menteeId },
+    });
+
+    if (!relation) {
+      return res.status(403).json({ error: '권한이 없습니다.' });
+    }
+
+    let endDate: Date | undefined;
+    if (year) {
+      const yearNum = parseInt(year as string, 10);
+      if (isNaN(yearNum)) {
+        return res.status(400).json({ error: '올바른 연도를 입력해주세요.' });
+      }
+      endDate = new Date(Date.UTC(yearNum, 11, 31));
+    }
+
+    const data = await generateHeatmapData(menteeId, endDate);
+    const resultYear = endDate ? endDate.getUTCFullYear() : getTodayUTC().getUTCFullYear();
+
+    res.json({ data, year: resultYear });
+  } catch (error) {
+    console.error('히트맵 조회 오류:', error);
+    res.status(500).json({ error: '히트맵 조회 실패' });
+  }
+});
+
+// 본인 소속 멘티들의 주간 랭킹 조회
+router.get('/ranking', async (req: AuthRequest, res: Response) => {
+  try {
+    const mentorId = req.user!.userId;
+    const rankings = await calculateWeeklyRanking(mentorId);
+
+    res.json({ rankings });
+  } catch (error) {
+    console.error('랭킹 조회 오류:', error);
+    res.status(500).json({ error: '랭킹 조회 실패' });
   }
 });
 

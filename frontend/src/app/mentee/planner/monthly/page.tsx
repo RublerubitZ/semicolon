@@ -1,5 +1,6 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
+import { getSubjectLabel, getSubjectBadgeColor } from '@/constants/subjects';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -30,19 +31,6 @@ interface MonthlyData {
   month: number;
 }
 
-const DEFAULT_SUBJECT_LABELS: Record<string, { label: string; color: string }> = {
-  KOREAN: { label: '국어', color: 'bg-blue-100 text-blue-800' },
-  ENGLISH: { label: '영어', color: 'bg-green-100 text-green-800' },
-  MATH: { label: '수학', color: 'bg-purple-100 text-purple-800' },
-};
-
-const getSubjectLabel = (subject: string) => {
-  return DEFAULT_SUBJECT_LABELS[subject]?.label || subject;
-};
-
-const getSubjectColor = (subject: string) => {
-  return DEFAULT_SUBJECT_LABELS[subject]?.color || 'bg-gray-100 text-gray-800';
-};
 
 export default function MonthlyPlanner() {
   const router = useRouter();
@@ -192,7 +180,7 @@ export default function MonthlyPlanner() {
 
               return (
                 <div key={subject} className="flex items-center justify-between">
-                  <span className={`text-xs px-2 py-1 rounded ${getSubjectColor(subject)}`}>
+                  <span className={`text-xs px-2 py-1 rounded ${getSubjectBadgeColor(subject)}`}>
                     {getSubjectLabel(subject)}
                   </span>
                   <div className="flex items-center gap-2 text-sm">

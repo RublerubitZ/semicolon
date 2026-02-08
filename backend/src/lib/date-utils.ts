@@ -17,9 +17,17 @@ export const isValidDateStr = (dateStr: string): boolean => {
 /**
  * YYYY-MM-DD 형식의 날짜 문자열을 UTC 기준 Date 객체로 변환
  * 예: "2026-02-04" -> UTC 2026-02-04 00:00:00
+ * @throws {Error} 날짜 형식이 올바르지 않거나 유효하지 않은 날짜인 경우
  */
 export const parseUTCDate = (dateStr: string): Date => {
-  return new Date(dateStr + 'T00:00:00.000Z');
+  if (!isValidDateStr(dateStr)) {
+    throw new Error(`Invalid date format: ${dateStr}. Expected YYYY-MM-DD`);
+  }
+  const date = new Date(dateStr + 'T00:00:00.000Z');
+  if (isNaN(date.getTime())) {
+    throw new Error(`Invalid date value: ${dateStr}`);
+  }
+  return date;
 };
 
 /**

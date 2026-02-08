@@ -65,7 +65,7 @@ router.post('/tasks/:taskId/comments', async (req: AuthRequest, res: Response) =
           select: {
             id: true,
             name: true,
-            nickname: true,
+            
             profileImage: true,
             role: true,
           },
@@ -80,7 +80,7 @@ router.post('/tasks/:taskId/comments', async (req: AuthRequest, res: Response) =
       try {
         const sender = await prisma.user.findUnique({
           where: { id: userId },
-          select: { name: true, nickname: true },
+          select: { name: true },
         });
 
         await prisma.notification.create({
@@ -88,7 +88,7 @@ router.post('/tasks/:taskId/comments', async (req: AuthRequest, res: Response) =
             userId: recipientId,
             type: 'NEW_FEEDBACK',
             title: '새로운 댓글이 도착했습니다',
-            content: `${sender?.nickname || sender?.name}님이 댓글을 남겼습니다: ${content.slice(0, 50)}${content.length > 50 ? '...' : ''}`,
+            content: `${sender?.name}님이 댓글을 남겼습니다: ${content.slice(0, 50)}${content.length > 50 ? '...' : ''}`,
             relatedId: taskId,
           },
         });
@@ -154,7 +154,7 @@ router.get('/tasks/:taskId/comments', async (req: AuthRequest, res: Response) =>
           select: {
             id: true,
             name: true,
-            nickname: true,
+            
             profileImage: true,
             role: true,
           },

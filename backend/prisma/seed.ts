@@ -27,7 +27,7 @@ async function main() {
       email: 'mentor@seolstudy.com',
       password: mentorPassword,
       name: '김멘토',
-      nickname: '멘토쌤',
+      
       role: 'MENTOR',
     },
   });
@@ -39,7 +39,7 @@ async function main() {
       email: 'mentee1@seolstudy.com',
       password: menteePassword,
       name: '이학생',
-      nickname: '열공이',
+      
       role: 'MENTEE',
     },
   });
@@ -50,7 +50,7 @@ async function main() {
       email: 'mentee2@seolstudy.com',
       password: menteePassword,
       name: '박학생',
-      nickname: '공부왕',
+      
       role: 'MENTEE',
     },
   });

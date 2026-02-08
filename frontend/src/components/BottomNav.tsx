@@ -5,10 +5,14 @@ import { BiSolidBookAlt } from "react-icons/bi";
 import { PiCalendarDotsFill } from "react-icons/pi";
 import { PiAlignBottomFill } from "react-icons/pi";
 import { motion } from 'framer-motion';
+import { useOverlayStore } from '@/stores/useOverlayStore';
 
 export default function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
+  const { isOverlayOpen } = useOverlayStore();
+
+  if (isOverlayOpen) return null;
 
   const navItems = [
     { label: '홈', icon: GoHomeFill, path: '/mentee', active: pathname === '/mentee' },

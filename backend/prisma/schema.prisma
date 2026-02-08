@@ -15,7 +15,6 @@ model User {
   email        String   @unique
   password     String
   name         String
-  nickname     String?
   role         Role     @default(MENTEE)
   grade        String?  // 학년 (고1, 고2, 고3, 재수생 등)
   profileImage String?
@@ -23,6 +22,16 @@ model User {
   birthDate    String?  // 생년월일 (예: "2008.06.05")
   goal         String?  // 목표 (예: "수능 준비")
   phone        String?  // 휴대폰번호 (예: "010-1234-5678")
+
+  // 푸시 알림 설정 (각 항목별 ON/OFF)
+  notifyTaskIncomplete Boolean @default(true)  // 과제 미완료 알림
+  notifyNewFeedback    Boolean @default(true)  // 새로운 피드백 알림
+  notifyReminder       Boolean @default(true)  // 리마인더 알림
+  notifyNewTask        Boolean @default(true)  // 새로운 과제 등록 알림
+  notifyTaskSubmitted  Boolean @default(true)  // 과제 제출 알림
+  notifyTaskApproved   Boolean @default(true)  // 과제 승인 알림
+  notifyStreakBroken   Boolean @default(true)  // 스트릭 깨짐 알림
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -44,6 +53,7 @@ model User {
   monthlyFeedbacksReceived MonthlyFeedback[] @relation("MonthlyFeedbacksMentee")
   weeklyFeedbacksGiven     WeeklyFeedback[]  @relation("WeeklyFeedbacksMentor")
   weeklyFeedbacksReceived  WeeklyFeedback[]  @relation("WeeklyFeedbacksMentee")
+  studyStreak            StudyStreak?      @relation("MenteeStreak")
 }
 
 enum Role {
@@ -109,9 +119,41 @@ model Task {
   feedbackComments FeedbackComment[]
   studyLogs        StudyTimeLog[]
   learningGoal     LearningGoal?      // 학습 목표 (선택)
+  materials        TaskMaterial[]     // 학습 자료 (PDF, 칼럼)
 
   @@index([menteeId, date])
   @@index([mentorId, date])
+  @@index([isFixed])
+  @@index([menteeId, isFixed])
+  @@index([subject])
+}
+
+// 과제 학습 자료 (PDF, 칼럼)
+model TaskMaterial {
+  id        String       @id @default(cuid())
+  taskId    String
+  type      MaterialType
+  order     Int          @default(0)
+
+  // PDF 타입용
+  pdfUrl      String?
+  pdfFileName String? // PDF 원본 파일명
+
+  // COLUMN 타입용
+  columnTitle   String?
+  columnContent String?
+
+  createdAt DateTime @default(now())
+
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, order])
+  @@map("task_materials")
+}
+
+enum MaterialType {
+  PDF
+  COLUMN
 }
 
 // 학습 목표
@@ -255,6 +297,9 @@ model Notification {
   createdAt DateTime         @default(now())
 
   user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
 }
 
 enum NotificationType {
@@ -264,6 +309,7 @@ enum NotificationType {
   NEW_TASK         // 새로운 과제 등록 (멘토 -> 멘티)
   TASK_SUBMITTED   // 과제 제출 (멘티 -> 멘토)
   TASK_APPROVED    // 과제 승인 (멘토 -> 멘티)
+  STREAK_BROKEN    // 스트릭 깨짐 (멘티 -> 멘토)
 }
 
 // 일일 전체 피드백
@@ -325,4 +371,20 @@ model WeeklyFeedback {
 
   @@unique([menteeId, year, month, weekNumber]) // 멘티당 주별로 하나만
   @@index([menteeId, year, month])
+}
+
+// 학습 스트릭 (연속 학습 일수)
+model StudyStreak {
+  id            String    @id @default(cuid())
+  menteeId      String    @unique // 멘티당 1개
+  currentStreak Int       @default(0) // 현재 연속 학습 일수
+  longestStreak Int       @default(0) // 최대 연속 학습 일수
+  lastStudyDate DateTime? @db.Date // 마지막 학습 날짜 (UTC)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  mentee User @relation("MenteeStreak", fields: [menteeId], references: [id], onDelete: Cascade)
+
+  @@index([menteeId])
+  @@index([lastStudyDate])
 }

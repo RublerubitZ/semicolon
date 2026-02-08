@@ -7,13 +7,19 @@ import { useRouter } from 'next/navigation';
 import { FaBell } from "react-icons/fa";
 import { IoIosArrowDown } from "react-icons/io";
 import { motion, AnimatePresence } from 'framer-motion';
+import { SUBJECT_LABELS, DEFAULT_SUBJECT_VALUES } from '@/constants/subjects';
+import { getTaskStatusInfo } from '@/constants/taskStatus';
+import { Z_INDEX } from '@/constants/zIndex';
 
 const WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"];
 
-const SUBJECT_MAP: Record<string, string> = {
-  KOREAN: '국어',
-  ENGLISH: '영어',
-  MATH: '수학'
+const getSubjectColor = (subject: string) => {
+  switch (subject) {
+    case 'KOREAN': return 'bg-pink-400';
+    case 'ENGLISH': return 'bg-yellow-400';
+    case 'MATH': return 'bg-blue-400';
+    default: return 'bg-gray-400';
+  }
 };
 
 interface Task {
@@ -138,15 +144,6 @@ export default function CalendarPage() {
 
   const grid = useMemo(() => buildMonthGrid(year, month), [year, month]);
 
-  const getSubjectColor = (subject: string) => {
-    switch (subject) {
-      case 'KOREAN': return 'bg-pink-400';
-      case 'ENGLISH': return 'bg-yellow-400';
-      case 'MATH': return 'bg-blue-400';
-      default: return 'bg-gray-400';
-    }
-  };
-
   // 데이터 검증 로직 추가: 현재 달과 데이터의 달이 일치할 때만 반환
   const getTasksForDate = (dateKey: string) => {
     if (!monthlyData || monthlyData.year !== year || monthlyData.month !== month) return [];
@@ -209,13 +206,38 @@ export default function CalendarPage() {
         </button>
 
         {/* Legend */}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {["국어", "영어", "수학", "피드백"].map((label, idx) => (
-            <div key={label} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold bg-gray-50 border border-gray-100`}>
-              <span className={`w-2 h-2 rounded-full ${['bg-pink-400', 'bg-yellow-400', 'bg-blue-400', 'bg-green-400'][idx]}`} />
-              {label}
-            </div>
-          ))}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[12px] font-semibold bg-pink-100 text-black"
+          >
+            <span className="w-2 h-2 rounded-full bg-pink-400" />
+            {SUBJECT_LABELS.KOREAN}
+          </button>
+
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[12px] font-semibold bg-yellow-100 text-black"
+          >
+            <span className="w-2 h-2 rounded-full bg-yellow-400" />
+            {SUBJECT_LABELS.ENGLISH}
+          </button>
+
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[12px] font-semibold bg-blue-100 text-black"
+          >
+            <span className="w-2 h-2 rounded-full bg-blue-400" />
+            {SUBJECT_LABELS.MATH}
+          </button>
+
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[12px] font-semibold bg-green-100 text-black"
+          >
+            <span className="w-2 h-2 rounded-full bg-green-400" />
+            피드백
+          </button>
         </div>
 
         {/* Swipeable Calendar Area */}
@@ -246,11 +268,10 @@ export default function CalendarPage() {
               const mentorTasks = tasks.filter(t => t.isFixed);
               const dailyFeedback = getDailyFeedbackForDate(cell.key);
               const rate = getCompletionRate(tasks);
-              
+
               // Unique subjects for dots (Only show main 3 subjects for mentor tasks)
-              const mainSubjects = ['KOREAN', 'ENGLISH', 'MATH'];
               const displaySubjects = Array.from(new Set(mentorTasks.map(t => t.subject)))
-                .filter(s => mainSubjects.includes(s));
+                .filter(s => DEFAULT_SUBJECT_VALUES.includes(s as any));
 
               return (
                 <button
@@ -356,7 +377,8 @@ export default function CalendarPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setPickerOpen(false)}
-              className="fixed inset-0 z-[110] flex items-end justify-center bg-black/40"
+              className="fixed inset-0 flex items-end justify-center bg-black/40"
+              style={{ zIndex: Z_INDEX.OVERLAY }}
             >
               <motion.div 
                 initial={{ y: "100%" }}
@@ -406,7 +428,8 @@ export default function CalendarPage() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSheetOpen(false)}
-              className="fixed inset-0 z-[110] flex items-end justify-center bg-black/40"
+              className="fixed inset-0 flex items-end justify-center bg-black/40"
+              style={{ zIndex: Z_INDEX.OVERLAY }}
             >
               <motion.div 
                 initial={{ y: "100%" }}
@@ -462,9 +485,13 @@ export default function CalendarPage() {
                           <div className={`w-3 h-3 rounded-full mt-1 shrink-0 ${getSubjectColor(task.subject)}`} />
                           <div>
                             <div className="text-[14px] font-bold text-gray-900">{task.title}</div>
-                            <div className="text-[11px] text-gray-500 mt-0.5">
-                              {SUBJECT_MAP[task.subject] || task.subject} • {task.submissions && task.submissions.length > 0 ? '제출 완료' : '미제출'}
-                              {!task.isFixed && <span className="ml-1 text-[9px] text-gray-400 font-normal">(자체과제)</span>}
+                            <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                              <span>{SUBJECT_LABELS[task.subject as keyof typeof SUBJECT_LABELS] || task.subject}</span>
+                              <span className="text-[8px] text-gray-300">•</span>
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${getTaskStatusInfo(task).style}`}>
+                                {getTaskStatusInfo(task).label}
+                              </span>
+                              {!task.isFixed && <span className="text-[9px] text-gray-400 font-normal">(자체과제)</span>}
                             </div>
                           </div>
                         </motion.div>

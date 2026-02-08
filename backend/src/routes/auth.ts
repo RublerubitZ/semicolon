@@ -8,9 +8,17 @@ const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required');
+if (!JWT_SECRET || JWT_SECRET.trim() === '') {
+  throw new Error('JWT_SECRET environment variable is required and must not be empty');
 }
+
+// JWT_SECRET 타입 가드 - 런타임에 안전하게 사용
+const getJwtSecret = (): string => {
+  if (!JWT_SECRET || JWT_SECRET.trim() === '') {
+    throw new Error('JWT_SECRET not configured');
+  }
+  return JWT_SECRET;
+};
 
 // 로그인
 router.post('/login', async (req: Request, res: Response) => {
@@ -28,7 +36,7 @@ router.post('/login', async (req: Request, res: Response) => {
         email: true,
         password: true,
         name: true,
-        nickname: true,
+        
         role: true,
         grade: true,
         profileImage: true,
@@ -48,19 +56,28 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
     }
 
+    // Access Token (30분)
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
+      getJwtSecret(),
+      { expiresIn: '30m' }
+    );
+
+    // Refresh Token (7일)
+    const refreshToken = jwt.sign(
+      { userId: user.id, type: 'refresh' },
+      getJwtSecret(),
       { expiresIn: '7d' }
     );
 
     res.json({
       token,
+      refreshToken,
       user: {
         id: user.id,
         email: user.email,
         name: user.name,
-        nickname: user.nickname,
+        
         role: user.role,
         grade: user.grade,
         profileImage: user.profileImage,
@@ -85,7 +102,7 @@ router.get('/me', async (req: Request, res: Response) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId: string };
+    const decoded = jwt.verify(token, getJwtSecret()) as { userId: string };
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
@@ -93,7 +110,7 @@ router.get('/me', async (req: Request, res: Response) => {
         id: true,
         email: true,
         name: true,
-        nickname: true,
+        
         role: true,
         grade: true,
         profileImage: true,
@@ -126,7 +143,7 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res: Response) =
         id: true,
         email: true,
         name: true,
-        nickname: true,
+        
         role: true,
         grade: true,
         profileImage: true,
@@ -178,10 +195,19 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res: Response) =
 router.patch('/update-profile', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { nickname, profileImage, grade, gender, birthDate, goal, phone } = req.body;
+    const {  profileImage, grade, gender, birthDate, goal, phone } = req.body;
 
-    const updateData: any = {};
-    if (nickname) updateData.nickname = nickname;
+    type UpdateProfileData = Partial<{
+      profileImage: string | null;
+      grade: string;
+      gender: string;
+      birthDate: string;
+      goal: string;
+      phone: string;
+    }>;
+
+    const updateData: UpdateProfileData = {};
+
     if (profileImage !== undefined) updateData.profileImage = profileImage;
     if (grade !== undefined) updateData.grade = grade;
     if (gender !== undefined) updateData.gender = gender;
@@ -196,7 +222,7 @@ router.patch('/update-profile', authMiddleware, async (req: AuthRequest, res: Re
         id: true,
         email: true,
         name: true,
-        nickname: true,
+        
         role: true,
         grade: true,
         profileImage: true,
@@ -252,6 +278,53 @@ router.patch('/change-password', authMiddleware, async (req: AuthRequest, res: R
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ error: '비밀번호 변경에 실패했습니다.' });
+  }
+});
+
+// 토큰 갱신
+router.post('/refresh', async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'Refresh token이 필요합니다.' });
+    }
+
+    // Refresh Token 검증
+    const decoded = jwt.verify(refreshToken, getJwtSecret()) as {
+      userId: string;
+      type: string;
+    };
+
+    if (decoded.type !== 'refresh') {
+      return res.status(401).json({ error: '유효하지 않은 refresh token입니다.' });
+    }
+
+    // 사용자 조회
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: '사용자를 찾을 수 없습니다.' });
+    }
+
+    // 새로운 Access Token 발급
+    const newToken = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role },
+      getJwtSecret(),
+      { expiresIn: '30m' }
+    );
+
+    res.json({ token: newToken });
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(401).json({ error: '토큰 갱신에 실패했습니다.' });
   }
 });
 

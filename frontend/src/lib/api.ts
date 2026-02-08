@@ -88,3 +88,52 @@ export function resetApiUrl(): void {
   cachedApiUrl = null;
   isCheckingBackend = false;
 }
+
+/**
+ * Access Token 갱신
+ * @returns 새로운 Access Token 또는 null (실패 시)
+ */
+export async function refreshAccessToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+
+  const refreshToken = localStorage.getItem('refreshToken');
+  if (!refreshToken) {
+    console.warn('[Auth] No refresh token found');
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${getApiUrl()}/api/auth/refresh`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      console.error('[Auth] Token refresh failed:', response.status);
+      // Refresh 실패 시 로컬스토리지 정리
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      return null;
+    }
+
+    const data = await response.json();
+    const newToken = data.token;
+
+    // 새 토큰 저장
+    localStorage.setItem('token', newToken);
+    console.log('[Auth] Token refreshed successfully');
+
+    return newToken;
+  } catch (error) {
+    console.error('[Auth] Token refresh error:', error);
+    // 에러 시 로컬스토리지 정리
+    localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
+    localStorage.removeItem('user');
+    return null;
+  }
+}

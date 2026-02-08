@@ -23,7 +23,6 @@ interface Feedback {
     mentee: {
       id: string;
       name: string;
-      nickname?: string;
     };
     submissions: {
       id: string;
@@ -177,7 +176,7 @@ function FeedbackEditForm() {
               <p className="text-sm text-gray-900 mb-2">{feedback.task.description}</p>
             )}
             <p className="text-sm text-gray-900">
-              멘티: {feedback.task.mentee.nickname || feedback.task.mentee.name}
+              멘티: {feedback.task.mentee.name}
             </p>
           </div>
         </div>

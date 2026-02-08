@@ -1,241 +1,760 @@
 'use client';
-import { getApiUrl } from '@/lib/api';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { IoIosArrowBack, IoIosArrowForward } from 'react-icons/io';
+import { MdTrendingUp, MdTrendingDown, MdOutlineDataUsage } from 'react-icons/md';
+import { motion, AnimatePresence } from 'framer-motion';
 
-type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
+import { getApiUrl } from '@/lib/api';
+import { getAuthHeaders } from '@/lib/auth';
+import { toYYYYMMDD, addDays } from '@/lib/dateUtils';
+import { DEFAULT_SUBJECTS } from '@/constants/subjects';
+import Heatmap, { HeatmapData } from '@/components/heatmap/Heatmap';
+import WeeklyRanking, { WeeklyRankingItem } from '@/components/ranking/WeeklyRanking';
 
-interface SubjectStats {
-  total: number;
-  completed: number;
+// Interfaces
+interface StudyLog {
+  duration: number;
 }
 
-interface Stats {
-  KOREAN: SubjectStats;
-  ENGLISH: SubjectStats;
-  MATH: SubjectStats;
-}
-
-interface User {
+interface Task {
   id: string;
-  name: string;
-  nickname?: string;
-  email: string;
-  role: string;
-  grade?: string;
-  profileImage?: string;
+  subject: string;
+  isFixed: boolean;
+  date: string;
+  submissions: any[];
+  studyLogs: StudyLog[];
 }
 
-const SUBJECT_LABELS: Record<Subject, { label: string; color: string; bgColor: string }> = {
-  KOREAN: {
-    label: '국어',
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-600'
-  },
-  ENGLISH: {
-    label: '영어',
-    color: 'text-green-600',
-    bgColor: 'bg-green-600'
-  },
-  MATH: {
-    label: '수학',
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-600'
-  },
+interface SubjectData {
+  subject: string;
+  minutes: number;
+  color: string;
+}
+
+interface PeriodData {
+  totalTasks: number;
+  completedTasks: number;
+  dailyData: { day: string; minutes: number; date?: string }[];
+  subjectData: SubjectData[];
+  previousAverage: number;
+}
+
+const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
+
+const formatMinutesToTime = (minutes: number) => {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins}분`;
+  if (mins === 0) return `${hours}시간`;
+  return `${hours}시간 ${mins}분`;
+};
+
+const formatMinutesToHours = (minutes: number) => {
+  return `${Math.floor(minutes / 60)}시간`;
 };
 
 export default function ReportsPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [tab, setTab] = useState<'weekly' | 'monthly'>('weekly');
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Data states
+  const [weeklyData, setWeeklyData] = useState<PeriodData | null>(null);
+  const [monthlyData, setMonthlyData] = useState<PeriodData | null>(null);
+  
+  // Feedback states
+  const [weeklyFeedback, setWeeklyFeedback] = useState<any>(null);
+  const [monthlyFeedback, setMonthlyFeedback] = useState<any>(null);
+  
+  // Heatmap & Ranking states
+  const [heatmapData, setHeatmapData] = useState<HeatmapData[]>([]);
+  const [selectedHeatmapYear, setSelectedHeatmapYear] = useState(new Date().getFullYear());
+  const [rankingData, setRankingData] = useState<WeeklyRankingItem[]>([]);
+  const [user, setUser] = useState<any>(null);
 
-  // 통계 조회
-  const fetchStats = async () => {
+  // Tooltip state
+  const [hoveredBar, setHoveredBar] = useState<{ day: string; minutes: number } | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      setUser(JSON.parse(userStr));
+    }
+    fetchRanking();
+    fetchHeatmap(selectedHeatmapYear);
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'weekly') {
+      fetchWeeklyData();
+    } else {
+      fetchMonthlyData();
+    }
+  }, [tab, currentDate]);
+
+  useEffect(() => {
+    fetchHeatmap(selectedHeatmapYear);
+  }, [selectedHeatmapYear]);
+
+  const fetchWeeklyData = async () => {
     setIsLoading(true);
-
     try {
-      const token = localStorage.getItem('token');
+      const day = currentDate.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const startOfWeek = addDays(currentDate, mondayOffset);
+      const prevStartOfWeek = addDays(startOfWeek, -7);
+      
+      const year = startOfWeek.getFullYear();
+      const month = startOfWeek.getMonth() + 1;
+      // 1일부터의 일수를 7로 나눠서 주차 계산 (정확한 주차 계산 로직은 프로젝트 기준에 따라 다를 수 있음)
+      const weekNumber = Math.ceil((startOfWeek.getDate() + new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), 1).getDay()) / 7);
 
-      const res = await fetch(`${getApiUrl()}/api/mentee/stats`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const [currentRes, prevRes, feedbackRes] = await Promise.all([
+        fetch(`${getApiUrl()}/api/mentee/planner/weekly?startDate=${toYYYYMMDD(startOfWeek)}`, { headers: getAuthHeaders() }),
+        fetch(`${getApiUrl()}/api/mentee/planner/weekly?startDate=${toYYYYMMDD(prevStartOfWeek)}`, { headers: getAuthHeaders() }),
+        fetch(`${getApiUrl()}/api/mentee/weekly-feedbacks?year=${year}&month=${month}&weekNumber=${weekNumber}`, { headers: getAuthHeaders() })
+      ]);
+      
+      if (!currentRes.ok || !prevRes.ok) throw new Error('Failed to fetch data');
+      
+      const currentData = await currentRes.json();
+      const prevData = await prevRes.json();
+      const feedbackData = feedbackRes.ok ? await feedbackRes.json() : null;
+      
+      setWeeklyFeedback(feedbackData);
 
-      if (!res.ok) {
-        throw new Error('통계를 불러오는데 실패했습니다.');
+      // Process Previous Week
+      const prevTasks: Task[] = prevData.tasks;
+      const prevTotalMinutes = prevTasks.reduce((sum, task) => 
+        sum + task.studyLogs.reduce((s, log) => s + log.duration, 0), 0
+      );
+      const prevAverage = Math.round(prevTotalMinutes / 7);
+
+      // Process Current Week
+      const tasks: Task[] = currentData.tasks;
+      const dailyStats: Record<string, number> = {};
+      const subjectStats: Record<string, number> = {};
+      let totalTasks = 0;
+      let completedTasks = 0;
+
+      for (let i = 0; i < 7; i++) {
+        const d = addDays(startOfWeek, i);
+        dailyStats[toYYYYMMDD(d)] = 0;
       }
 
-      const data = await res.json();
-      setStats(data);
-    } catch (err) {
-      console.error('Stats error:', err);
+      tasks.forEach(task => {
+        const dateKey = toYYYYMMDD(task.date);
+        const duration = task.studyLogs.reduce((sum, log) => sum + log.duration, 0);
+        if (dailyStats[dateKey] !== undefined) dailyStats[dateKey] += duration;
+        if (task.isFixed) {
+          totalTasks++;
+          if (task.submissions.length > 0) completedTasks++;
+        }
+        subjectStats[task.subject] = (subjectStats[task.subject] || 0) + duration;
+      });
+
+      setWeeklyData({
+        totalTasks,
+        completedTasks,
+        dailyData: Object.entries(dailyStats).map(([date, minutes]) => ({
+          date,
+          day: DAYS[(new Date(date).getDay() + 6) % 7],
+          minutes
+        })).sort((a, b) => a.date!.localeCompare(b.date!)),
+        subjectData: DEFAULT_SUBJECTS.map(s => ({
+          subject: s.label,
+          minutes: subjectStats[s.value] || 0,
+          color: s.value === 'KOREAN' ? 'bg-pink-400' : s.value === 'ENGLISH' ? 'bg-yellow-400' : 'bg-blue-300'
+        })),
+        previousAverage: prevAverage,
+      });
+    } catch (error) {
+      console.error('Error fetching weekly data:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 달성률 계산
-  const calculateProgress = (completed: number, total: number): number => {
-    if (total === 0) return 0;
-    return Math.round((completed / total) * 100);
-  };
+  const fetchMonthlyData = async () => {
+    setIsLoading(true);
+    try {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth() + 1;
+      
+      const prevMonthDate = new Date(currentDate);
+      prevMonthDate.setMonth(currentDate.getMonth() - 1);
+      const prevYear = prevMonthDate.getFullYear();
+      const prevMonth = prevMonthDate.getMonth() + 1;
+      
+      const [currentRes, prevRes, feedbackRes] = await Promise.all([
+        fetch(`${getApiUrl()}/api/mentee/planner/monthly?year=${year}&month=${month}`, { headers: getAuthHeaders() }),
+        fetch(`${getApiUrl()}/api/mentee/planner/monthly?year=${prevYear}&month=${prevMonth}`, { headers: getAuthHeaders() }),
+        fetch(`${getApiUrl()}/api/mentee/monthly-feedbacks?year=${year}&month=${month}`, { headers: getAuthHeaders() })
+      ]);
+      
+      if (!currentRes.ok || !prevRes.ok) throw new Error('Failed to fetch monthly data');
+      const currentData = await currentRes.json();
+      const prevData = await prevRes.json();
+      const feedbackData = feedbackRes.ok ? await feedbackRes.json() : null;
 
-  // 전체 달성률 계산
-  const calculateOverallProgress = (): number => {
-    if (!stats) return 0;
+      setMonthlyFeedback(feedbackData);
+      
+      // Previous Month Average (Weekly based)
+      const prevStats = prevData.stats;
+      const prevAverage = Math.round(prevStats.totalStudyTime / 4); // Average per week
 
-    const totalTasks = stats.KOREAN.total + stats.ENGLISH.total + stats.MATH.total;
-    const completedTasks = stats.KOREAN.completed + stats.ENGLISH.completed + stats.MATH.completed;
+      const { stats, tasksByDate } = currentData;
+      const weeklyMinutes: number[] = [0, 0, 0, 0, 0, 0];
+      Object.entries(tasksByDate).forEach(([dateStr, tasks]: [string, any]) => {
+        const date = new Date(dateStr);
+        const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+        const weekIndex = Math.floor((date.getDate() + firstDayOfMonth.getDay() - 1) / 7);
+        let dailyMinutes = 0;
+        tasks.forEach((task: any) => {
+          dailyMinutes += task.studyLogs.reduce((sum: number, log: any) => sum + log.duration, 0);
+        });
+        if (weekIndex < weeklyMinutes.length) weeklyMinutes[weekIndex] += dailyMinutes;
+      });
 
-    if (totalTasks === 0) return 0;
-    return Math.round((completedTasks / totalTasks) * 100);
-  };
-
-  useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      const userData = JSON.parse(userStr);
-      setUser(userData);
+      setMonthlyData({
+        totalTasks: stats.totalTasks,
+        completedTasks: stats.completedTasks,
+        dailyData: weeklyMinutes
+          .filter((min, idx) => idx < 5 || min > 0)
+          .map((minutes, idx) => ({
+            day: `${idx + 1}주차`,
+            minutes
+          })),
+        subjectData: DEFAULT_SUBJECTS.map(s => ({
+          subject: s.label,
+          minutes: (stats.subjectStats[s.value]?.studyTime) || 0,
+          color: s.value === 'KOREAN' ? 'bg-pink-400' : s.value === 'ENGLISH' ? 'bg-yellow-400' : 'bg-blue-300'
+        })),
+        previousAverage: prevAverage,
+      });
+    } catch (error) {
+      console.error('Error fetching monthly data:', error);
+    } finally {
+      setIsLoading(false);
     }
-    fetchStats();
-  }, []);
+  };
 
-  if (isLoading) {
-    return (
-      <div className="p-4 pb-20">
-        <p className="text-center text-gray-900 dark:text-gray-100">로딩 중...</p>
-      </div>
-    );
-  }
+  const fetchHeatmap = async (year: number) => {
+    try {
+      const res = await fetch(`${getApiUrl()}/api/mentee/heatmap?year=${year}`, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setHeatmapData(data.data || []);
+      }
+    } catch (err) {
+      console.error('Heatmap error:', err);
+    }
+  };
+
+  const fetchRanking = async () => {
+    try {
+      const res = await fetch(`${getApiUrl()}/api/mentee/ranking`, {
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setRankingData(data.rankings || []);
+      }
+    } catch (err) {
+      console.error('Ranking error:', err);
+    }
+  };
+
+  const handlePrev = () => {
+    if (tab === 'weekly') {
+      setCurrentDate(addDays(currentDate, -7));
+    } else {
+      const prevMonth = new Date(currentDate);
+      prevMonth.setMonth(currentDate.getMonth() - 1);
+      setCurrentDate(prevMonth);
+    }
+  };
+
+  const handleNext = () => {
+    if (tab === 'weekly') {
+      setCurrentDate(addDays(currentDate, 7));
+    } else {
+      const nextMonth = new Date(currentDate);
+      nextMonth.setMonth(currentDate.getMonth() + 1);
+      setCurrentDate(nextMonth);
+    }
+  };
+
+  const currentPeriodData = tab === 'weekly' ? weeklyData : monthlyData;
+  const isWeekly = tab === 'weekly';
+
+  const totalMinutes = currentPeriodData?.subjectData.reduce((sum, s) => sum + s.minutes, 0) || 0;
+  const completionRate = currentPeriodData?.totalTasks 
+    ? Math.round((currentPeriodData.completedTasks / currentPeriodData.totalTasks) * 100) 
+    : 0;
+  
+  const currentAverage = currentPeriodData?.dailyData.length 
+    ? Math.round(totalMinutes / currentPeriodData.dailyData.length) 
+    : 0;
+
+  const previousAverage = currentPeriodData?.previousAverage || 0;
+  const changeRate = previousAverage > 0 
+    ? Math.round(((currentAverage - previousAverage) / previousAverage) * 100)
+    : 0;
+
+  const maxValue = Math.max(...(currentPeriodData?.dailyData.map(d => d.minutes) || [60]), 60);
+
+  // 데이터 존재 여부 판별
+  const hasData = currentPeriodData && (totalMinutes > 0 || currentPeriodData.totalTasks > 0);
+
+  const getPeriodLabel = () => {
+    if (isWeekly) {
+      const day = currentDate.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const monday = addDays(currentDate, mondayOffset);
+      const month = monday.getMonth() + 1;
+      const weekOfMonth = Math.ceil((monday.getDate() + new Date(monday.getFullYear(), monday.getMonth(), 1).getDay()) / 7);
+      return `${monday.getFullYear()}년 ${month}월 ${weekOfMonth}주차 리포트`;
+    } else {
+      return `${currentDate.getFullYear()}년 ${currentDate.getMonth() + 1}월 종합 리포트`;
+    }
+  };
+
+  const handleBarMouseEnter = (data: { day: string; minutes: number }, e: React.MouseEvent) => {
+    setHoveredBar(data);
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top - 8 });
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
+    <div className="min-h-screen bg-gray-50 p-4 pb-32 font-['Pretendard']">
       {/* 헤더 */}
-      <div className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 sticky top-0 z-10">
-        <div className="px-4 sm:px-6 md:px-8 py-3 sm:py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button onClick={() => router.back()} className="text-xl sm:text-2xl dark:text-white">
-              ←
-            </button>
-            <h1 className="text-base sm:text-lg md:text-xl font-bold dark:text-white">학습 리포트</h1>
-          </div>
-        </div>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">리포트</h1>
       </div>
 
-      {/* 전체 달성률 */}
-      <div className="bg-gradient-to-br from-blue-500 to-purple-600">
-        <div className="px-4 sm:px-6 md:px-8 py-5 sm:py-6 text-white">
-          <div className="bg-white/10 rounded-lg p-3 sm:p-4 md:p-5 backdrop-blur">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs sm:text-sm">전체 달성률</span>
-              <span className="text-xl sm:text-2xl md:text-3xl font-bold">{calculateOverallProgress()}%</span>
-            </div>
-            <div className="w-full bg-white/20 rounded-full h-2.5 sm:h-3 overflow-hidden">
-              <div
-                className="bg-white h-full rounded-full transition-all duration-500"
-                style={{ width: `${calculateOverallProgress()}%` }}
-              />
-            </div>
-            {stats && (
-              <div className="mt-2 sm:mt-3 flex items-center justify-between text-xs sm:text-sm text-blue-100">
-                <span>
-                  완료: {stats.KOREAN.completed + stats.ENGLISH.completed + stats.MATH.completed}개
-                </span>
-                <span>
-                  전체: {stats.KOREAN.total + stats.ENGLISH.total + stats.MATH.total}개
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
+      {/* 주간/월간 탭 */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setTab('weekly')}
+          className={`flex-1 py-3 px-6 rounded-xl font-bold transition-all ${
+            tab === 'weekly'
+              ? 'bg-[#B0D4FF] text-[#00265A] shadow-md'
+              : 'bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          주간
+        </button>
+        <button
+          onClick={() => setTab('monthly')}
+          className={`flex-1 py-3 px-6 rounded-xl font-bold transition-all ${
+            tab === 'monthly'
+              ? 'bg-[#B0D4FF] text-[#00265A] shadow-md'
+              : 'bg-white text-gray-500 hover:bg-gray-50'
+          }`}
+        >
+          월간
+        </button>
       </div>
 
-      {/* 통계 요약 카드 */}
-      {stats && (
-        <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border dark:border-gray-700 text-center">
-              <p className="text-xs text-gray-900 dark:text-gray-300 mb-1">총 할 일</p>
-              <p className="text-2xl font-bold text-gray-800 dark:text-white">
-                {stats.KOREAN.total + stats.ENGLISH.total + stats.MATH.total}
-              </p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border dark:border-gray-700 text-center">
-              <p className="text-xs text-gray-900 dark:text-gray-300 mb-1">완료</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {stats.KOREAN.completed + stats.ENGLISH.completed + stats.MATH.completed}
-              </p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border dark:border-gray-700 text-center">
-              <p className="text-xs text-gray-900 dark:text-gray-300 mb-1">미완료</p>
-              <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                {(stats.KOREAN.total - stats.KOREAN.completed) +
-                  (stats.ENGLISH.total - stats.ENGLISH.completed) +
-                  (stats.MATH.total - stats.MATH.completed)}
-              </p>
-            </div>
-          </div>
+      {/* 날짜 네비게이션 */}
+      <div className="flex items-center justify-between mb-6">
+        <button
+          onClick={handlePrev}
+          className="p-2 bg-white hover:bg-gray-50 rounded-xl shadow-sm border border-gray-100 transition-all active:scale-95"
+        >
+          <IoIosArrowBack className="w-5 h-5 text-gray-600" />
+        </button>
+        <h2 className="text-base font-bold text-gray-800 bg-white px-4 py-2 rounded-full shadow-sm border border-gray-50">
+          {getPeriodLabel()}
+        </h2>
+        <button
+          onClick={handleNext}
+          className="p-2 bg-white hover:bg-gray-50 rounded-xl shadow-sm border border-gray-100 transition-all active:scale-95"
+        >
+          <IoIosArrowForward className="w-5 h-5 text-gray-600" />
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-4">
+          <div className="w-10 h-10 border-4 border-blue-100 border-t-blue-400 rounded-full animate-spin"></div>
+          <p className="text-gray-400 text-sm animate-pulse">데이터를 분석하고 있어요...</p>
         </div>
-      )}
+      ) : !hasData ? (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center justify-center py-20 px-10 text-center"
+        >
+          <div className="w-20 h-20 bg-gray-100 rounded-3xl flex items-center justify-center mb-6">
+            <MdOutlineDataUsage className="text-4xl text-gray-300" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-800 mb-2">리포트 데이터가 없어요</h3>
+          <p className="text-sm text-gray-400 leading-relaxed">
+            해당 기간에는 기록된 학습 활동이 없습니다.<br/>
+            다른 날짜를 선택하거나 공부를 시작해 보세요!
+          </p>
+          
+          <div className="mt-10 w-full max-w-xs space-y-4">
+            <div className="w-full h-1 bg-gray-100 rounded-full"></div>
+            <div className="w-2/3 h-1 bg-gray-100 rounded-full mx-auto"></div>
+          </div>
 
-      {/* 과목별 달성률 */}
-      <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5">
-        <h3 className="text-base sm:text-lg md:text-xl font-bold mb-3 sm:mb-4 dark:text-white">과목별 달성률</h3>
-
-        <div className="space-y-3 sm:space-y-4">
-          {(Object.keys(SUBJECT_LABELS) as Subject[]).map((subject) => {
-            const subjectStats = stats?.[subject] || { total: 0, completed: 0 };
-            const progress = calculateProgress(subjectStats.completed, subjectStats.total);
-
-            return (
-              <div key={subject} className="bg-white dark:bg-gray-800 rounded-lg p-4 border dark:border-gray-700">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${SUBJECT_LABELS[subject as Subject]?.bgColor || 'bg-gray-600'}`} />
-                    <span className="font-semibold dark:text-white">{SUBJECT_LABELS[subject as Subject]?.label || subject}</span>
+          <div className="mt-20 w-full">
+             <div className="w-full h-px bg-gray-100 mb-10"></div>
+             {/* 히트맵은 월간에서만, 랭킹은 주간에서만 보여줌 (데이터 없을 때) */}
+             {tab === 'monthly' && (
+               <div className="text-left">
+                  <div className="flex items-center gap-2 mb-6">
+                    <div className="w-8 h-8 bg-indigo-50 rounded-xl flex items-center justify-center">
+                      <span className="text-base">🔥</span>
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-800">학습 히트맵</h3>
                   </div>
-                  <span className={`text-xl font-bold ${SUBJECT_LABELS[subject as Subject]?.color || 'text-gray-600'}`}>
-                    {progress}%
-                  </span>
+                  <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-50">
+                    <Heatmap data={heatmapData} year={selectedHeatmapYear} onYearChange={setSelectedHeatmapYear} />
+                  </div>
+               </div>
+             )}
+
+             {tab === 'weekly' && (
+               <div className="text-left">
+                  <div className="flex items-center gap-2 mb-6">
+                    <div className="w-8 h-8 bg-yellow-50 rounded-xl flex items-center justify-center">
+                      <span className="text-base">🏆</span>
+                    </div>
+                    <h3 className="text-lg font-bold text-gray-800">이번 주 랭킹</h3>
+                  </div>
+                  <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-50">
+                    <WeeklyRanking
+                      rankings={rankingData}
+                      myMenteeId={user?.id}
+                      variant="plain"
+                    />
+                  </div>
+               </div>
+             )}
+          </div>
+        </motion.div>
+      ) : (
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={tab + currentDate.getTime()}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.3 }}
+          >
+            {/* 통계 카드 */}
+            <div className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-50 flex items-center justify-around">
+              <div className="text-center">
+                <p className="text-xs text-gray-400 font-medium mb-1">총 학습 시간</p>
+                <p className="text-2xl font-black text-gray-800">
+                  {totalMinutes.toLocaleString()}
+                  <span className="text-xs font-bold text-gray-400 ml-1">분</span>
+                </p>
+              </div>
+              <div className="w-px h-10 bg-gray-100"></div>
+              <div className="text-center">
+                <p className="text-xs text-gray-400 font-medium mb-1">학습 완료율</p>
+                <p className="text-2xl font-black text-gray-800">
+                  {completionRate}
+                  <span className="text-xs font-bold text-gray-400 ml-1">%</span>
+                </p>
+              </div>
+            </div>
+
+            {/* 평균 시간 카드 & 그래프 */}
+            <div className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-50">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <p className="text-xs text-gray-400 font-medium mb-1">
+                    {isWeekly ? '하루 평균 학습' : '주간 평균 학습'}
+                  </p>
+                  <h3 className="text-3xl font-black text-gray-800 tracking-tight">
+                    {isWeekly
+                      ? formatMinutesToTime(currentAverage)
+                      : formatMinutesToHours(currentAverage)}
+                  </h3>
+                </div>
+                
+                {/* 동적 성장 지표 */}
+                <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-2xl">
+                  <div className={`w-8 h-8 ${changeRate >= 0 ? 'bg-red-500' : 'bg-blue-500'} text-white rounded-full flex items-center justify-center shadow-sm transition-colors`}>
+                    {changeRate >= 0 ? <MdTrendingUp className="w-5 h-5" /> : <MdTrendingDown className="w-5 h-5" />}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-gray-400 font-bold leading-none mb-1">
+                      {isWeekly 
+                        ? (changeRate >= 0 ? '지난주 대비 상승' : '지난주 대비 하락')
+                        : (changeRate >= 0 ? '지난달 대비 상승' : '지난달 대비 하락')
+                      }
+                    </p>
+                    <p className={`text-sm font-black ${changeRate >= 0 ? 'text-red-500' : 'text-blue-500'} leading-none`}>
+                      {changeRate >= 0 ? '+' : ''}{changeRate}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 그래프 섹션 */}
+              <div className="mt-8 flex gap-2">
+                <div className="flex-1 relative h-48 border border-gray-100 rounded-2xl bg-gray-50/30 overflow-hidden">
+                  {/* Y축 기준선 */}
+                  <div className="absolute left-0 top-0 bottom-0 w-full flex flex-col justify-between pointer-events-none px-2">
+                    <div className="w-full border-t border-gray-100/50"></div>
+                    <div className="w-full border-t border-gray-100/50"></div>
+                    <div className="w-full border-t border-gray-100/50"></div>
+                  </div>
+
+                  {/* 막대 그래프 영역 */}
+                  <div className="h-full flex items-end justify-between gap-2 relative z-10 px-4">
+                    {currentPeriodData?.dailyData.map((data, index) => {
+                      const heightPercent = Math.max((data.minutes / maxValue) * 100, 5);
+                      return (
+                        <div key={index} className="flex-1 flex flex-col items-center justify-end h-full group">
+                          <motion.div 
+                            initial={{ height: 0 }}
+                            animate={{ height: `${heightPercent}%` }}
+                            onMouseEnter={(e) => handleBarMouseEnter(data, e)}
+                            onMouseLeave={() => setHoveredBar(null)}
+                            className={`w-full max-w-[28px] rounded-t-lg transition-all duration-300 cursor-pointer ${
+                              data.minutes === maxValue 
+                                ? 'bg-[#B0D4FF] shadow-md shadow-blue-200/50' 
+                                : 'bg-blue-100 group-hover:bg-blue-300'
+                            }`}
+                          ></motion.div>
+                          <span className={`text-[9px] font-bold mt-1.5 ${
+                            data.minutes === maxValue ? 'text-blue-600' : 'text-gray-400'
+                          }`}>
+                            {data.day}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                    {/* 평균선 (테두리 안쪽만) */}
+                    <div 
+                      className="absolute left-0 right-0 border-t-2 border-dashed border-blue-400/20 pointer-events-none transition-all duration-500"
+                      style={{ bottom: `${(currentAverage / maxValue) * 100}%` }}
+                    ></div>
+                  </div>
                 </div>
 
-                {/* 프로그레스 바 */}
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden mb-2">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${SUBJECT_LABELS[subject as Subject]?.bgColor || 'bg-gray-600'}`}
-                    style={{ width: `${progress}%` }}
+                {/* 지표 라벨 영역 (테두리 밖 우측) */}
+                <div className="w-8 relative h-48 flex flex-col justify-between py-1">
+                  {/* MAX 라벨 */}
+                  <div className="text-left">
+                    <span className="text-[8px] font-black text-gray-300 uppercase tracking-tighter block leading-none">
+                      MAX
+                    </span>
+                    <span className="text-[9px] font-black text-gray-400 block">
+                      {Math.ceil(maxValue / 60)}H
+                    </span>
+                  </div>
+
+                  {/* 동적 AVG 라벨 (평균선 높이에 맞춰 이동) */}
+                  <div 
+                    className="absolute right-0 transition-all duration-500"
+                    style={{ bottom: `calc(${(currentAverage / maxValue) * 100}% - 10px)` }}
+                  >
+                    <div className="bg-blue-50 text-blue-600 text-[8px] px-1.5 py-0.5 rounded-md font-black border border-blue-100 shadow-sm whitespace-nowrap">
+                      AVG
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 멘토 리포트 섹션 */}
+            {(isWeekly ? weeklyFeedback : monthlyFeedback) && (
+              <motion.div 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-50"
+              >
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="w-8 h-8 bg-blue-50 rounded-xl flex items-center justify-center">
+                    <span className="text-base">💬</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-800">멘토의 리포트</h3>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="bg-blue-50/30 rounded-2xl p-4 border border-blue-100/30">
+                    <p className="text-[10px] font-black text-blue-500 mb-2 uppercase tracking-wider">Overall Comment</p>
+                    <p className="text-sm text-gray-700 leading-relaxed font-semibold">
+                      {(isWeekly ? weeklyFeedback : monthlyFeedback).overallComment}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="bg-green-50/30 rounded-2xl p-4 border border-green-100/30">
+                      <p className="text-[10px] font-black text-green-600 mb-2 uppercase tracking-wider">Strengths</p>
+                      <p className="text-sm text-gray-700 leading-relaxed font-semibold">
+                        {(isWeekly ? weeklyFeedback : monthlyFeedback).strengths}
+                      </p>
+                    </div>
+                    <div className="bg-orange-50/30 rounded-2xl p-4 border border-orange-100/30">
+                      <p className="text-[10px] font-black text-orange-600 mb-2 uppercase tracking-wider">Improvements</p>
+                      <p className="text-sm text-gray-700 leading-relaxed font-semibold">
+                        {(isWeekly ? weeklyFeedback : monthlyFeedback).improvements}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-purple-50/30 rounded-2xl p-4 border border-purple-100/30">
+                    <p className="text-[10px] font-black text-purple-600 mb-2 uppercase tracking-wider">
+                      {isWeekly ? 'Next Week Goals' : 'Next Month Goals'}
+                    </p>
+                    <p className="text-sm text-gray-700 leading-relaxed font-semibold">
+                      {(isWeekly ? weeklyFeedback : monthlyFeedback)[isWeekly ? 'nextWeekGoals' : 'nextMonthGoals']}
+                    </p>
+                  </div>
+                </div>
+                
+                <div className="mt-6 pt-6 border-t border-gray-50 flex items-center justify-between">
+                   <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center text-[12px] shadow-inner">
+                        { (isWeekly ? weeklyFeedback : monthlyFeedback).mentor?.profileImage ? (
+                          <img 
+                            src={(isWeekly ? weeklyFeedback : monthlyFeedback).mentor.profileImage} 
+                            alt="Mentor" 
+                            className="w-full h-full rounded-full object-cover"
+                          />
+                        ) : "👤" }
+                      </div>
+                      <span className="text-[11px] font-black text-gray-400">{(isWeekly ? weeklyFeedback : monthlyFeedback).mentor?.name || '담당'} 멘토님</span>
+                   </div>
+                   <span className="text-[10px] font-bold text-gray-300 bg-gray-50 px-2 py-1 rounded-lg">
+                     {new Date((isWeekly ? weeklyFeedback : monthlyFeedback).updatedAt).toLocaleDateString('ko-KR')}
+                   </span>
+                </div>
+              </motion.div>
+            )}
+
+            {/* 과목별 공부 시간 */}
+            <div className="bg-white rounded-3xl p-6 mb-10 shadow-sm border border-gray-50">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-pink-50 rounded-xl flex items-center justify-center">
+                    <span className="text-base">📝</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-800">과목별 학습 비중</h3>
+                </div>
+                <div className="bg-gray-50 px-3 py-1 rounded-full">
+                  <p className="text-[11px] font-bold text-gray-500">
+                    총 {Math.floor(totalMinutes / 60)}시간 {totalMinutes % 60}분
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex h-10 rounded-2xl overflow-hidden mb-8 bg-gray-50 p-1">
+                {currentPeriodData?.subjectData.some(s => s.minutes > 0) ? (
+                  currentPeriodData.subjectData.map((subject, index) => {
+                    const widthPercent = (subject.minutes / totalMinutes) * 100;
+                    if (widthPercent === 0) return null;
+                    return (
+                      <motion.div
+                        key={index}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${widthPercent}%` }}
+                        className={`${subject.color} rounded-xl h-full transition-all border-2 border-white`}
+                      ></motion.div>
+                    );
+                  })
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-300 font-bold">
+                    기록된 데이터가 없습니다
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {currentPeriodData?.subjectData.map((subject, index) => (
+                  <div key={index} className="flex items-center gap-3 p-3 rounded-2xl border border-gray-50 bg-gray-50/30">
+                    <div className={`w-3 h-3 rounded-full ${subject.color}`}></div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-gray-800 truncate">{subject.subject}</p>
+                      <p className="text-[10px] font-medium text-gray-400">
+                        {Math.floor(subject.minutes / 60)}시간 {subject.minutes % 60}분
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="w-full h-px bg-gray-100 mb-10"></div>
+
+            {/* 히트맵 섹션 - 월간 리포트에서만 표시 */}
+            {tab === 'monthly' && (
+              <div className="mb-10">
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="w-8 h-8 bg-indigo-50 rounded-xl flex items-center justify-center">
+                    <span className="text-base">🔥</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-800">학습 히트맵</h3>
+                </div>
+                <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-50">
+                  <Heatmap
+                    data={heatmapData}
+                    year={selectedHeatmapYear}
+                    onYearChange={setSelectedHeatmapYear}
                   />
                 </div>
+              </div>
+            )}
 
-                {/* 상세 정보 */}
-                <div className="flex items-center justify-between text-sm text-gray-900 dark:text-gray-300">
-                  <span>완료: {subjectStats.completed}개</span>
-                  <span>전체: {subjectStats.total}개</span>
+            {/* 랭킹 섹션 - 주간 리포트에서만 표시 */}
+            {tab === 'weekly' && (
+              <div className="mb-10">
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="w-8 h-8 bg-yellow-50 rounded-xl flex items-center justify-center">
+                    <span className="text-base">🏆</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-800">이번 주 랭킹</h3>
+                </div>
+                <div className="bg-white rounded-3xl overflow-hidden shadow-sm border border-gray-50">
+                  <WeeklyRanking
+                    rankings={rankingData}
+                    myMenteeId={user?.id}
+                    variant="plain"
+                  />
                 </div>
               </div>
-            );
-          })}
-        </div>
-      </div>
+            )}
 
-      {/* 월 리포트 버튼 */}
-      <div className="px-4 sm:px-6 md:px-8 py-4 sm:py-5">
-        <button
-          onClick={() => router.push('/mentee/reports/monthly')}
-          className="block w-full py-3 sm:py-4 md:py-5 bg-gradient-to-r from-green-500 to-blue-500 text-white text-center rounded-lg text-sm sm:text-base font-bold shadow-lg hover:shadow-xl transition-shadow"
-        >
-          📊 월간 리포트 보기
-        </button>
-        <p className="text-xs sm:text-sm text-gray-900 dark:text-gray-300 text-center mt-2">
-          한 달 동안의 학습 통계를 확인하세요
-        </p>
-      </div>
-
-      {/* 하단 여백 */}
-      <div className="h-4" />
+            {/* 막대 그래프 툴팁 */}
+            <AnimatePresence>
+              {hoveredBar && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, x: -50 }}
+                  animate={{ opacity: 1, y: 0, x: -50 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="fixed z-50 bg-slate-800 text-white px-3 py-2 rounded-xl shadow-xl text-xs font-bold pointer-events-none"
+                  style={{
+                    left: `${tooltipPos.x}px`,
+                    top: `${tooltipPos.y}px`,
+                    transform: 'translate(-50%, -100%)',
+                  }}
+                >
+                  <div className="text-blue-300 text-[10px] mb-1">{hoveredBar.day}</div>
+                  <div>{formatMinutesToTime(hoveredBar.minutes)}</div>
+                  <div className="absolute bottom-[-6px] left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-slate-800"></div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </AnimatePresence>
+      )}
     </div>
   );
 }

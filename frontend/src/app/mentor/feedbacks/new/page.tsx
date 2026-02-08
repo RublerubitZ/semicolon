@@ -1,5 +1,6 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
+import { getSubjectLabel, getSubjectBadgeColor } from '@/constants/subjects';
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -17,7 +18,6 @@ interface Task {
   mentee: {
     id: string;
     name: string;
-    nickname?: string;
   };
   submissions: {
     id: string;
@@ -118,20 +118,6 @@ function FeedbackForm() {
     }
   };
 
-  const getSubjectLabel = (subject: Subject) => {
-    const labels = { KOREAN: '국어', ENGLISH: '영어', MATH: '수학' };
-    return labels[subject];
-  };
-
-  const getSubjectColor = (subject: Subject) => {
-    const colors = {
-      KOREAN: 'bg-blue-100 text-blue-700',
-      ENGLISH: 'bg-green-100 text-green-700',
-      MATH: 'bg-orange-100 text-orange-700',
-    };
-    return colors[subject];
-  };
-
   // 피드백 마감 시간 계산 (과제 날짜 다음날 11시)
   const getFeedbackDeadline = (taskDate: string) => {
     const deadline = new Date(taskDate);
@@ -209,7 +195,7 @@ function FeedbackForm() {
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <span className={`text-xs px-2 py-1 rounded ${getSubjectColor(task.subject)}`}>
+              <span className={`text-xs px-2 py-1 rounded ${getSubjectBadgeColor(task.subject)}`}>
                 {getSubjectLabel(task.subject)}
               </span>
             </div>
@@ -218,7 +204,7 @@ function FeedbackForm() {
               <p className="text-sm text-gray-900 mb-2">{task.description}</p>
             )}
             <p className="text-sm text-gray-900">
-              멘티: {task.mentee.nickname || task.mentee.name}
+              멘티: {task.mentee.name}
             </p>
           </div>
         </div>

@@ -3,9 +3,17 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required');
+if (!JWT_SECRET || JWT_SECRET.trim() === '') {
+  throw new Error('JWT_SECRET environment variable is required and must not be empty');
 }
+
+// JWT_SECRET 타입 가드 - 런타임에 안전하게 사용
+const getJwtSecret = (): string => {
+  if (!JWT_SECRET || JWT_SECRET.trim() === '') {
+    throw new Error('JWT_SECRET not configured');
+  }
+  return JWT_SECRET;
+};
 
 export interface AuthRequest extends Request {
   user?: {
@@ -28,7 +36,7 @@ export const authMiddleware = (
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as {
+    const decoded = jwt.verify(token, getJwtSecret()) as {
       userId: string;
       email: string;
       role: 'MENTEE' | 'MENTOR' | 'ADMIN';
