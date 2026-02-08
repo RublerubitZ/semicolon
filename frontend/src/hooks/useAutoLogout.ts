@@ -24,9 +24,9 @@ export function useAutoLogout(options: AutoLogoutOptions = {}) {
   } = options;
 
   const router = useRouter();
-  const idleTimerRef = useRef<NodeJS.Timeout>();
-  const warningTimerRef = useRef<NodeJS.Timeout>();
-  const refreshTimerRef = useRef<NodeJS.Timeout>();
+  const idleTimerRef = useRef<NodeJS.Timeout>(null);
+  const warningTimerRef = useRef<NodeJS.Timeout>(null);
+  const refreshTimerRef = useRef<NodeJS.Timeout>(null);
   const [showWarning, setShowWarning] = useState(false);
 
   // 로그아웃 처리
