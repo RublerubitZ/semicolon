@@ -7,6 +7,7 @@ import { HiOutlineDocumentText } from 'react-icons/hi2';
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from '@/stores/useToastStore';
 
 type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
 type WorksheetType = 'COLUMN' | 'PDF';
@@ -80,7 +81,7 @@ export default function WorksheetsPage() {
       setWorksheets(data);
     } catch (err) {
       console.error('Fetch worksheets error:', err);
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -111,10 +112,10 @@ export default function WorksheetsPage() {
 
       if (!res.ok) throw new Error('학습지 삭제에 실패했습니다.');
 
-      alert('학습지가 삭제되었습니다.');
+      toast.success('학습지가 삭제되었습니다.');
       fetchWorksheets(filteredSubject === 'ALL' ? undefined : filteredSubject);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     }
   };
 

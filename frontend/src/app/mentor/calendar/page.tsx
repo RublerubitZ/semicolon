@@ -472,7 +472,7 @@ function MentorCalendarContent() {
                     {visibleBars.slice(0, 5).map((bar) => (
                       <div
                         key={bar.id}
-                        className="h-[6px] w-full rounded-full opacity-90 shadow-sm"
+                        className="h-[6px] w-full rounded-sm opacity-90 shadow-sm"
                         style={{ backgroundColor: COLORS[bar.type as keyof typeof COLORS] }}
                       />
                     ))}
@@ -528,7 +528,7 @@ function MentorCalendarContent() {
                   <div className="bg-[#DDFBEA] rounded-[24px] p-6 border border-[#9AF2BF]/30 relative group">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-[#9AF2BF]" />
+                        <div className="w-2 h-2 rounded-sm bg-[#9AF2BF]" />
                         <span className="text-[13px] font-bold text-[#2D6A4F] uppercase tracking-wider">Daily Feedback</span>
                       </div>
                       <button 
@@ -585,7 +585,7 @@ function MentorCalendarContent() {
                         >
                           <div className="flex items-center gap-4">
                             <div 
-                              className="w-3 h-3 rounded-full shadow-sm group-hover:scale-125 transition-transform" 
+                              className="w-3 h-3 rounded-sm shadow-sm group-hover:scale-125 transition-transform" 
                               style={{ backgroundColor: COLORS[subjectType as keyof typeof COLORS] }}
                             />
                             <div>

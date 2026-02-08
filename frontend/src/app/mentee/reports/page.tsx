@@ -573,6 +573,58 @@ export default function ReportsPage() {
               </div>
             </div>
 
+            {/* 과목별 공부 시간 */}
+            <div className="bg-white rounded-3xl p-6 mb-10 shadow-sm border border-gray-50">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-pink-50 rounded-xl flex items-center justify-center">
+                    <span className="text-base">📝</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-800">과목별 학습 비중</h3>
+                </div>
+                <div className="bg-gray-50 px-3 py-1 rounded-full">
+                  <p className="text-[11px] font-bold text-gray-500">
+                    총 {Math.floor(totalMinutes / 60)}시간 {totalMinutes % 60}분
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex h-10 rounded-2xl overflow-hidden mb-8 bg-gray-50 p-1">
+                {currentPeriodData?.subjectData.some(s => s.minutes > 0) ? (
+                  currentPeriodData.subjectData.map((subject, index) => {
+                    const widthPercent = (subject.minutes / totalMinutes) * 100;
+                    if (widthPercent === 0) return null;
+                    return (
+                      <motion.div
+                        key={index}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${widthPercent}%` }}
+                        className={`${subject.color} rounded-xl h-full transition-all border-2 border-white`}
+                      ></motion.div>
+                    );
+                  })
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-300 font-bold">
+                    기록된 데이터가 없습니다
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {currentPeriodData?.subjectData.map((subject, index) => (
+                  <div key={index} className="flex items-center gap-3 p-3 rounded-2xl border border-gray-50 bg-gray-50/30">
+                    <div className={`w-3 h-3 rounded-full ${subject.color}`}></div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-gray-800 truncate">{subject.subject}</p>
+                      <p className="text-[10px] font-medium text-gray-400">
+                        {Math.floor(subject.minutes / 60)}시간 {subject.minutes % 60}분
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* 멘토 리포트 섹션 */}
             {(isWeekly ? weeklyFeedback : monthlyFeedback) && (
               <motion.div 
@@ -639,58 +691,6 @@ export default function ReportsPage() {
                 </div>
               </motion.div>
             )}
-
-            {/* 과목별 공부 시간 */}
-            <div className="bg-white rounded-3xl p-6 mb-10 shadow-sm border border-gray-50">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-pink-50 rounded-xl flex items-center justify-center">
-                    <span className="text-base">📝</span>
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-800">과목별 학습 비중</h3>
-                </div>
-                <div className="bg-gray-50 px-3 py-1 rounded-full">
-                  <p className="text-[11px] font-bold text-gray-500">
-                    총 {Math.floor(totalMinutes / 60)}시간 {totalMinutes % 60}분
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex h-10 rounded-2xl overflow-hidden mb-8 bg-gray-50 p-1">
-                {currentPeriodData?.subjectData.some(s => s.minutes > 0) ? (
-                  currentPeriodData.subjectData.map((subject, index) => {
-                    const widthPercent = (subject.minutes / totalMinutes) * 100;
-                    if (widthPercent === 0) return null;
-                    return (
-                      <motion.div
-                        key={index}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${widthPercent}%` }}
-                        className={`${subject.color} rounded-xl h-full transition-all border-2 border-white`}
-                      ></motion.div>
-                    );
-                  })
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-300 font-bold">
-                    기록된 데이터가 없습니다
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                {currentPeriodData?.subjectData.map((subject, index) => (
-                  <div key={index} className="flex items-center gap-3 p-3 rounded-2xl border border-gray-50 bg-gray-50/30">
-                    <div className={`w-3 h-3 rounded-full ${subject.color}`}></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-bold text-gray-800 truncate">{subject.subject}</p>
-                      <p className="text-[10px] font-medium text-gray-400">
-                        {Math.floor(subject.minutes / 60)}시간 {subject.minutes % 60}분
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
 
             <div className="w-full h-px bg-gray-100 mb-10"></div>
 

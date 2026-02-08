@@ -2,6 +2,7 @@
 import { getApiUrl } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { AiOutlineSave } from 'react-icons/ai';
+import { toast } from '@/stores/useToastStore';
 
 interface MonthlyFeedback {
   id: string;
@@ -84,7 +85,7 @@ export default function MonthlyFeedbackForm({ menteeId }: { menteeId: string }) 
 
   const handleSave = async () => {
     if (!overallComment.trim() || !strengths.trim() || !improvements.trim() || !nextMonthGoals.trim()) {
-      alert('모든 항목을 입력해주세요.');
+      toast.warning('모든 항목을 입력해주세요.');
       return;
     }
 
@@ -125,9 +126,9 @@ export default function MonthlyFeedbackForm({ menteeId }: { menteeId: string }) 
 
       const result = await res.json();
       setFeedback(result);
-      alert(feedback ? '월간 총평이 수정되었습니다.' : '월간 총평이 저장되었습니다.');
+      toast.success(feedback ? '월간 총평이 수정되었습니다.' : '월간 총평이 저장되었습니다.');
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsSaving(false);
     }

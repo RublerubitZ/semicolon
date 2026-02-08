@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { toast } from '@/stores/useToastStore';
 
 export interface Message {
   id: string;
@@ -40,7 +41,7 @@ export default function FeedbackChatUI({
       setInputValue('');
     } catch (error) {
       console.error('메시지 전송 실패:', error);
-      alert('메시지 전송에 실패했습니다.');
+      toast.error('메시지 전송에 실패했습니다.');
     } finally {
       setIsSending(false);
     }

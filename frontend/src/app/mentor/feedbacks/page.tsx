@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { getApiUrl } from '@/lib/api';
 import { FaCommentAlt, FaCalendar, FaRegComments, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import FeedbackChatUI from '@/components/FeedbackChatUI';
+import { toast } from '@/stores/useToastStore';
 
 interface Feedback {
   id: string;
@@ -183,10 +184,10 @@ function FeedbackContent() {
       setFeedbacks((prev) => prev.filter((f) => f.id !== feedbackId));
       setDetailOpen(false);
       setSelected(null);
-      alert('피드백이 삭제되었습니다.');
+      toast.success('피드백이 삭제되었습니다.');
     } catch (err) {
       console.error('Delete feedback error:', err);
-      alert('피드백 삭제에 실패했습니다.');
+      toast.error('피드백 삭제에 실패했습니다.');
     }
   };
 

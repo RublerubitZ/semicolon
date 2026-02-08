@@ -3,6 +3,7 @@ import { getApiUrl } from '@/lib/api';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from '@/stores/useToastStore';
 
 interface MonthlyReport {
   year: number;
@@ -118,7 +119,7 @@ export default function MonthlyReportPage() {
       }
     } catch (err) {
       console.error('Fetch report error:', err);
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -239,42 +240,6 @@ export default function MonthlyReportPage() {
         </div>
       </div>
 
-      {/* 과목별 통계 */}
-      {report.subjectStats.length > 0 && (
-        <div className="mb-6">
-          <h3 className="text-lg font-semibold mb-3">과목별 통계</h3>
-          <div className="space-y-3">
-            {report.subjectStats.map((stat) => (
-              <div
-                key={stat.subject}
-                className={`border rounded-lg p-4 ${getSubjectColor(stat.subject)}`}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold">{getSubjectLabel(stat.subject)}</h4>
-                  <span className="text-2xl font-bold">{stat.completionRate}%</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-sm">
-                  <div>
-                    <p className="text-xs opacity-75">과제</p>
-                    <p className="font-medium">
-                      {stat.completedTasks}/{stat.totalTasks}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs opacity-75">공부 시간</p>
-                    <p className="font-medium">{formatTime(stat.totalStudyTime)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs opacity-75">피드백</p>
-                    <p className="font-medium">{stat.totalFeedbacks}개</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* 일별 달성률 */}
       {report.dailyProgress.length > 0 && (
         <div className="mb-6">
@@ -315,6 +280,42 @@ export default function MonthlyReportPage() {
             {report.dailyProgress.filter((day) => day.totalTasks > 0).length === 0 && (
               <p className="text-center text-gray-500 py-4">해당 월에 과제가 없습니다.</p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 과목별 통계 */}
+      {report.subjectStats.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-3">과목별 통계</h3>
+          <div className="space-y-3">
+            {report.subjectStats.map((stat) => (
+              <div
+                key={stat.subject}
+                className={`border rounded-lg p-4 ${getSubjectColor(stat.subject)}`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold">{getSubjectLabel(stat.subject)}</h4>
+                  <span className="text-2xl font-bold">{stat.completionRate}%</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <p className="text-xs opacity-75">과제</p>
+                    <p className="font-medium">
+                      {stat.completedTasks}/{stat.totalTasks}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs opacity-75">공부 시간</p>
+                    <p className="font-medium">{formatTime(stat.totalStudyTime)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs opacity-75">피드백</p>
+                    <p className="font-medium">{stat.totalFeedbacks}개</p>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import { getSubjectLabel, getSubjectBadgeColor } from '@/constants/subjects';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from '@/stores/useToastStore';
 
 interface Task {
   id: string;
@@ -63,7 +64,7 @@ export default function WeeklyPlanner() {
       const data = await res.json();
       setWeeklyData(data);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }

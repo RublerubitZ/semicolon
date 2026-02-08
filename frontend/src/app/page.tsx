@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { motion, useScroll, useSpring } from 'framer-motion';
 import { AiFillMessage } from "react-icons/ai";
+import { BsArrowUpRight, BsArrowUpLeft } from "react-icons/bs";
 import { Z_INDEX } from '@/constants/zIndex';
 
 export default function Home() {
@@ -112,7 +113,14 @@ export default function Home() {
             className="flex items-center gap-3 cursor-pointer"
             onClick={() => router.push('/')}
           >
-            <Image src="/logo.svg" alt="설스터디" width={36} height={30} className="w-9 h-8" />
+            <Image 
+              src="/logo.svg" 
+              alt="설스터디" 
+              width={36} 
+              height={30} 
+              style={{ width: '36px', height: 'auto' }}
+              className="w-9" 
+            />
             <span className="text-zinc-800 text-2xl sm:text-3xl font-bold font-scoredream tracking-tight">설스터디</span>
           </motion.div>
           <motion.button
@@ -157,7 +165,13 @@ export default function Home() {
                 animate={{ rotate: [0, 10, -10, 0] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
-                <Image src="https://placehold.co/24x24" alt="Icon" width={20} height={20} />
+                <Image 
+                  src="/snu.png" 
+                  alt="Icon" 
+                  width={20} 
+                  height={20}
+                  style={{ width: '20px', height: 'auto' }}
+                />
               </motion.div>
               <span className="text-[#002559] text-base font-semibold font-inter tracking-tight">
                 서울대생 멘토의 1:1 밀착 코칭
@@ -299,11 +313,29 @@ export default function Home() {
                 {item.step}
               </motion.span>
               <div className="flex items-center gap-6 mb-8 group">
-                {item.side === 'right' && <motion.div whileInView={{ rotate: 360 }} className="w-10 h-10 bg-[#002559] rounded-xl shadow-lg" />}
+                {item.side === 'right' && (
+                  <>
+                    <motion.div 
+                      whileInView={{ rotate: 360 }} 
+                      className="w-10 h-10 bg-[#002559] rounded-xl shadow-lg flex items-center justify-center"
+                    >
+                      <BsArrowUpLeft className="text-xl text-white group-hover:-translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                    </motion.div>
+                  </>
+                )}
                 <h4 className="text-zinc-900 text-5xl sm:text-6xl font-bold leading-tight font-pretendard group-hover:text-[#002559] transition-colors">
                   {item.title}
                 </h4>
-                {item.side === 'left' && <motion.div whileInView={{ rotate: 360 }} className="w-10 h-10 bg-[#002559] rounded-xl shadow-lg" />}
+                {item.side === 'left' && (
+                  <>
+                    <motion.div 
+                      whileInView={{ rotate: 360 }} 
+                      className="w-10 h-10 bg-[#002559] rounded-xl shadow-lg flex items-center justify-center"
+                    >
+                      <BsArrowUpRight className="text-xl text-white group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                    </motion.div>
+                  </>
+                )}
               </div>
               <p className="max-w-2xl text-gray-500 text-2xl font-medium leading-relaxed font-pretendard">
                 {item.desc}
@@ -324,7 +356,13 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-start gap-12 mb-20">
             <div className="flex flex-col gap-6">
               <div className="flex items-center gap-4">
-                <Image src="/logo.svg" alt="설스터디" width={32} height={32} />
+                <Image 
+                  src="/logo.svg" 
+                  alt="설스터디" 
+                  width={32} 
+                  height={32} 
+                  style={{ width: '32px', height: 'auto' }}
+                />
                 <span className="text-3xl font-bold font-scoredream tracking-tight text-[#002559]">설스터디</span>
               </div>
               <p className="text-[#002559]/70 text-lg leading-relaxed max-w-xs font-pretendard font-medium">

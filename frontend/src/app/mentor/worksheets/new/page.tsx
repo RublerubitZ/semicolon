@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FiChevronDown } from "react-icons/fi";
 import { CgFileDocument } from "react-icons/cg";
 import { getApiUrl } from "@/lib/api";
+import { toast } from '@/stores/useToastStore';
 
 type SubjectUI = "국어" | "영어" | "수학";
 type SubjectType = "KOREAN" | "ENGLISH" | "MATH";
@@ -84,6 +85,7 @@ function formatBytes(bytes: number) {
 interface UploadedFile {
     file: File;
     url: string;
+    originalName: string; // 서버에서 반환된 원본 파일명
 }
 
 export default function LibraryNewPage() {
@@ -114,7 +116,7 @@ export default function LibraryNewPage() {
         const pdfFiles = fileList.filter(f => f.type === 'application/pdf');
 
         if (pdfFiles.length === 0) {
-            alert('PDF 파일만 업로드 가능합니다.');
+            toast.warning('PDF 파일만 업로드 가능합니다.');
             return;
         }
 
@@ -141,13 +143,13 @@ export default function LibraryNewPage() {
                 }
 
                 const data = await res.json();
-                newUploadedFiles.push({ file, url: data.url });
+                newUploadedFiles.push({ file, url: data.url, originalName: data.originalName || file.name });
             }
 
             setUploadedFiles(newUploadedFiles);
         } catch (err) {
             console.error('Upload error:', err);
-            alert(err instanceof Error ? err.message : 'PDF 업로드 중 오류가 발생했습니다.');
+            toast.error(err instanceof Error ? err.message : 'PDF 업로드 중 오류가 발생했습니다.');
         } finally {
             setIsUploading(false);
         }
@@ -161,21 +163,22 @@ export default function LibraryNewPage() {
         if (isSubmitting || isUploading) return;
 
         if (!name) {
-            alert("학습지명을 입력해주세요.");
+            toast.warning("학습지명을 입력해주세요.");
             return;
         }
 
         const pdfUrlsStr = uploadedFiles.map(f => f.url).join(',');
+        const pdfFileNamesStr = uploadedFiles.map(f => f.originalName).join(',');
 
         // 검증 1: PDF와 칼럼 동시 등록 방지
         if (hasPdf && hasColumn) {
-            alert('PDF와 칼럼을 동시에 등록할 수 없습니다.');
+            toast.warning('PDF와 칼럼을 동시에 등록할 수 없습니다.');
             return;
         }
 
         // 검증 2: 둘 다 없는 경우 방지
         if (!hasPdf && !hasColumn) {
-            alert('학습지 내용(PDF 또는 칼럼)을 등록해주세요.');
+            toast.warning('학습지 내용(PDF 또는 칼럼)을 등록해주세요.');
             return;
         }
 
@@ -197,15 +200,16 @@ export default function LibraryNewPage() {
                     type,
                     content: type === 'COLUMN' ? JSON.stringify({ topics: [{ title, description: content }] }) : null,
                     pdfUrl: pdfUrlsStr || null,
+                    pdfFileName: pdfFileNamesStr || null,
                 }),
             });
 
             if (!res.ok) throw new Error('학습지 생성에 실패했습니다.');
 
-            alert('학습지가 등록되었습니다.');
+            toast.success('학습지가 등록되었습니다.');
             router.push('/mentor/worksheets');
         } catch (err) {
-            alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+            toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
         } finally {
             setIsSubmitting(false);
         }

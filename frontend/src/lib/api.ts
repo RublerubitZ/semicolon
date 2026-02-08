@@ -138,3 +138,151 @@ export async function refreshAccessToken(): Promise<string | null> {
     return null;
   }
 }
+
+/**
+ * 자동 토큰 갱신 기능이 포함된 fetch 래퍼
+ * 401 에러 발생 시 자동으로 토큰을 갱신하고 요청을 재시도합니다.
+ *
+ * @param url - 요청 URL
+ * @param options - fetch 옵션
+ * @returns fetch Response
+ */
+let isRefreshing = false;
+let refreshPromise: Promise<string | null> | null = null;
+
+export async function fetchWithAuth(
+  url: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  // 첫 번째 요청
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+
+  const headers = new Headers(options.headers);
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (!headers.has('Content-Type') && options.method !== 'GET') {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  let response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  // 401 에러가 아니면 그대로 반환
+  if (response.status !== 401) {
+    return response;
+  }
+
+  // 401 에러 발생 - 토큰 갱신 시도
+  console.log('[Auth] 401 error detected, attempting token refresh...');
+
+  // 이미 다른 요청이 토큰을 갱신 중이면 그 결과를 기다림
+  if (isRefreshing && refreshPromise) {
+    const newToken = await refreshPromise;
+    if (!newToken) {
+      // 토큰 갱신 실패 - 로그인 페이지로 리다이렉트
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login?reason=expired';
+      }
+      return response;
+    }
+
+    // 새 토큰으로 재시도
+    headers.set('Authorization', `Bearer ${newToken}`);
+    return fetch(url, { ...options, headers });
+  }
+
+  // 토큰 갱신 시작
+  isRefreshing = true;
+  refreshPromise = refreshAccessToken();
+
+  try {
+    const newToken = await refreshPromise;
+
+    if (!newToken) {
+      // Refresh token도 만료됨 - 로그인 페이지로 리다이렉트
+      console.error('[Auth] Token refresh failed, redirecting to login');
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login?reason=expired';
+      }
+      return response;
+    }
+
+    // 새 토큰으로 원래 요청 재시도
+    console.log('[Auth] Retrying request with new token');
+    headers.set('Authorization', `Bearer ${newToken}`);
+    response = await fetch(url, {
+      ...options,
+      headers,
+    });
+
+    return response;
+  } finally {
+    isRefreshing = false;
+    refreshPromise = null;
+  }
+}
+
+/**
+ * API GET 요청 헬퍼 함수
+ * @param endpoint - API 엔드포인트 (예: '/api/tasks')
+ * @returns Response 객체
+ */
+export async function apiGet(endpoint: string): Promise<Response> {
+  const url = `${getApiUrl()}${endpoint}`;
+  return fetchWithAuth(url, { method: 'GET' });
+}
+
+/**
+ * API POST 요청 헬퍼 함수
+ * @param endpoint - API 엔드포인트
+ * @param data - 전송할 데이터
+ * @returns Response 객체
+ */
+export async function apiPost(endpoint: string, data?: unknown): Promise<Response> {
+  const url = `${getApiUrl()}${endpoint}`;
+  return fetchWithAuth(url, {
+    method: 'POST',
+    body: data ? JSON.stringify(data) : undefined,
+  });
+}
+
+/**
+ * API PUT 요청 헬퍼 함수
+ * @param endpoint - API 엔드포인트
+ * @param data - 전송할 데이터
+ * @returns Response 객체
+ */
+export async function apiPut(endpoint: string, data?: unknown): Promise<Response> {
+  const url = `${getApiUrl()}${endpoint}`;
+  return fetchWithAuth(url, {
+    method: 'PUT',
+    body: data ? JSON.stringify(data) : undefined,
+  });
+}
+
+/**
+ * API PATCH 요청 헬퍼 함수
+ * @param endpoint - API 엔드포인트
+ * @param data - 전송할 데이터
+ * @returns Response 객체
+ */
+export async function apiPatch(endpoint: string, data?: unknown): Promise<Response> {
+  const url = `${getApiUrl()}${endpoint}`;
+  return fetchWithAuth(url, {
+    method: 'PATCH',
+    body: data ? JSON.stringify(data) : undefined,
+  });
+}
+
+/**
+ * API DELETE 요청 헬퍼 함수
+ * @param endpoint - API 엔드포인트
+ * @returns Response 객체
+ */
+export async function apiDelete(endpoint: string): Promise<Response> {
+  const url = `${getApiUrl()}${endpoint}`;
+  return fetchWithAuth(url, { method: 'DELETE' });
+}

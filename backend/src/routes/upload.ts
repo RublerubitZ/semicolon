@@ -169,9 +169,15 @@ router.post('/pdf', (req: AuthRequest, res: Response, next: NextFunction) => {
 
     const base64Pdf = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
     const timestamp = Date.now();
-    const originalName = req.file.originalname.replace(/\.[^/.]+$/, ""); // 확장자 제거
-    // 한글 등 인코딩 시 길이가 급격히 늘어날 수 있으므로 safeName 길이를 제한
-    const safeName = encodeURIComponent(originalName).replace(/%/g, "_").substring(0, 100);
+    // multer(busboy)는 파일명을 latin1으로 디코딩하므로 UTF-8로 재변환
+    const decodedOriginalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+    const originalName = decodedOriginalName.replace(/\.[^/.]+$/, ""); // 확장자 제거
+    // 영문, 숫자, 하이픈, 언더스코어만 남기고 나머지는 제거
+    const safeName = originalName
+      .replace(/[^a-zA-Z0-9-_]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "")
+      .substring(0, 50) || "worksheet";
 
     const result = await cloudinary.uploader.upload(base64Pdf, {
       folder: CLOUDINARY_WORKSHEET_FOLDER,
@@ -191,6 +197,7 @@ router.post('/pdf', (req: AuthRequest, res: Response, next: NextFunction) => {
     res.json({
       url: signedUrl,
       publicId: result.public_id,
+      originalName: decodedOriginalName,
     });
   } catch (error) {
     console.error('PDF upload error:', error);
@@ -217,8 +224,15 @@ router.post('/pdfs', (req: AuthRequest, res: Response, next: NextFunction) => {
       const base64Pdf = `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substring(7);
-      const originalName = file.originalname.replace(/\.[^/.]+$/, ""); // 확장자 제거
-      const safeName = encodeURIComponent(originalName).replace(/%/g, "_").substring(0, 100);
+      // multer(busboy)는 파일명을 latin1으로 디코딩하므로 UTF-8로 재변환
+      const decodedOriginalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      const originalName = decodedOriginalName.replace(/\.[^/.]+$/, ""); // 확장자 제거
+      // 영문, 숫자, 하이픈, 언더스코어만 남기고 나머지는 제거
+      const safeName = originalName
+        .replace(/[^a-zA-Z0-9-_]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "")
+        .substring(0, 50) || "worksheet";
 
       const result = await cloudinary.uploader.upload(base64Pdf, {
         folder: CLOUDINARY_WORKSHEET_FOLDER,
@@ -238,6 +252,7 @@ router.post('/pdfs', (req: AuthRequest, res: Response, next: NextFunction) => {
       return {
         url: signedUrl,
         publicId: result.public_id,
+        originalName: decodedOriginalName,
       };
     });
 
@@ -246,6 +261,7 @@ router.post('/pdfs', (req: AuthRequest, res: Response, next: NextFunction) => {
     res.json({
       urls: results.map(r => r.url),
       publicIds: results.map(r => r.publicId),
+      originalNames: results.map(r => r.originalName),
       count: results.length,
     });
   } catch (error) {

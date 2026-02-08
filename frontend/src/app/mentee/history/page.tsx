@@ -15,7 +15,9 @@ import {
   HiChevronLeft,
   HiXMark
 } from 'react-icons/hi2';
+import { PiPushPinFill, PiPencilLineLight } from "react-icons/pi";
 import { AlertModal } from '@/components/AlertModal';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type Subject = 'KOREAN' | 'ENGLISH' | 'MATH' | 'OTHER';
 type SortOrder = 'LATEST' | 'OLDEST';
@@ -234,6 +236,19 @@ export default function TaskHistoryPage() {
     setIsDatePickerOpen(false);
   };
 
+  const handleDragEnd = (event: any, info: any) => {
+    const threshold = 50;
+    const currentIndex = SUBJECT_TABS.findIndex(tab => tab.id === selectedSubject);
+    
+    if (info.offset.x < -threshold && currentIndex < SUBJECT_TABS.length - 1) {
+      // Swipe Left -> Next Tab
+      setSelectedSubject(SUBJECT_TABS[currentIndex + 1].id as any);
+    } else if (info.offset.x > threshold && currentIndex > 0) {
+      // Swipe Right -> Previous Tab
+      setSelectedSubject(SUBJECT_TABS[currentIndex - 1].id as any);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-white font-['Pretendard']">
       {/* Header */}
@@ -262,19 +277,22 @@ export default function TaskHistoryPage() {
       </div>
 
       {/* Tabs */}
-      <div className="relative border-b border-gray-100 mb-2">
+      <div className="relative border-b border-gray-100 mb-2 overflow-hidden">
         <div className="flex px-4 overflow-x-auto scrollbar-hide">
           {SUBJECT_TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setSelectedSubject(tab.id as any)}
-              className={`flex-1 min-w-[60px] py-4 text-center text-base font-semibold transition-colors relative ${
+              className={`flex-1 min-w-[60px] py-4 text-center text-base font-semibold transition-colors relative z-10 ${
                 selectedSubject === tab.id ? 'text-black' : 'text-[#94A3B8]'
               }`}
             >
               {tab.label}
               {selectedSubject === tab.id && (
-                <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#BFDBFE]" />
+                <motion.div 
+                  layoutId="activeTab"
+                  className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#BFDBFE]" 
+                />
               )}
             </button>
           ))}
@@ -307,170 +325,198 @@ export default function TaskHistoryPage() {
       </div>
 
       {/* Task List */}
-      <div className="flex-1 px-6 pb-4 space-y-4 overflow-y-auto">
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="w-full h-32 bg-gray-100 rounded-[10px] animate-pulse" />
-            ))}
-          </div>
-        ) : filteredTasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-[#94A3B8]">
-            <p className="text-sm">등록된 과제가 없습니다.</p>
-          </div>
-        ) : (
-          <>
-            {paginatedTasks.map((task) => {
-              const isFuture = isFutureTask(task.date);
-              const restricted = isAccessRestricted(task);
-              const statusInfo = getTaskStatusInfo(task);
-              const hasFeedback = task.feedbacks && task.feedbacks.length > 0;
-              const feedback = hasFeedback ? task.feedbacks![0] : null;
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={selectedSubject}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.1}
+            onDragEnd={handleDragEnd}
+            className="flex-1 flex flex-col overflow-hidden touch-pan-y"
+          >
+            <div className="flex-1 px-6 pb-4 space-y-4 overflow-y-auto">
+              {isLoading ? (
+                <div className="space-y-4 mt-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="w-full h-32 bg-gray-100 rounded-[10px] animate-pulse" />
+                  ))}
+                </div>
+              ) : filteredTasks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-[#94A3B8]">
+                  <p className="text-sm">등록된 과제가 없습니다.</p>
+                </div>
+              ) : (
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={`${selectedSubject}-${currentPage}`}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-4 pt-2"
+                  >
+                    {paginatedTasks.map((task) => {
+                      const isFuture = isFutureTask(task.date);
+                      const restricted = isAccessRestricted(task);
+                      const statusInfo = getTaskStatusInfo(task);
+                      const hasFeedback = task.feedbacks && task.feedbacks.length > 0;
+                      const feedback = hasFeedback ? task.feedbacks![0] : null;
 
-              return (
-                <div 
-                  key={task.id}
-                  className={`w-full p-5 bg-[#F3F4F6] rounded-[10px] flex flex-col gap-4 ${restricted ? 'opacity-60' : ''}`}
-                >
-                  <div className="flex flex-col gap-2.5">
-                    <div className="flex items-start gap-3.5">
-                      {/* Icon */}
-                      <div className={`size-7 min-w-[28px] rounded-2xl flex items-center justify-center mt-0.5 ${task.isFixed ? 'bg-[#082F49]' : 'bg-[#64748B]'}`}>
-                        <div className="size-4 flex items-center justify-center">
-                          <div className="size-3 bg-white rounded-sm" />
-                        </div>
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="flex justify-between items-start gap-2 mb-2">
-                          <div className="flex flex-col gap-1.5 min-w-0">
-                            <div className="flex items-start gap-1.5 min-w-0 flex-1">
-                              <h3 className="text-black text-base font-semibold leading-6 line-clamp-2 flex-1">
-                                {task.title}
-                              </h3>
+                      return (
+                        <div 
+                          key={task.id}
+                          className={`w-full p-5 bg-[#F3F4F6] rounded-[10px] flex flex-col gap-4 ${restricted ? 'opacity-60' : ''}`}
+                        >
+                          <div className="flex flex-col gap-2.5">
+                            <div className="flex items-start gap-3.5">
+                              {/* Icon */}
+                              <div className="mt-1 flex-shrink-0">
+                                {task.isFixed ? (
+                                  <PiPushPinFill className="text-[#00265A] text-lg -scale-x-100" />
+                                ) : (
+                                  <PiPencilLineLight className="text-gray-400 text-lg" />
+                                )}
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className="flex justify-between items-start gap-2 mb-2">
+                                  <div className="flex flex-col gap-1.5 min-w-0">
+                                    <div className="flex items-start gap-1.5 min-w-0 flex-1">
+                                      <h3 className="text-black text-base font-semibold leading-6 line-clamp-2 flex-1">
+                                        {task.title}
+                                      </h3>
 
-                              <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
-                                {/* Subject Tag */}
-                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${getSubjectBadgeColor(task.subject)}`}>
-                                  {getSubjectLabel(task.subject)}
-                                </span>
+                                      <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                                        {/* Subject Tag */}
+                                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${getSubjectBadgeColor(task.subject)}`}>
+                                          {getSubjectLabel(task.subject)}
+                                        </span>
 
-                                {/* Status Badge */}
-                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold whitespace-nowrap ${statusInfo.style}`}>
-                                  {statusInfo.label}
-                                </span>
+                                        {/* Status Badge */}
+                                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold whitespace-nowrap ${statusInfo.style}`}>
+                                          {statusInfo.label}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Detailed View Link */}
+                                  <button 
+                                    onClick={() => {
+                                      if (isFuture) {
+                                        showAlert('미래의 과제는 해당 날짜가 되어야 접근할 수 있습니다.');
+                                        return;
+                                      }
+                                      router.push(`/mentee/tasks/${task.id}`);
+                                    }}
+                                    className="shrink-0 flex items-center gap-1 text-[#4B5563] text-xs font-medium pt-1"
+                                  >
+                                    상세 보기
+                                    <HiChevronRight className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+
+                                {/* Date & Time Info */}
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-1.5 text-[#4B5563] text-xs font-medium">
+                                    <HiCalendar className="w-4 h-4 shrink-0" />
+                                    {formatDate(task.date)}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-[#4B5563] text-xs font-medium">
+                                    <HiClock className="w-4 h-4 shrink-0" />
+                                    {formatTimeRange(task)}
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>
-                          
-                          {/* Detailed View Link */}
-                          <button 
-                            onClick={() => {
-                              if (isFuture) {
-                                showAlert('미래의 과제는 해당 날짜가 되어야 접근할 수 있습니다.');
-                                return;
-                              }
-                              router.push(`/mentee/tasks/${task.id}`);
-                            }}
-                            className="shrink-0 flex items-center gap-1 text-[#4B5563] text-xs font-medium pt-1"
-                          >
-                            상세 보기
-                            <HiChevronRight className="w-3.5 h-3.5" />
-                          </button>
+
+                          {/* PDF Download Button */}
+                          {(task.worksheet?.pdfUrl || task.pdfUrl) && !isFuture && (
+                            <div className="ml-10.5">
+                              <a
+                                href={task.worksheet?.pdfUrl || task.pdfUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-[#4B5563] hover:bg-gray-50 transition-colors"
+                              >
+                                <HiOutlineDocumentText className="w-4 h-4 text-blue-500" />
+                                학습자료(PDF) 다운로드
+                              </a>
+                            </div>
+                          )}
+
+                          {/* Restricted Access Message */}
+                          {isFuture && (
+                            <div className="ml-10.5 text-[#EF4444] text-[10px] font-medium flex items-center gap-1">
+                              <span>🔒 해당 날짜가 되면 상세 내용과 학습지를 확인할 수 있습니다</span>
+                            </div>
+                          )}
+
+                          {/* Feedback Section */}
+                          {feedback && (
+                            <div className="w-full bg-white rounded-lg p-3.5 flex flex-col gap-2.5 mt-1">
+                              <div className="text-[#1E293B] text-sm font-semibold">
+                                {getSubjectLabel(task.subject)} 피드백 요약
+                              </div>
+                              <div className="bg-[#F0F7FF] rounded-lg border border-[#BFDBFE] p-3.5">
+                                <div className="text-[#082F49] text-sm font-medium leading-5">
+                                  {feedback.summary || feedback.content}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Pagination Controls moved inside inner motion.div */}
+                    {totalPages > 1 && (
+                      <div className="flex justify-center items-center gap-4 py-6">
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                          className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                        >
+                          <HiChevronLeft className="w-6 h-6" />
+                        </button>
+                        
+                        <div className="flex items-center gap-2">
+                          {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                            <button
+                              key={page}
+                              onClick={() => setCurrentPage(page)}
+                              className={`w-8 h-8 rounded-lg text-sm font-semibold transition-colors ${
+                                currentPage === page 
+                                  ? 'bg-[#BFDBFE] text-[#082F49]' 
+                                  : 'text-gray-400 hover:bg-gray-50'
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          ))}
                         </div>
 
-                        {/* Date & Time Info */}
-                        <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-1.5 text-[#4B5563] text-xs font-medium">
-                            <HiCalendar className="w-4 h-4 shrink-0" />
-                            {formatDate(task.date)}
-                          </div>
-                          <div className="flex items-center gap-1.5 text-[#4B5563] text-xs font-medium">
-                            <HiClock className="w-4 h-4 shrink-0" />
-                            {formatTimeRange(task)}
-                          </div>
-                        </div>
+                        <button
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                          className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+                        >
+                          <HiChevronRight className="w-6 h-6" />
+                        </button>
                       </div>
-                    </div>
-                  </div>
-
-                  {/* PDF Download Button */}
-                  {(task.worksheet?.pdfUrl || task.pdfUrl) && !isFuture && (
-                    <div className="ml-10.5">
-                      <a
-                        href={task.worksheet?.pdfUrl || task.pdfUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-[#4B5563] hover:bg-gray-50 transition-colors"
-                      >
-                        <HiOutlineDocumentText className="w-4 h-4 text-blue-500" />
-                        학습자료(PDF) 다운로드
-                      </a>
-                    </div>
-                  )}
-
-                  {/* Restricted Access Message */}
-                  {isFuture && (
-                    <div className="ml-10.5 text-[#EF4444] text-[10px] font-medium flex items-center gap-1">
-                      <span>🔒 해당 날짜가 되면 상세 내용과 학습지를 확인할 수 있습니다</span>
-                    </div>
-                  )}
-
-                  {/* Feedback Section */}
-                  {feedback && (
-                    <div className="w-full bg-white rounded-lg p-3.5 flex flex-col gap-2.5 mt-1">
-                      <div className="text-[#1E293B] text-sm font-semibold">
-                        {getSubjectLabel(task.subject)} 피드백 요약
-                      </div>
-                      <div className="bg-[#F0F7FF] rounded-lg border border-[#BFDBFE] p-3.5">
-                        <div className="text-[#082F49] text-sm font-medium leading-5">
-                          {feedback.summary || feedback.content}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex justify-center items-center gap-4 py-6">
-                <button
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  disabled={currentPage === 1}
-                  className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-                >
-                  <HiChevronLeft className="w-6 h-6" />
-                </button>
-                
-                <div className="flex items-center gap-2">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`w-8 h-8 rounded-lg text-sm font-semibold transition-colors ${
-                        currentPage === page 
-                          ? 'bg-[#BFDBFE] text-[#082F49]' 
-                          : 'text-gray-400 hover:bg-gray-50'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  disabled={currentPage === totalPages}
-                  className="p-2 rounded-full hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
-                >
-                  <HiChevronRight className="w-6 h-6" />
-                </button>
-              </div>
-            )}
-          </>
-        )}
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              )}
+            </div>
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Date Picker Modal */}

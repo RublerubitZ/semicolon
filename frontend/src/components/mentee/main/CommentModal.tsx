@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "@/stores/useToastStore";
 
 interface CommentModalProps {
   open: boolean;
@@ -21,7 +22,7 @@ export function CommentModal({ open, onClose, onSubmit }: CommentModalProps) {
     e.preventDefault();
 
     if (!content.trim()) {
-      alert("내용을 입력해주세요.");
+      toast.warning("내용을 입력해주세요.");
       return;
     }
 

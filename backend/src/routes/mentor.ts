@@ -1103,7 +1103,7 @@ router.get('/worksheets', async (req: AuthRequest, res: Response) => {
 router.post('/worksheets', async (req: AuthRequest, res: Response) => {
   try {
     const mentorId = req.user!.userId;
-    const { title, subject, content, pdfUrl, type } = req.body;
+    const { title, subject, content, pdfUrl, pdfFileName, type } = req.body;
 
     // 검증 1: PDF와 칼럼 동시 등록 방지
     const hasPdf = pdfUrl && pdfUrl.trim();
@@ -1132,6 +1132,7 @@ router.post('/worksheets', async (req: AuthRequest, res: Response) => {
         subject,
         content,
         pdfUrl,
+        pdfFileName: pdfFileName || null,
         type: finalType,
       },
     });
@@ -1148,7 +1149,7 @@ router.put('/worksheets/:id', async (req: AuthRequest, res: Response) => {
   try {
     const mentorId = req.user!.userId;
     const worksheetId = req.params.id as string;
-    const { title, subject, content, pdfUrl, type } = req.body;
+    const { title, subject, content, pdfUrl, pdfFileName, type } = req.body;
 
     // 권한 확인
     const worksheet = await prisma.worksheet.findUnique({
@@ -1170,6 +1171,7 @@ router.put('/worksheets/:id', async (req: AuthRequest, res: Response) => {
         subject,
         content,
         pdfUrl,
+        pdfFileName: pdfFileName !== undefined ? pdfFileName : undefined,
         type,
       },
     });

@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { FiChevronDown } from "react-icons/fi";
 import { CgFileDocument } from "react-icons/cg";
 import { getApiUrl } from "@/lib/api";
+import { toast } from '@/stores/useToastStore';
 
 type SubjectUI = "국어" | "영어" | "수학";
 type SubjectType = "KOREAN" | "ENGLISH" | "MATH";
@@ -153,7 +154,7 @@ export default function LibraryEditPage() {
                 const worksheet = data.find((w: any) => w.id === id);
                 
                 if (!worksheet) {
-                    alert('학습지를 찾을 수 없습니다.');
+                    toast.error('학습지를 찾을 수 없습니다.');
                     router.push('/mentor/worksheets');
                     return;
                 }
@@ -175,14 +176,15 @@ export default function LibraryEditPage() {
 
                 if (worksheet.pdfUrl) {
                     const urls = worksheet.pdfUrl.split(',');
-                    setUploadedFiles(urls.map((url: string) => ({
-                        name: extractFileName(url),
+                    const names = worksheet.pdfFileName ? worksheet.pdfFileName.split(',') : [];
+                    setUploadedFiles(urls.map((url: string, i: number) => ({
+                        name: names[i] || extractFileName(url),
                         url: url
                     })));
                 }
             } catch (err) {
                 console.error('Fetch error:', err);
-                alert('학습지 정보를 불러오는데 실패했습니다.');
+                toast.error('학습지 정보를 불러오는데 실패했습니다.');
             } finally {
                 setIsLoading(false);
             }
@@ -196,7 +198,7 @@ export default function LibraryEditPage() {
         const pdfFiles = fileList.filter(f => f.type === 'application/pdf');
 
         if (pdfFiles.length === 0) {
-            alert('PDF 파일만 업로드 가능합니다.');
+            toast.warning('PDF 파일만 업로드 가능합니다.');
             return;
         }
 
@@ -223,13 +225,13 @@ export default function LibraryEditPage() {
                 }
 
                 const data = await res.json();
-                newUploadedFiles.push({ file, name: file.name, url: data.url, size: file.size });
+                newUploadedFiles.push({ file, name: data.originalName || file.name, url: data.url, size: file.size });
             }
 
             setUploadedFiles(newUploadedFiles);
         } catch (err) {
             console.error('Upload error:', err);
-            alert(err instanceof Error ? err.message : 'PDF 업로드 중 오류가 발생했습니다.');
+            toast.error(err instanceof Error ? err.message : 'PDF 업로드 중 오류가 발생했습니다.');
         } finally {
             setIsUploading(false);
         }
@@ -243,12 +245,13 @@ export default function LibraryEditPage() {
         if (isSubmitting || isUploading) return;
 
         if (!name) {
-            alert("학습지명을 입력해주세요.");
+            toast.warning("학습지명을 입력해주세요.");
             return;
         }
 
         let type: "COLUMN" | "PDF" = "COLUMN";
         const pdfUrlsStr = uploadedFiles.map(f => f.url).join(',');
+        const pdfFileNamesStr = uploadedFiles.map(f => f.name).join(',');
 
         if (pdfUrlsStr && !title && !content) {
             type = "PDF";
@@ -257,7 +260,7 @@ export default function LibraryEditPage() {
         } else if (pdfUrlsStr) {
             type = "PDF";
         } else {
-            alert("칼럼 내용이나 PDF 파일을 등록해주세요.");
+            toast.warning("칼럼 내용이나 PDF 파일을 등록해주세요.");
             return;
         }
 
@@ -276,15 +279,16 @@ export default function LibraryEditPage() {
                     type,
                     content: type === 'COLUMN' ? JSON.stringify({ topics: [{ title, description: content }] }) : null,
                     pdfUrl: pdfUrlsStr || null,
+                    pdfFileName: pdfFileNamesStr || null,
                 }),
             });
 
             if (!res.ok) throw new Error('학습지 수정에 실패했습니다.');
 
-            alert('학습지가 수정되었습니다.');
+            toast.success('학습지가 수정되었습니다.');
             router.push('/mentor/worksheets');
         } catch (err) {
-            alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+            toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
         } finally {
             setIsSubmitting(false);
         }

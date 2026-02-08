@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { TimeInputModal } from "./TimeInputModal";
 import { getApiUrl } from "@/lib/api";
+import { toast } from "@/stores/useToastStore";
 
 export interface AssignmentItem {
   id: string;
@@ -33,7 +34,7 @@ export function AssignmentCard({ item, existingTimes, onTimeAdded }: AssignmentC
       setShowTimeModal(true);
     } else if (!newChecked && item.hasTimeLog) {
       // 체크 해제는 막음 (시간이 이미 입력된 경우)
-      alert("이미 학습 시간이 기록된 과제는 체크를 해제할 수 없습니다.");
+      toast.warning("이미 학습 시간이 기록된 과제는 체크를 해제할 수 없습니다.");
       setChecked(true);
     } else {
       setChecked(newChecked);
@@ -74,10 +75,10 @@ export function AssignmentCard({ item, existingTimes, onTimeAdded }: AssignmentC
       setChecked(true);
       setShowTimeModal(false);
       onTimeAdded(); // 부모 컴포넌트에 알려서 데이터 새로고침
-      alert("학습 시간이 기록되었습니다!");
+      toast.success("학습 시간이 기록되었습니다!");
     } catch (err) {
       console.error(err);
-      alert(err instanceof Error ? err.message : "오류가 발생했습니다.");
+      toast.error(err instanceof Error ? err.message : "오류가 발생했습니다.");
       setChecked(false);
     } finally {
       setIsSubmitting(false);

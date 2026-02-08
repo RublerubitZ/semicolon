@@ -6,6 +6,7 @@ import { getSelfCheckInfo, type SelfCheckStatus } from '@/constants/selfCheck';
 import { getTaskStatusInfo } from '@/constants/taskStatus';
 import StreakBadge from '@/components/streak/StreakBadge';
 import Heatmap, { HeatmapData } from '@/components/heatmap/Heatmap';
+import { toast } from '@/stores/useToastStore';
 
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -302,7 +303,7 @@ export default function MenteePlannerPage() {
   const handleSubmitDailyFeedback = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!dailyFeedbackForm.content || !dailyFeedbackForm.summary) {
-      alert('모든 필드를 입력해주세요.');
+      toast.warning('모든 필드를 입력해주세요.');
       return;
     }
 
@@ -328,13 +329,13 @@ export default function MenteePlannerPage() {
       });
 
       if (!res.ok) throw new Error('일일 피드백 저장에 실패했습니다.');
-      alert(dailyFeedback ? '수정되었습니다.' : '작성되었습니다.');
+      toast.success(dailyFeedback ? '수정되었습니다.' : '작성되었습니다.');
       fetchDailyFeedback();
       if (activeTab === 'dailyFeedback') {
         setActiveTab('tasks');
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     }
   };
 
@@ -352,11 +353,11 @@ export default function MenteePlannerPage() {
         body: JSON.stringify(editFormData),
       });
       if (!res.ok) throw new Error('과제 수정에 실패했습니다.');
-      alert('과제가 수정되었습니다.');
+      toast.success('과제가 수정되었습니다.');
       closeEditModal();
       fetchPlanner();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     }
   };
 
@@ -369,10 +370,10 @@ export default function MenteePlannerPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('과제 삭제에 실패했습니다.');
-      alert('과제가 삭제되었습니다.');
+      toast.success('과제가 삭제되었습니다.');
       fetchPlanner();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     }
   };
 
@@ -466,14 +467,41 @@ export default function MenteePlannerPage() {
               <div className="flex items-center gap-1.5"><span className="text-gray-400 text-xs font-medium">피드백</span><span className="text-slate-800 text-xs font-bold">{task.feedbacks.length}</span></div>
               <div className="flex items-center gap-1.5"><span className="text-gray-400 text-xs font-medium">학습시간</span><span className="text-blue-500 text-xs font-bold">{Math.floor(studyTime / 60)}분</span></div>
             </div>
+            {(() => {
+              const hasSubmissions = task.submissions && task.submissions.length > 0;
+              const hasFeedbacks = task.feedbacks && task.feedbacks.length > 0;
+
+              if (hasFeedbacks) {
+                return (
+                  <button 
+                    onClick={() => router.push(`/mentor/tasks/${task.id}`)} 
+                    className="mt-3 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-0.5 transition-colors"
+                  >
+                    <span>💬 피드백 대화 연결하기</span>
+                    <span>›</span>
+                  </button>
+                );
+              }
+
+              if (hasSubmissions) {
+                return (
+                  <button 
+                    onClick={() => router.push(`/mentor/tasks/${task.id}`)} 
+                    className="mt-3 text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-0.5 transition-colors"
+                  >
+                    <span>✍️ 피드백 작성하러 가기</span>
+                    <span>›</span>
+                  </button>
+                );
+              }
+
+              return null;
+            })()}
           </div>
-          <div className="flex flex-col gap-2 shrink-0">
-            <button onClick={() => router.push(`/mentor/tasks/${task.id}`)} className="px-4 py-2 text-sm bg-blue-500 text-white rounded-xl font-bold hover:bg-blue-600 transition-colors">
-              {task.feedbacks.length > 0 ? '피드백 대화' : '피드백 작성'}
-            </button>
-            <div className="flex gap-1 justify-end">
-              <button onClick={() => openEditModal(task)} className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><EditIcon size={18} /></button>
-              <button onClick={() => handleDeleteTask(task)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><DeleteIcon size={18} /></button>
+          <div className="flex flex-col gap-3 shrink-0">
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => openEditModal(task)} className="p-2.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"><EditIcon size={18} /></button>
+              <button onClick={() => handleDeleteTask(task)} className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"><DeleteIcon size={18} /></button>
             </div>
           </div>
         </div>
@@ -714,7 +742,7 @@ function NewTaskInTab({ menteeId, menteeName, onSuccess }: any) {
 
   const onSubmit = async (e: any) => {
     e.preventDefault();
-    if (!taskName) return alert('과제명을 입력해주세요.');
+    if (!taskName) { toast.warning('과제명을 입력해주세요.'); return; }
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('token');
@@ -724,9 +752,9 @@ function NewTaskInTab({ menteeId, menteeName, onSuccess }: any) {
         body: JSON.stringify({ menteeId, title: taskName, description: goal, subject, date, materials: [] })
       });
       if (!res.ok) throw new Error('과제 등록 실패');
-      alert('등록되었습니다.');
+      toast.success('등록되었습니다.');
       onSuccess();
-    } catch (err) { alert('실패했습니다.'); } finally { setIsSubmitting(false); }
+    } catch (err) { toast.error('실패했습니다.'); } finally { setIsSubmitting(false); }
   };
 
   return (

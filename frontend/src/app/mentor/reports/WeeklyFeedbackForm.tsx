@@ -2,6 +2,7 @@
 import { getApiUrl } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { AiOutlineSave } from 'react-icons/ai';
+import { toast } from '@/stores/useToastStore';
 
 interface WeeklyFeedback {
   id: string;
@@ -105,7 +106,7 @@ export default function WeeklyFeedbackForm({ menteeId }: { menteeId: string }) {
 
   const handleSave = async () => {
     if (!overallComment.trim() || !strengths.trim() || !improvements.trim() || !nextWeekGoals.trim()) {
-      alert('모든 항목을 입력해주세요.');
+      toast.warning('모든 항목을 입력해주세요.');
       return;
     }
 
@@ -147,7 +148,7 @@ export default function WeeklyFeedbackForm({ menteeId }: { menteeId: string }) {
 
       const result = await res.json();
       setFeedback(result);
-      alert(feedback ? '주간 총평이 수정되었습니다.' : '주간 총평이 저장되었습니다.');
+      toast.success(feedback ? '주간 총평이 수정되었습니다.' : '주간 총평이 저장되었습니다.');
       
       // Fetch all feedbacks again to update the dots
       const token2 = localStorage.getItem('token');
@@ -161,7 +162,7 @@ export default function WeeklyFeedbackForm({ menteeId }: { menteeId: string }) {
       }
 
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsSaving(false);
     }

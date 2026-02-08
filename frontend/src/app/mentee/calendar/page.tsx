@@ -13,13 +13,12 @@ import { Z_INDEX } from '@/constants/zIndex';
 
 const WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"];
 
-const getSubjectColor = (subject: string) => {
-  switch (subject) {
-    case 'KOREAN': return 'bg-pink-400';
-    case 'ENGLISH': return 'bg-yellow-400';
-    case 'MATH': return 'bg-blue-400';
-    default: return 'bg-gray-400';
-  }
+const SUBJECT_CONFIG: Record<string, { bg: string; dot: string; label: string }> = {
+  KOREAN: { bg: "#FFE1EC", dot: "#FFA6CE", label: '국어' },
+  ENGLISH: { bg: "#FFECC1", dot: "#F9CA42", label: '영어' },
+  MATH: { bg: "#DCEEFF", dot: "#B4D6FF", label: '수학' },
+  OTHER: { bg: "#E6DDFF", dot: "#A28FFF", label: '기타' },
+  FEEDBACK: { bg: "#DDFBEA", dot: "#9AF2BF", label: '피드백' },
 };
 
 interface Task {
@@ -93,6 +92,9 @@ export default function CalendarPage() {
   const [selected, setSelected] = useState(todayKey);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Filter state
+  const [visibleSubjects, setVisibleSubjects] = useState<Set<string>>(new Set(['KOREAN', 'ENGLISH', 'MATH', 'OTHER', 'FEEDBACK']));
+
   // Picker states
   const [pickerOpen, setPickerOpen] = useState(false);
   const [draftYear, setDraftYear] = useState(year);
@@ -102,15 +104,21 @@ export default function CalendarPage() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetDateKey, setSheetDateKey] = useState<string | null>(null);
 
+  const toggleSubject = (s: string) => {
+    const next = new Set(visibleSubjects);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    setVisibleSubjects(next);
+  };
+
   const fetchMonthlyData = async (y: number, m: number) => {
     const cacheKey = `${y}-${m}`;
     
-    // 1. 캐시 확인: 이미 데이터가 있으면 즉시 교체, 없으면 null로 비워서 이전 달 데이터 잔상 제거
     if (cache[cacheKey]) {
       setMonthlyData(cache[cacheKey]);
       setIsLoading(false);
     } else {
-      setMonthlyData(null); // 이전 데이터 초기화 (잔상 방지 핵심)
+      setMonthlyData(null);
       setIsLoading(true);
     }
 
@@ -144,7 +152,6 @@ export default function CalendarPage() {
 
   const grid = useMemo(() => buildMonthGrid(year, month), [year, month]);
 
-  // 데이터 검증 로직 추가: 현재 달과 데이터의 달이 일치할 때만 반환
   const getTasksForDate = (dateKey: string) => {
     if (!monthlyData || monthlyData.year !== year || monthlyData.month !== month) return [];
     return monthlyData.tasksByDate?.[dateKey] || [];
@@ -205,39 +212,25 @@ export default function CalendarPage() {
           <IoIosArrowDown className="text-gray-500" />
         </button>
 
-        {/* Legend */}
+        {/* Legend / Toggles */}
         <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[12px] font-semibold bg-pink-100 text-black"
-          >
-            <span className="w-2 h-2 rounded-full bg-pink-400" />
-            {SUBJECT_LABELS.KOREAN}
-          </button>
-
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[12px] font-semibold bg-yellow-100 text-black"
-          >
-            <span className="w-2 h-2 rounded-full bg-yellow-400" />
-            {SUBJECT_LABELS.ENGLISH}
-          </button>
-
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[12px] font-semibold bg-blue-100 text-black"
-          >
-            <span className="w-2 h-2 rounded-full bg-blue-400" />
-            {SUBJECT_LABELS.MATH}
-          </button>
-
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[12px] font-semibold bg-green-100 text-black"
-          >
-            <span className="w-2 h-2 rounded-full bg-green-400" />
-            피드백
-          </button>
+          {Object.entries(SUBJECT_CONFIG).map(([key, config]) => {
+            const isActive = visibleSubjects.has(key);
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleSubject(key)}
+                className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[12px] font-semibold transition-all ${
+                  isActive ? "" : "opacity-30 grayscale grayscale-[50%]"
+                }`}
+                style={{ backgroundColor: config.bg, color: "#1A1A1A" }}
+              >
+                <span className="w-2 h-2 rounded-sm" style={{ backgroundColor: config.dot }} />
+                {config.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Swipeable Calendar Area */}
@@ -262,16 +255,19 @@ export default function CalendarPage() {
               const isSelected = cell.key === selected;
               const isToday = cell.key === todayKey;
               const isFuture = cell.key > todayKey;
-              const isPast = cell.key < todayKey;
               
               const tasks = getTasksForDate(cell.key);
               const mentorTasks = tasks.filter(t => t.isFixed);
               const dailyFeedback = getDailyFeedbackForDate(cell.key);
               const rate = getCompletionRate(tasks);
 
-              // Unique subjects for dots (Only show main 3 subjects for mentor tasks)
-              const displaySubjects = Array.from(new Set(mentorTasks.map(t => t.subject)))
-                .filter(s => DEFAULT_SUBJECT_VALUES.includes(s as any));
+              // Unique subjects for dots (all tasks)
+              const displaySubjects = Array.from(new Set(tasks.map(t => {
+                const s = t.subject;
+                return (s === 'KOREAN' || s === 'ENGLISH' || s === 'MATH') ? s : 'OTHER';
+              }))).filter(s => visibleSubjects.has(s));
+
+              const showFeedbackDot = dailyFeedback && visibleSubjects.has('FEEDBACK');
 
               return (
                 <button
@@ -284,15 +280,25 @@ export default function CalendarPage() {
                   }}
                   className={`h-[84px] flex flex-col items-center justify-start pt-1 relative ${isFuture ? 'opacity-40 cursor-default' : ''}`}
                 >
-                  <div className={`
-                    w-8 h-8 rounded-full grid place-items-center text-[14px] font-bold transition-all
-                    ${!cell.inMonth ? "text-gray-300" : "text-gray-900"}
-                    ${isSelected ? "bg-[#00265A] text-white shadow-md" : isToday ? "bg-blue-50 text-blue-600" : ""}
-                  `}>
-                    {cell.day}
+                  <div className="relative">
+                    <div className={`
+                      w-8 h-8 rounded-full grid place-items-center text-[14px] font-bold transition-all
+                      ${!cell.inMonth ? "text-gray-300" : "text-gray-900"}
+                      ${isSelected ? "bg-[#00265A] text-white shadow-md" : isToday ? "bg-blue-50 text-blue-600" : ""}
+                    `}>
+                      {cell.day}
+                    </div>
+                    {/* Feedback Indicator: Top Right Green Dot */}
+                    {dailyFeedback && visibleSubjects.has('FEEDBACK') && (
+                      <motion.div 
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#9AF2BF] rounded-full border border-white shadow-sm"
+                      />
+                    )}
                   </div>
 
-                  {/* Status Dots & Progress (Hidden for Future) */}
+                  {/* Status Squares & Progress */}
                   {!isFuture && (
                     <div className="mt-1.5 h-2 w-full flex justify-center items-center overflow-hidden">
                       <AnimatePresence mode="wait">
@@ -307,16 +313,9 @@ export default function CalendarPage() {
                             {[1, 2].map((i) => (
                               <motion.span
                                 key={i}
-                                animate={{ 
-                                  opacity: [0.3, 0.6, 0.3],
-                                  scale: [0.9, 1.1, 0.9]
-                                }}
-                                transition={{ 
-                                  duration: 1.5, 
-                                  repeat: Infinity,
-                                  delay: i * 0.2
-                                }}
-                                className="w-1.5 h-1.5 rounded-full bg-gray-200"
+                                animate={{ opacity: [0.3, 0.6, 0.3], scale: [0.9, 1.1, 0.9] }}
+                                transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
+                                className="w-1.5 h-1.5 rounded-[1px] bg-gray-200"
                               />
                             ))}
                           </motion.div>
@@ -333,17 +332,10 @@ export default function CalendarPage() {
                                 layoutId={`${cell.key}-${subject}`}
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
-                                className={`w-2 h-2 rounded-full ${getSubjectColor(subject)}`}
+                                className="w-2 h-2 rounded-[1px]"
+                                style={{ backgroundColor: SUBJECT_CONFIG[subject]?.dot }}
                               />
                             ))}
-                            {dailyFeedback && (
-                              <motion.span 
-                                layoutId={`${cell.key}-feedback`}
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                className="w-2 h-2 rounded-full bg-green-400" 
-                              />
-                            )}
                           </motion.div>
                         )}
                       </AnimatePresence>
@@ -369,7 +361,7 @@ export default function CalendarPage() {
           </div>
         </motion.div>
 
-        {/* Year/Month Picker */}
+        {/* Picker and Sheet Modals (Same logic but updated colors if needed) */}
         <AnimatePresence>
           {pickerOpen && (
             <motion.div 
@@ -420,7 +412,6 @@ export default function CalendarPage() {
           )}
         </AnimatePresence>
 
-        {/* Day Detail Sheet */}
         <AnimatePresence>
           {sheetOpen && sheetDateKey && (
             <motion.div 
@@ -464,38 +455,43 @@ export default function CalendarPage() {
                           initial={{ opacity: 0, x: -10 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: 0.1 }}
-                          className="p-4 bg-green-50 border border-green-100 rounded-xl flex items-start gap-3"
+                          className="p-4 rounded-xl flex items-start gap-3"
+                          style={{ backgroundColor: SUBJECT_CONFIG.FEEDBACK.bg, border: `1px solid ${SUBJECT_CONFIG.FEEDBACK.dot}20` }}
                         >
-                          <div className="w-3 h-3 rounded-full bg-green-400 mt-1 shrink-0" />
+                          <div className="w-3 h-3 rounded-sm mt-1 shrink-0" style={{ backgroundColor: SUBJECT_CONFIG.FEEDBACK.dot }} />
                           <div>
-                            <div className="text-[14px] font-bold text-green-900">데일리 피드백</div>
-                            <div className="text-[12px] text-green-800 mt-1">{getDailyFeedbackForDate(sheetDateKey).content}</div>
+                            <div className="text-[14px] font-bold text-slate-800">데일리 피드백</div>
+                            <div className="text-[12px] text-slate-600 mt-1">{getDailyFeedbackForDate(sheetDateKey).content}</div>
                           </div>
                         </motion.div>
                       )}
-                      {getTasksForDate(sheetDateKey).map((task, idx) => (
-                        <motion.div 
-                          key={task.id} 
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: 0.1 + idx * 0.05 }}
-                          onClick={() => { setSheetOpen(false); router.push(`/mentee/tasks/${task.id}`); }}
-                          className="flex items-start gap-3 p-3 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer"
-                        >
-                          <div className={`w-3 h-3 rounded-full mt-1 shrink-0 ${getSubjectColor(task.subject)}`} />
-                          <div>
-                            <div className="text-[14px] font-bold text-gray-900">{task.title}</div>
-                            <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
-                              <span>{SUBJECT_LABELS[task.subject as keyof typeof SUBJECT_LABELS] || task.subject}</span>
-                              <span className="text-[8px] text-gray-300">•</span>
-                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${getTaskStatusInfo(task).style}`}>
-                                {getTaskStatusInfo(task).label}
-                              </span>
-                              {!task.isFixed && <span className="text-[9px] text-gray-400 font-normal">(자체과제)</span>}
+                      {getTasksForDate(sheetDateKey).map((task, idx) => {
+                        const s = (task.subject === 'KOREAN' || task.subject === 'ENGLISH' || task.subject === 'MATH') ? task.subject : 'OTHER';
+                        const config = SUBJECT_CONFIG[s];
+                        return (
+                          <motion.div 
+                            key={task.id} 
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: 0.1 + idx * 0.05 }}
+                            onClick={() => { setSheetOpen(false); router.push(`/mentee/tasks/${task.id}`); }}
+                            className="flex items-start gap-3 p-3 hover:bg-gray-50 rounded-xl transition-colors cursor-pointer"
+                          >
+                            <div className="w-3 h-3 rounded-sm mt-1 shrink-0" style={{ backgroundColor: config.dot }} />
+                            <div>
+                              <div className="text-[14px] font-bold text-gray-900">{task.title}</div>
+                              <div className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                <span>{SUBJECT_LABELS[task.subject as keyof typeof SUBJECT_LABELS] || task.subject}</span>
+                                <span className="text-[8px] text-gray-300">•</span>
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${getTaskStatusInfo(task).style}`}>
+                                  {getTaskStatusInfo(task).label}
+                                </span>
+                                {!task.isFixed && <span className="text-[9px] text-gray-400 font-normal">(자체과제)</span>}
+                              </div>
                             </div>
-                          </div>
-                        </motion.div>
-                      ))}
+                          </motion.div>
+                        );
+                      })}
                     </>
                   )}
                 </div>

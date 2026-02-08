@@ -3,6 +3,7 @@ import { getApiUrl } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FILE_LIMITS } from '@/constants/fileLimits';
+import { toast } from '@/stores/useToastStore';
 
 type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
 type DateMode = 'single' | 'range';
@@ -22,6 +23,7 @@ interface Worksheet {
   type: 'COLUMN' | 'PDF';
   content: string | null;
   pdfUrl: string | null;
+  pdfFileName: string | null;
 }
 
 interface Material {
@@ -127,7 +129,7 @@ export default function NewTaskPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [assignMode, setAssignMode] = useState<AssignMode>('one');
-  const [menteeId, setMenteeId] = useState<string>('');
+  const [selectedMenteeIds, setSelectedMenteeIds] = useState<string[]>([]);
 
   const [dateMode, setDateMode] = useState<DateMode>('single');
   const [singleDate, setSingleDate] = useState(todayStr());
@@ -161,6 +163,12 @@ export default function NewTaskPage() {
     setWeekdays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
   }
 
+  function toggleMentee(id: string) {
+    setSelectedMenteeIds((prev) => 
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
   const fetchMentees = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -172,7 +180,7 @@ export default function NewTaskPage() {
       setMentees(data);
     } catch (err) {
       console.error('Fetch mentees error:', err);
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     }
   };
 
@@ -237,7 +245,7 @@ export default function NewTaskPage() {
 
         // 5개 초과 방지
         if (currentCount + columnItems.length > FILE_LIMITS.MAX_TASK_MATERIALS) {
-          alert(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다. (현재: ${currentCount}개)`);
+          toast.warning(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다. (현재: ${currentCount}개)`);
           return;
         }
 
@@ -254,31 +262,31 @@ export default function NewTaskPage() {
         setMaterials([...materials, ...newMaterials]);
       } catch (err) {
         console.error('Content parsing error:', err);
-        alert('학습지 내용을 불러오는데 실패했습니다.');
+        toast.error('학습지 내용을 불러오는데 실패했습니다.');
         return;
       }
     } else if (worksheet.type === 'PDF' && worksheet.pdfUrl) {
       // 5개 초과 방지
       if (currentCount >= FILE_LIMITS.MAX_TASK_MATERIALS) {
-        alert(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다.`);
+        toast.warning(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다.`);
         return;
       }
 
-      // PDF URL을 materials에 추가 (복사) - 파일명 추출 포함
+      // PDF URL을 materials에 추가 (복사) - 저장된 파일명 우선 사용
       setMaterials([
         ...materials,
         {
           type: 'PDF',
           order: materials.length,
           pdfUrl: worksheet.pdfUrl,
-          pdfFileName: extractFileName(worksheet.pdfUrl), // 파일명 추출
+          pdfFileName: worksheet.pdfFileName || extractFileName(worksheet.pdfUrl),
           source: 'worksheet',
           worksheetTitle: worksheet.title,
         },
       ]);
     }
 
-    alert(`"${worksheet.title}" 학습지를 불러왔습니다.`);
+    toast.success(`"${worksheet.title}" 학습지를 불러왔습니다.`);
   };
 
   const handlePdfUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -287,13 +295,13 @@ export default function NewTaskPage() {
 
     const pdfFilesArray = Array.from(files).filter((file) => file.type === 'application/pdf');
     if (pdfFilesArray.length === 0) {
-      alert('PDF 파일만 업로드 가능합니다.');
+      toast.warning('PDF 파일만 업로드 가능합니다.');
       return;
     }
 
     const currentCount = materials.length;
     if (currentCount + pdfFilesArray.length > FILE_LIMITS.MAX_TASK_MATERIALS) {
-      alert(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다. (현재: ${currentCount}개)`);
+      toast.warning(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다. (현재: ${currentCount}개)`);
       return;
     }
 
@@ -344,9 +352,9 @@ export default function NewTaskPage() {
       }));
 
       setMaterials([...materials, ...newMaterials]);
-      alert(`${pdfFilesArray.length}개의 PDF가 업로드되었습니다.`);
+      toast.success(`${pdfFilesArray.length}개의 PDF가 업로드되었습니다.`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'PDF 업로드 중 오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : 'PDF 업로드 중 오류가 발생했습니다.');
     } finally {
       setIsUploading(false);
     }
@@ -354,7 +362,7 @@ export default function NewTaskPage() {
 
   const addColumn = () => {
     if (materials.length >= FILE_LIMITS.MAX_TASK_MATERIALS) {
-      alert(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다.`);
+      toast.warning(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다.`);
       return;
     }
 
@@ -409,24 +417,28 @@ export default function NewTaskPage() {
   };
 
   const onSubmit = async () => {
-    if (!menteeId || !taskName) {
-      alert('멘티와 과제 이름을 입력해주세요.');
+    if (selectedMenteeIds.length === 0 && assignMode !== 'all') {
+      toast.warning('멘티를 선택해 주세요.');
+      return;
+    }
+    if (!taskName) {
+      toast.warning('과제 이름을 입력해주세요.');
       return;
     }
     if (dateMode === 'range' && weekdays.length === 0) {
-      alert('최소 하나의 요일을 선택해주세요.');
+      toast.warning('최소 하나의 요일을 선택해주세요.');
       return;
     }
 
     // 검증: 학습 자료 최소 1개
     if (materials.length === 0) {
-      alert('최소 1개의 학습 자료를 등록해주세요.');
+      toast.warning('최소 1개의 학습 자료를 등록해주세요.');
       return;
     }
 
     // 검증: 학습 자료 최대 5개
     if (materials.length > FILE_LIMITS.MAX_TASK_MATERIALS) {
-      alert(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다.`);
+      toast.warning(`학습 자료는 최대 ${FILE_LIMITS.MAX_TASK_MATERIALS}개까지 등록 가능합니다.`);
       return;
     }
 
@@ -438,7 +450,7 @@ export default function NewTaskPage() {
     });
 
     if (validMaterials.length === 0) {
-      alert('유효한 학습 자료가 없습니다.');
+      toast.warning('유효한 학습 자료가 없습니다.');
       return;
     }
 
@@ -447,36 +459,40 @@ export default function NewTaskPage() {
       const token = localStorage.getItem('token');
       const dates = dateMode === 'single' ? [singleDate] : calculateRepeatDates();
       if (dates.length === 0) {
-        alert('선택한 요일에 해당하는 날짜가 없습니다.');
+        toast.warning('선택한 요일에 해당하는 날짜가 없습니다.');
         setIsSubmitting(false);
         return;
       }
 
-      for (const dateStr of dates) {
-        const res = await fetch(`${getApiUrl()}/api/mentor/tasks`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            menteeId: assignMode === 'all' ? undefined : menteeId,
-            title: taskName,
-            description: goal,
-            subject,
-            date: dateStr,
-            materials: validMaterials, // 새로운 materials 배열
-          }),
-        });
-        if (!res.ok) throw new Error('할 일 생성에 실패했습니다.');
+      const targetMenteeIds = assignMode === 'all' ? mentees.map(m => m.id) : selectedMenteeIds;
+
+      for (const mId of targetMenteeIds) {
+        for (const dateStr of dates) {
+          const res = await fetch(`${getApiUrl()}/api/mentor/tasks`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              menteeId: mId,
+              title: taskName,
+              description: goal,
+              subject,
+              date: dateStr,
+              materials: validMaterials, // 새로운 materials 배열
+            }),
+          });
+          if (!res.ok) throw new Error('할 일 생성에 실패했습니다.');
+        }
       }
 
-      const successMessage =
-        dateMode === 'range' ? `${dates.length}개의 할 일이 등록되었습니다.` : '할 일이 등록되었습니다.';
-      alert(successMessage);
+      const totalCount = targetMenteeIds.length * dates.length;
+      const successMessage = `${totalCount}개의 할 일이 등록되었습니다.`;
+      toast.success(successMessage);
       router.push('/mentor');
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }
@@ -489,26 +505,66 @@ export default function NewTaskPage() {
 
         <div className="mt-5 rounded-xl border border-gray-200 bg-white p-6">
           {/* 멘티 선택 */}
-          <select
-            value={menteeId}
-            onChange={(e) => setMenteeId(e.target.value)}
-            className="w-full rounded-lg bg-white px-4 py-3 text-[12px] text-gray-700 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-blue-200"
-            disabled={assignMode === 'all'}
-          >
-            <option value="" disabled>
-              멘티를 선택해 주세요.
-            </option>
-            {mentees.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
+          <div className="space-y-3">
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value) {
+                  toggleMentee(e.target.value);
+                  e.target.value = '';
+                }
+              }}
+              className="w-full rounded-lg bg-white px-4 py-3 text-[12px] text-gray-700 outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-blue-200"
+              disabled={assignMode === 'all'}
+            >
+              <option value="" disabled>
+                멘티를 선택해 주세요.
               </option>
-            ))}
-          </select>
+              {mentees
+                .filter(m => !selectedMenteeIds.includes(m.id))
+                .map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+
+            {/* 선택된 멘티 목록 */}
+            {assignMode === 'one' && selectedMenteeIds.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {selectedMenteeIds.map(id => {
+                  const mentee = mentees.find(m => m.id === id);
+                  if (!mentee) return null;
+                  return (
+                    <div key={id} className="h-8 px-2.5 bg-gray-200 rounded-[8px] inline-flex justify-start items-center gap-1.5">
+                      <div className="justify-start text-black text-[13px] font-medium font-['Pretendard']">
+                        {mentee.name} 멘티
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => toggleMentee(id)}
+                        className="size-3 bg-gray-400 rounded-full flex items-center justify-center text-white text-[8px] hover:bg-gray-500 transition"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* 대상 모드 */}
           <div className="mt-3 flex gap-2">
             <ToggleChip active={assignMode === 'one'} label="선택 멘티" onClick={() => setAssignMode('one')} />
-            <ToggleChip active={assignMode === 'all'} label="전체 멘티" onClick={() => setAssignMode('all')} />
+            <ToggleChip 
+              active={assignMode === 'all'} 
+              label="전체 멘티" 
+              onClick={() => {
+                setAssignMode('all');
+                setSelectedMenteeIds([]);
+              }} 
+            />
           </div>
 
           {/* 학습 날짜 */}
@@ -551,18 +607,22 @@ export default function NewTaskPage() {
             </div>
           </div>
 
-          {/* 요일 선택 */}
-          <div className="mt-6 text-[12px] font-bold text-gray-800">요일 선택</div>
-          <div className="mt-3 flex gap-2">
-            {WEEKDAYS.map((d) => (
-              <DayCircle
-                key={d.key}
-                label={d.label}
-                active={weekdays.includes(d.key)}
-                onClick={() => toggleWeekday(d.key)}
-              />
-            ))}
-          </div>
+          {/* 요일 선택 - 반복 날짜일 때만 표시 */}
+          {dateMode === 'range' && (
+            <>
+              <div className="mt-6 text-[12px] font-bold text-gray-800">요일 선택</div>
+              <div className="mt-3 flex gap-2">
+                {WEEKDAYS.map((d) => (
+                  <DayCircle
+                    key={d.key}
+                    label={d.label}
+                    active={weekdays.includes(d.key)}
+                    onClick={() => toggleWeekday(d.key)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
 
           {/* 과제 이름 */}
           <div className="mt-6">

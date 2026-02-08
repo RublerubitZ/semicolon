@@ -632,12 +632,57 @@ export default function MenteeDashboard() {
   };
 
   const calculateTotalStudyTime = () => {
-    if (!plannerData) return '0시간';
-    const totalMinutes = plannerData.tasks.reduce((total, task) => {
-      return total + task.studyLogs.reduce((taskTotal, log) => taskTotal + log.duration, 0);
-    }, 0);
+    if (!plannerData || !plannerData.tasks) return '0시간';
+    
+    // 모든 과제의 공부 시간 간격을 모음 [시작분, 종료분]
+    const intervals: [number, number][] = [];
+    
+    plannerData.tasks.forEach(task => {
+      task.studyLogs.forEach(log => {
+        if (log.startTime && log.endTime) {
+          const [startH, startM] = log.startTime.split(':').map(Number);
+          const [endH, endM] = log.endTime.split(':').map(Number);
+          let startMin = startH * 60 + startM;
+          let endMin = endH * 60 + endM;
+          
+          // 종료 시간이 시작 시간보다 빠른 경우 (자정 넘김 처리)
+          if (endMin < startMin) {
+            endMin += 24 * 60;
+          }
+          
+          intervals.push([startMin, endMin]);
+        }
+      });
+    });
+
+    if (intervals.length === 0) return '0시간';
+
+    // 간격 정렬 및 병합 (Union of intervals)
+    intervals.sort((a, b) => a[0] - b[0]);
+    
+    const merged: [number, number][] = [];
+    let current = intervals[0];
+    
+    for (let i = 1; i < intervals.length; i++) {
+      const next = intervals[i];
+      if (next[0] <= current[1]) {
+        // 겹치거나 이어짐 -> 병합
+        current[1] = Math.max(current[1], next[1]);
+      } else {
+        // 겹치지 않음 -> 현재 간격 저장 후 다음으로
+        merged.push(current);
+        current = next;
+      }
+    }
+    merged.push(current);
+
+    // 병합된 간격들의 총합 계산
+    const totalMinutes = merged.reduce((sum, [start, end]) => sum + (end - start), 0);
+    
     const h = Math.floor(totalMinutes / 60);
     const m = totalMinutes % 60;
+    
+    if (h === 0) return `${m}분`;
     return `${h}시간${m > 0 ? ` ${m}분` : ''}`;
   };
 
@@ -1043,7 +1088,7 @@ export default function MenteeDashboard() {
                                             }}
                                           >
                                             <div className="flex items-center gap-2 overflow-hidden flex-wrap">
-                                              {task.isFixed ? <PiPushPinFill className="text-blue-500 text-sm flex-shrink-0" /> : <PiPencilLineLight className="text-gray-400 text-sm flex-shrink-0" />}
+                                              {task.isFixed ? <PiPushPinFill className="text-[#00265A] text-sm flex-shrink-0 -scale-x-100" /> : <PiPencilLineLight className="text-gray-400 text-sm flex-shrink-0" />}
                                               <span 
                                                 className={`text-black text-base font-semibold truncate transition-colors ${
                                                   (task.feedbacks?.length || 0) > 0 ? 'line-through text-gray-400 opacity-60' : 

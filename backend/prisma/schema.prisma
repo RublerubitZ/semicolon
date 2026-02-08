@@ -237,6 +237,7 @@ model Worksheet {
   subject     String
   content     String?
   pdfUrl      String?
+  pdfFileName String?       // PDF 원본 파일명
   type        WorksheetType @default(COLUMN)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt

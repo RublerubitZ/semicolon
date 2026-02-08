@@ -5,6 +5,7 @@ import { getSubjectLabel, getSubjectBadgeColor, DEFAULT_SUBJECT_VALUES } from '@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from '@/stores/useToastStore';
 
 interface Feedback {
   id: string;
@@ -47,7 +48,7 @@ export default function FeedbackListPage() {
       const data = await res.json();
       setTasks(data);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }

@@ -7,6 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import ImageModal from '@/components/ImageModal';
+import { toast } from '@/stores/useToastStore';
 import { 
   MdChevronLeft, 
   MdPushPin, 
@@ -158,7 +159,7 @@ export default function MentorTaskDetailPage() {
   const handleSubmitFeedback = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!feedbackForm.summary || !feedbackForm.content) {
-      alert('요약과 상세 피드백을 모두 입력해주세요.');
+      toast.warning('요약과 상세 피드백을 모두 입력해주세요.');
       return;
     }
     if (!task) return;
@@ -185,7 +186,7 @@ export default function MentorTaskDetailPage() {
       await fetchTask();
       await fetchComments();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }

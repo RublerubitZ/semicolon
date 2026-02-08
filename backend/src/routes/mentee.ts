@@ -328,24 +328,23 @@ router.post('/tasks/:id/time', async (req: AuthRequest, res: Response) => {
     const task = await prisma.task.findUnique({ where: { id } });
     if (!task) return res.status(404).json({ error: '과제 없음' });
 
-    // 해당 과제에 대한 기존 기록이 있는지 확인
-    const existingLog = await prisma.studyTimeLog.findFirst({
-      where: { taskId: id }
-    });
-
-    let log;
-    if (existingLog) {
-      // 기존 기록이 있으면 업데이트
-      log = await prisma.studyTimeLog.update({
-        where: { id: existingLog.id },
-        data: { duration, startTime, endTime, date: parseUTCDate(date) }
-      });
-    } else {
-      // 없으면 새로 생성
-      log = await prisma.studyTimeLog.create({
-        data: { menteeId, taskId: id, subject: task.subject, date: parseUTCDate(date), duration, startTime, endTime },
-      });
-    }
+    // 해당 과제에 대한 기존 기록들을 트랜잭션으로 삭제 후 생성 (중복 생성 방지)
+    const [_, log] = await prisma.$transaction([
+      prisma.studyTimeLog.deleteMany({
+        where: { taskId: id }
+      }),
+      prisma.studyTimeLog.create({
+        data: { 
+          menteeId, 
+          taskId: id, 
+          subject: task.subject, 
+          date: parseUTCDate(date), 
+          duration, 
+          startTime, 
+          endTime 
+        },
+      })
+    ]);
 
     // 스트릭 업데이트 (학습 시간 기록 시)
     try {

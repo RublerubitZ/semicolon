@@ -6,6 +6,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import { toast } from '@/stores/useToastStore';
 
 type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
 
@@ -44,7 +45,7 @@ function FeedbackForm() {
   // 과제 정보 가져오기
   const fetchTask = async () => {
     if (!taskId) {
-      alert('과제 ID가 없습니다.');
+      toast.warning('과제 ID가 없습니다.');
       router.back();
       return;
     }
@@ -62,7 +63,7 @@ function FeedbackForm() {
       setTask(data);
     } catch (err) {
       console.error('Fetch task error:', err);
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
       router.back();
     }
   };
@@ -79,12 +80,12 @@ function FeedbackForm() {
     if (isSubmitting) return;
 
     if (!formData.content || !formData.summary) {
-      alert('모든 필드를 입력해주세요.');
+      toast.warning('모든 필드를 입력해주세요.');
       return;
     }
 
     if (!task) {
-      alert('과제 정보를 불러오는 중입니다.');
+      toast.info('과제 정보를 불러오는 중입니다.');
       return;
     }
 
@@ -109,10 +110,10 @@ function FeedbackForm() {
 
       if (!res.ok) throw new Error('피드백 작성에 실패했습니다.');
 
-      alert('피드백이 작성되었습니다.');
+      toast.success('피드백이 작성되었습니다.');
       router.back();
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsSubmitting(false);
     }

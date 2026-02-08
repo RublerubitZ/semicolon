@@ -4,6 +4,7 @@ import { formatDate, formatDateTime } from '@/lib/dateUtils';
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { toast } from '@/stores/useToastStore';
 
 type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
 
@@ -77,7 +78,7 @@ export default function FeedbackDetail() {
       const data = await res.json();
       setTask(data);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
       router.push('/mentee/feedbacks');
     } finally {
       setIsLoading(false);

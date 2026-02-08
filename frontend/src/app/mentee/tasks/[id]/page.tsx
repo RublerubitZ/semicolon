@@ -882,9 +882,12 @@ export default function TaskDetailPage() {
           const isMe = currentUser && m.userId === currentUser.id;
           return (
             <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${isMe ? 'bg-[#1A1A1A] text-white' : 'bg-gray-100 text-gray-900'}`}>
+              <div className={`max-w-[75%] px-4 py-3 rounded-2xl ${
+                isMe 
+                  ? 'bg-slate-800 text-white rounded-tr-none' 
+                  : 'bg-slate-100 text-slate-800 rounded-tl-none'
+              }`}>
                 <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
-                {isMe && <div className="flex items-center gap-2 mt-2 justify-end opacity-50"><button className="text-white"><MdEdit className="w-3.5 h-3.5" /></button><button className="text-white"><MdDelete className="w-3.5 h-3.5" /></button></div>}
               </div>
             </div>
           );

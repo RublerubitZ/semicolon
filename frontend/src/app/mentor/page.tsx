@@ -8,13 +8,13 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { getSubjectLabel, getSubjectBadgeColor } from '@/constants/subjects';
 import { getTaskStatusInfo } from '@/constants/taskStatus';
+import { toast } from '@/stores/useToastStore';
 
 import { RiUserFill } from 'react-icons/ri';
 import { FaBook } from 'react-icons/fa';
 import { GiGraduateCap } from 'react-icons/gi';
 import { PiPushPinDuotone } from 'react-icons/pi';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { Toast, ToastType } from '@/components/Toast';
 
 interface Mentee {
   id: string;
@@ -155,14 +155,9 @@ export default function MentorPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [currentDate, setCurrentDate] = useState(() => new Date());
 
-  // 삭제 및 토스트 관련 상태
+  // 삭제 관련 상태
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
-  const [toast, setToast] = useState({ show: false, message: '', type: 'success' as ToastType });
-
-  const showToast = (message: string, type: ToastType = 'success') => {
-    setToast({ show: true, message, type });
-  };
 
   // 데일리 피드백 관련 상태
   const [feedbackOpen, setFeedbackOpen] = useState(false);
@@ -290,10 +285,10 @@ export default function MentorPage() {
         body: JSON.stringify(editFormData),
       });
       if (!res.ok) throw new Error('과제 수정 실패');
-      alert('수정되었습니다.');
+      toast.success('수정되었습니다.');
       setEditModalOpen(false);
       if (selectedId) fetchTasks(selectedId);
-    } catch (err) { alert('실패했습니다.'); }
+    } catch (err) { toast.error('실패했습니다.'); }
   };
 
   const handleDeleteClick = (taskId: string) => {
@@ -310,10 +305,10 @@ export default function MentorPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('과제 삭제 실패');
-      showToast('과제가 삭제되었습니다.');
+      toast.success('과제가 삭제되었습니다.');
       if (selectedId) fetchTasks(selectedId);
-    } catch (err) { 
-      showToast('실패했습니다.', 'error');
+    } catch (err) {
+      toast.error('실패했습니다.');
     } finally {
       setTaskToDelete(null);
     }
@@ -342,10 +337,10 @@ export default function MentorPage() {
       });
 
       if (!res.ok) throw new Error('피드백 저장 실패');
-      alert(dailyFeedback ? '데일리 종합 피드백이 수정되었습니다.' : '데일리 종합 피드백이 전송되었습니다.');
+      toast.success(dailyFeedback ? '데일리 종합 피드백이 수정되었습니다.' : '데일리 종합 피드백이 전송되었습니다.');
       setFeedbackOpen(false);
       fetchDailyFeedback(selectedMentee.id, dateStr);
-    } catch (err) { alert('실패했습니다.'); }
+    } catch (err) { toast.error('실패했습니다.'); }
   };
 
   return (
@@ -457,7 +452,39 @@ export default function MentorPage() {
                             </span>
                           </div>
                           <div className="text-center"><SubjectPill subject={t.subject} /></div>
-                          <div className="text-center"><TaskStatusBadge task={t} /></div>
+                          <div className="text-center flex flex-col items-center gap-1.5">
+                            <TaskStatusBadge task={t} />
+                            {(() => {
+                              const hasSubmissions = t.submissions && t.submissions.length > 0;
+                              const hasFeedbacks = t.feedbacks && t.feedbacks.length > 0;
+
+                              if (hasFeedbacks) {
+                                return (
+                                  <button
+                                    onClick={() => router.push(`/mentor/tasks/${t.id}`)}
+                                    className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 hover:underline flex items-center gap-0.5 transition-colors"
+                                  >
+                                    <span>피드백 대화</span>
+                                    <span>›</span>
+                                  </button>
+                                );
+                              }
+
+                              if (hasSubmissions) {
+                                return (
+                                  <button
+                                    onClick={() => router.push(`/mentor/tasks/${t.id}`)}
+                                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-0.5 transition-colors"
+                                  >
+                                    <span>피드백 작성</span>
+                                    <span>›</span>
+                                  </button>
+                                );
+                              }
+
+                              return null;
+                            })()}
+                          </div>
                           <div className="text-center flex justify-center gap-4 text-gray-400">
                             <button onClick={() => handleEditClick(t)} className="hover:text-blue-500 transition-colors">✎</button>
                             <button onClick={() => handleDeleteClick(t.id)} className="hover:text-red-500 transition-colors">🗑</button>
@@ -482,13 +509,6 @@ export default function MentorPage() {
             message={"정말 이 과제를 삭제하시겠습니까?\n삭제된 과제는 복구할 수 없습니다."}
             confirmText="삭제"
             variant="danger"
-          />
-
-          <Toast
-            show={toast.show}
-            message={toast.message}
-            type={toast.type}
-            onClose={() => setToast({ ...toast, show: false })}
           />
 
           {feedbackOpen && (

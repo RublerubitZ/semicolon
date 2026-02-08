@@ -70,11 +70,23 @@ export function useAutoLogout(options: AutoLogoutOptions = {}) {
         const newToken = await refreshAccessToken();
         if (newToken) {
           // 성공 시 다음 갱신 예약
+          console.log('[AutoLogout] Token refreshed, scheduling next refresh');
           scheduleTokenRefresh();
+        } else {
+          // 갱신 실패 - refresh token이 만료되었을 수 있음
+          // 하지만 바로 로그아웃하지 않고, 다음 API 요청에서 처리하도록 함
+          console.warn('[AutoLogout] Token refresh failed, will retry on next API call');
+          // 5분 후 다시 시도
+          setTimeout(() => {
+            if (getToken()) {
+              scheduleTokenRefresh();
+            }
+          }, 5 * 60 * 1000);
         }
       } catch (error) {
-        console.error('Token refresh failed:', error);
-        handleLogout('expired');
+        console.error('[AutoLogout] Token refresh error:', error);
+        // 에러 발생 시에도 바로 로그아웃하지 않음
+        // API 요청 시 자동으로 처리됨
       }
     }, TIMEOUTS.TOKEN_REFRESH_INTERVAL);
   };

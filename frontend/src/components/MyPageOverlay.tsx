@@ -9,6 +9,7 @@ import { HiOutlineAcademicCap, HiOutlineFlag } from 'react-icons/hi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SUBJECT_LABELS, Subject, DEFAULT_SUBJECT_VALUES, getSubjectStyles, getSubjectLabel } from '@/constants/subjects';
 import { useOverlayStore } from '@/stores/useOverlayStore';
+import { toast } from '@/stores/useToastStore';
 import StreakBadge from './streak/StreakBadge';
 import { Z_INDEX } from '@/constants/zIndex';
 
@@ -182,7 +183,7 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
       const data = await res.json();
       setEditData({ ...editData, profileImage: data.url });
     } catch (err) {
-      alert(err instanceof Error ? err.message : '이미지 업로드 중 오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '이미지 업로드 중 오류가 발생했습니다.');
     } finally {
       setIsUpdating(false);
     }
@@ -207,9 +208,9 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
       setUser(updatedUser);
       localStorage.setItem('user', JSON.stringify(updatedUser));
       setActiveOverlay(null);
-      alert('프로필이 업데이트되었습니다.');
+      toast.success('프로필이 업데이트되었습니다.');
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsUpdating(false);
     }
@@ -217,7 +218,7 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
 
   const handleChangePassword = async () => {
     if (passwordData.new !== passwordData.confirm) {
-      alert('새 비밀번호가 일치하지 않습니다.');
+      toast.warning('새 비밀번호가 일치하지 않습니다.');
       return;
     }
     setIsChangingPassword(true);
@@ -238,11 +239,11 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
         const data = await res.json();
         throw new Error(data.error || '비밀번호 변경 실패');
       }
-      alert('비밀번호가 변경되었습니다.');
+      toast.success('비밀번호가 변경되었습니다.');
       setActiveOverlay(null);
       setPasswordData({ current: '', new: '', confirm: '' });
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsChangingPassword(false);
     }
@@ -264,10 +265,10 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
         const data = await res.json();
         throw new Error(data.error || '알림 설정 업데이트 실패');
       }
-      alert('알림 설정이 저장되었습니다.');
+      toast.success('알림 설정이 저장되었습니다.');
       setActiveOverlay(null);
     } catch (err) {
-      alert(err instanceof Error ? err.message : '오류가 발생했습니다.');
+      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
     } finally {
       setIsUpdatingNotifications(false);
     }
