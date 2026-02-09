@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { trackError } from '@/lib/error-tracker';
 
 interface Props {
   children: ReactNode;
@@ -10,6 +11,7 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  errorId?: string;
 }
 
 /**
@@ -27,7 +29,10 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    trackError(error, {
+      source: 'ErrorBoundary',
+      componentStack: errorInfo.componentStack || undefined,
+    });
   }
 
   render() {
@@ -64,12 +69,20 @@ export class ErrorBoundary extends Component<Props, State> {
               <br />
               페이지를 새로고침해 주세요.
             </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
-            >
-              새로고침
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => this.setState({ hasError: false, error: null })}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-md transition-colors"
+              >
+                다시 시도
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition-colors"
+              >
+                새로고침
+              </button>
+            </div>
           </div>
         </div>
       );

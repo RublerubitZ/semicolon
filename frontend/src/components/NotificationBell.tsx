@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiGet, apiPatch } from '@/lib/api';
-import { getUser } from '@/lib/auth';
 import { IoIosNotifications, IoIosArrowBack } from "react-icons/io";
 import { motion, AnimatePresence } from 'framer-motion';
 import { useOverlayStore } from '@/stores/useOverlayStore';
 import { Z_INDEX } from '@/constants/zIndex';
-import { TIMEOUTS } from '@/constants/timeouts';
+import { getUser } from '@/lib/auth';
+import { useNotifications, useUnreadCount, useMarkAsRead, useMarkAllAsRead } from '@/lib/queries/use-notifications';
 
 interface Notification {
   id: string;
@@ -22,86 +21,33 @@ interface Notification {
 
 export default function NotificationBell() {
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { setOverlay } = useOverlayStore();
 
-  useEffect(() => {
-    setOverlay('notifications', isOpen);
-  }, [isOpen, setOverlay]);
+  const { data: notifications = [] } = useNotifications();
+  const { data: unreadData } = useUnreadCount();
+  const unreadCount = unreadData?.count ?? 0;
+  const markAsRead = useMarkAsRead();
+  const markAllAsRead = useMarkAllAsRead();
 
-  // 알림 목록 조회
-  const fetchNotifications = async () => {
-    try {
-      const response = await apiGet('/api/notifications');
-
-      if (response.ok) {
-        const data = await response.json();
-        setNotifications(data);
-      }
-    } catch (error) {
-      // 서버가 꺼져있을 때는 에러 메시지를 조용히 처리
-      if (error instanceof TypeError && (error.message === 'Failed to fetch' || error.message === 'NetworkError when attempting to fetch resource.')) {
-        return;
-      }
-      console.error('Failed to fetch notifications:', error);
-    }
+  const handleToggle = () => {
+    const next = !isOpen;
+    setIsOpen(next);
+    setOverlay('notifications', next);
   };
 
-  // 읽지 않은 알림 개수 조회
-  const fetchUnreadCount = async () => {
-    try {
-      const response = await apiGet('/api/notifications/unread-count');
-
-      if (response.ok) {
-        const data = await response.json();
-        setUnreadCount(data.count);
-      }
-    } catch (error) {
-      // 서버가 꺼져있을 때는 에러 메시지를 조용히 처리
-      if (error instanceof TypeError && (error.message === 'Failed to fetch' || error.message === 'NetworkError when attempting to fetch resource.')) {
-        return;
-      }
-      console.error('Failed to fetch unread count:', error);
-    }
-  };
-
-  // 알림 읽음 처리
-  const markAsRead = async (id: string) => {
-    try {
-      const response = await apiPatch(`/api/notifications/${id}/read`);
-
-      if (response.ok) {
-        await fetchNotifications();
-        await fetchUnreadCount();
-      }
-    } catch (error) {
-      console.error('Failed to mark as read:', error);
-    }
-  };
-
-  // 모든 알림 읽음 처리
-  const markAllAsRead = async () => {
-    try {
-      const response = await apiPatch('/api/notifications/read-all');
-
-      if (response.ok) {
-        await fetchNotifications();
-        await fetchUnreadCount();
-      }
-    } catch (error) {
-      console.error('Failed to mark all as read:', error);
-    }
+  const handleClose = () => {
+    setIsOpen(false);
+    setOverlay('notifications', false);
   };
 
   // 알림 클릭 처리 (읽음 처리 + 페이지 이동)
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.isRead) {
-      await markAsRead(notification.id);
+      markAsRead.mutate(notification.id);
     }
-    setIsOpen(false);
+    handleClose();
     if (!notification.relatedId) return;
 
     const user = getUser();
@@ -132,16 +78,6 @@ export default function NotificationBell() {
         break;
     }
   };
-
-  // 초기 로드 및 주기적 갱신
-  useEffect(() => {
-    fetchNotifications();
-    fetchUnreadCount();
-    const interval = setInterval(() => {
-      fetchUnreadCount();
-    }, TIMEOUTS.AUTO_REFRESH);
-    return () => clearInterval(interval);
-  }, []);
 
   // 알림 타입에 따른 이모지 반환
   const getNotificationEmoji = (type: string) => {
@@ -175,10 +111,7 @@ export default function NotificationBell() {
     <div className="relative" ref={dropdownRef}>
       {/* 알림 벨 버튼 */}
       <button
-        onClick={() => {
-          setIsOpen(!isOpen);
-          if (!isOpen) fetchNotifications();
-        }}
+        onClick={handleToggle}
         className="relative p-2 hover:bg-gray-100 rounded-full transition-colors text-zinc-800 active:scale-90"
       >
         <IoIosNotifications className="text-2xl" />
@@ -194,40 +127,40 @@ export default function NotificationBell() {
         {isOpen && (
           <div className="fixed inset-0 flex justify-center md:justify-end items-center md:items-start md:pt-20 md:pr-10 pointer-events-none" style={{ zIndex: Z_INDEX.OVERLAY_BACKDROP }}>
             {/* 배경 오버레이 (PC) */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
-              className="hidden md:block fixed inset-0 bg-black/20 pointer-events-auto" 
+              onClick={handleClose}
+              className="hidden md:block fixed inset-0 bg-black/20 pointer-events-auto"
             />
 
             {/* 카드 */}
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, x: 100, scale: 0.95 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: 100, scale: 0.95 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
               className="w-full h-full md:w-[384px] md:h-[852px] md:max-h-[90vh] bg-white relative flex flex-col shadow-2xl md:rounded-[32px] overflow-hidden pointer-events-auto"
             >
-              {/* 헤더 (MyPage와 동일한 스타일) */}
+              {/* 헤더 */}
               <div className="w-full h-20 px-6 flex items-center justify-between sticky top-0 bg-white z-10 border-b border-gray-50 flex-shrink-0">
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setIsOpen(false)}
+                    onClick={handleClose}
                     className="w-10 h-10 flex items-center justify-start text-zinc-800 hover:bg-gray-50 rounded-full transition-colors"
                   >
                     <IoIosArrowBack size={24} />
                   </button>
                   <h1 className="text-slate-800 text-xl font-semibold font-['Pretendard']">알림</h1>
                 </div>
-                
+
                 {unreadCount > 0 && (
-                  <button 
+                  <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      markAllAsRead();
-                    }} 
+                      markAllAsRead.mutate();
+                    }}
                     className="px-3 py-1.5 text-xs text-blue-600 font-bold hover:bg-blue-50 rounded-full transition-colors"
                   >
                     모두 읽기
@@ -238,7 +171,7 @@ export default function NotificationBell() {
               {/* 스크롤 영역 */}
               <div className="flex-1 overflow-y-auto bg-gray-50/30">
                 <div className="px-6 py-6 space-y-5">
-                  {/* 상단 추천 카드 (선택사항) */}
+                  {/* 상단 추천 카드 */}
                   <div className="w-full rounded-2xl bg-white px-5 py-5 flex items-center justify-between cursor-pointer active:scale-[0.98] transition border border-gray-100 shadow-sm">
                     <div className="flex items-center gap-4">
                       <div className="w-10 h-10 rounded-xl bg-blue-50 grid place-items-center">
@@ -252,13 +185,13 @@ export default function NotificationBell() {
 
                   {/* 알림 리스트 */}
                   <div className="rounded-[24px] overflow-hidden bg-white border border-gray-100 shadow-sm">
-                    {notifications.length === 0 ? (
+                    {(notifications as Notification[]).length === 0 ? (
                       <div className="py-20 text-center flex flex-col items-center gap-3">
                         <span className="text-4xl opacity-50">🔕</span>
                         <div className="text-gray-400 text-sm font-medium">새로운 알림이 없습니다.</div>
                       </div>
                     ) : (
-                      notifications.map((notification) => (
+                      (notifications as Notification[]).map((notification) => (
                         <button
                           key={notification.id}
                           type="button"

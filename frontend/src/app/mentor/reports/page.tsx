@@ -97,6 +97,35 @@ function ReportTypeToggle({
   );
 }
 
+function MentorDashboardWrapper({ menteeId }: { menteeId: string }) {
+  const now = new Date();
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+
+  const handleChangeMonth = (direction: 'prev' | 'next') => {
+    let newYear = selectedYear;
+    let newMonth = selectedMonth;
+    if (direction === 'next') {
+      newMonth += 1;
+      if (newMonth > 12) { newMonth = 1; newYear += 1; }
+    } else {
+      newMonth -= 1;
+      if (newMonth < 1) { newMonth = 12; newYear -= 1; }
+    }
+    setSelectedYear(newYear);
+    setSelectedMonth(newMonth);
+  };
+
+  return (
+    <MentorDashboard
+      menteeId={menteeId}
+      selectedYear={selectedYear}
+      selectedMonth={selectedMonth}
+      onChangeMonth={handleChangeMonth}
+    />
+  );
+}
+
 export default function MentorReportsPage() {
   const [mentees, setMentees] = useState<Mentee[]>([]);
   const [selectedMenteeId, setSelectedMenteeId] = useState<string | null>(null);
@@ -340,7 +369,7 @@ export default function MentorReportsPage() {
               ? <MonthlyFeedbackForm menteeId={selectedMenteeId} /> 
               : <WeeklyFeedbackForm menteeId={selectedMenteeId} />
           )}
-          {activeTab === 'dashboard' && <MentorDashboard menteeId={selectedMenteeId} />}
+          {activeTab === 'dashboard' && <MentorDashboardWrapper menteeId={selectedMenteeId} />}
         </div>
       )}
     </div>

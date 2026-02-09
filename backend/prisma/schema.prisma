@@ -304,13 +304,14 @@ model Notification {
 }
 
 enum NotificationType {
-  TASK_INCOMPLETE  // 과제 미완료 알림
-  NEW_FEEDBACK     // 새로운 피드백
-  REMINDER         // 리마인더
-  NEW_TASK         // 새로운 과제 등록 (멘토 -> 멘티)
-  TASK_SUBMITTED   // 과제 제출 (멘티 -> 멘토)
-  TASK_APPROVED    // 과제 승인 (멘토 -> 멘티)
-  STREAK_BROKEN    // 스트릭 깨짐 (멘티 -> 멘토)
+  TASK_INCOMPLETE         // 과제 미완료 알림
+  NEW_FEEDBACK            // 새로운 피드백
+  REMINDER                // 리마인더
+  NEW_TASK                // 새로운 과제 등록 (멘토 -> 멘티)
+  TASK_SUBMITTED          // 과제 제출 (멘티 -> 멘토)
+  TASK_APPROVED           // 과제 승인 (멘토 -> 멘티)
+  STREAK_BROKEN           // 스트릭 깨짐 (멘티 -> 멘토)
+  DAILY_FEEDBACK_REMINDER // 데일리 피드백 미작성 알림 (멘토)
 }
 
 // 일일 전체 피드백

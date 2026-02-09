@@ -117,6 +117,90 @@ export const sendIncompleteTaskNotification = async () => {
   }
 };
 
+// 저녁 10시 - 데일리 피드백 미작성 알림
+export const sendDailyFeedbackReminder = async () => {
+  try {
+    console.log('[Scheduler] Running daily feedback reminder at 10 PM (KST)...');
+
+    const today = getTodayUTC();
+
+    // 모든 멘토-멘티 관계 조회
+    const mentorMentees = await prisma.mentorMentee.findMany({
+      include: {
+        mentor: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        mentee: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    console.log(`[Scheduler] Found ${mentorMentees.length} mentor-mentee relationships`);
+
+    // 멘토별로 그룹화
+    const mentorGroups = mentorMentees.reduce((acc, relation) => {
+      const mentorId = relation.mentorId;
+      if (!acc[mentorId]) {
+        acc[mentorId] = {
+          mentorName: relation.mentor.name,
+          mentees: [],
+        };
+      }
+      acc[mentorId].mentees.push({
+        id: relation.menteeId,
+        name: relation.mentee.name,
+      });
+      return acc;
+    }, {} as Record<string, { mentorName: string; mentees: { id: string; name: string }[] }>);
+
+    // 각 멘토에 대해 오늘 피드백 작성 여부 확인
+    for (const [mentorId, { mentees }] of Object.entries(mentorGroups)) {
+      // 오늘 작성된 데일리 피드백 조회
+      const todayFeedbacks = await prisma.dailyFeedback.findMany({
+        where: {
+          mentorId,
+          date: today,
+        },
+        select: {
+          menteeId: true,
+        },
+      });
+
+      const feedbackWrittenMenteeIds = new Set(todayFeedbacks.map((fb) => fb.menteeId));
+
+      // 피드백을 작성하지 않은 멘티 찾기
+      const menteesWithoutFeedback = mentees.filter((mentee) => !feedbackWrittenMenteeIds.has(mentee.id));
+
+      // 피드백을 작성하지 않은 멘티가 있으면 알림 전송
+      if (menteesWithoutFeedback.length > 0) {
+        const menteeNames = menteesWithoutFeedback.map((m) => m.name).join(', ');
+
+        await createNotification({
+          userId: mentorId,
+          type: 'DAILY_FEEDBACK_REMINDER',
+          title: `오늘의 데일리 피드백을 작성해주세요`,
+          content: `${menteesWithoutFeedback.length}명의 멘티에게 피드백이 필요합니다: ${menteeNames}`,
+        });
+
+        console.log(
+          `[Scheduler] Sent feedback reminder to mentor ${mentorId} for ${menteesWithoutFeedback.length} mentees`
+        );
+      }
+    }
+
+    console.log('[Scheduler] Daily feedback reminder completed');
+  } catch (error) {
+    console.error('[Scheduler Error] Failed to send daily feedback reminder:', error);
+  }
+};
+
 // 자정 1시 - 스트릭 깨짐 체크
 export const checkStreakBreaks = async () => {
   try {
@@ -207,6 +291,11 @@ export const startScheduler = () => {
     timezone: SCHEDULER_TIMEZONE,
   });
 
+  // 매일 저녁 10시 (한국 시간 기준) - 데일리 피드백 미작성 알림
+  cron.schedule(CRON_SCHEDULES.DAILY_FEEDBACK_REMINDER, sendDailyFeedbackReminder, {
+    timezone: SCHEDULER_TIMEZONE,
+  });
+
   // 매일 자정 1시 (한국 시간 기준) - 스트릭 체크
   cron.schedule(CRON_SCHEDULES.STREAK_CHECK, checkStreakBreaks, {
     timezone: SCHEDULER_TIMEZONE,
@@ -215,5 +304,6 @@ export const startScheduler = () => {
   console.log('[Scheduler] Schedulers started');
   console.log('[Scheduler] - Daily task reminder: Every day at 9 AM (KST)');
   console.log('[Scheduler] - Incomplete task notification: Every day at 9 PM (KST)');
+  console.log('[Scheduler] - Daily feedback reminder: Every day at 10 PM (KST)');
   console.log('[Scheduler] - Streak break check: Every day at 1 AM (KST)');
 };

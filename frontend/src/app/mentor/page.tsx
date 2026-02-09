@@ -203,30 +203,51 @@ export default function MentorPage() {
     }
   };
 
-  const fetchDailyFeedback = async (menteeId: string, date: string) => {
+  const fetchDailyFeedback = async (menteeId: string, dateStr: string) => {
     try {
-      const res = await apiGet(`/api/mentor/mentees/${menteeId}/daily-feedbacks?date=${date}`);
+      const res = await apiGet(`/api/mentor/mentees/${menteeId}/daily-feedbacks?date=${dateStr}`);
       if (res.ok) {
         const data = await res.json();
-        setDailyFeedback(data);
-        if (data) {
-          setFeedbackText(data.content);
-          // 요약 매칭 (기존 로직 유지)
-          if (data.summary.includes('이해')) setFeedbackSummary('GOOD');
-          else if (data.summary.includes('연습')) setFeedbackSummary('PRACTICE');
-          else setFeedbackSummary('RECHECK');
+        if (data && data.length > 0) {
+          const fb = data[0];
+          setDailyFeedback(fb);
+          setFeedbackText(fb.content || '');
+          const summaryMap: Record<string, 'GOOD' | 'PRACTICE' | 'RECHECK'> = {
+            '잘 이해했어요.': 'GOOD',
+            '조금 더 연습해요.': 'PRACTICE',
+            '다시 확인해요.': 'RECHECK',
+          };
+          setFeedbackSummary(summaryMap[fb.summary] || 'GOOD');
         } else {
+          setDailyFeedback(null);
           setFeedbackText('');
           setFeedbackSummary('GOOD');
         }
-      } else {
-        setDailyFeedback(null);
-        setFeedbackText('');
-        setFeedbackSummary('GOOD');
       }
     } catch (err) {
       console.error('Fetch daily feedback error:', err);
-      toast.error('데일리 피드백을 불러오는데 실패했습니다.');
+    }
+  };
+
+  const handleFeedbackSubmit = async () => {
+    if (!selectedMentee) return;
+    try {
+      const dateStr = format(currentDate, 'yyyy-MM-dd');
+      const summary = feedbackSummary === 'GOOD' ? '잘 이해했어요.' : feedbackSummary === 'PRACTICE' ? '조금 더 연습해요.' : '다시 확인해요.';
+
+      let res;
+      if (dailyFeedback) {
+        res = await apiPut(`/api/mentor/daily-feedbacks/${dailyFeedback.id}`, { content: feedbackText, summary });
+      } else {
+        res = await apiPost('/api/mentor/daily-feedbacks', { menteeId: selectedMentee.id, date: dateStr, summary, content: feedbackText });
+      }
+
+      if (!res.ok) throw new Error('피드백 저장 실패');
+      toast.success(dailyFeedback ? '데일리 종합 피드백이 수정되었습니다.' : '데일리 종합 피드백이 전송되었습니다.');
+      setFeedbackOpen(false);
+      fetchDailyFeedback(selectedMentee.id, dateStr);
+    } catch (err) {
+      toast.error('실패했습니다.');
     }
   };
 
@@ -239,7 +260,8 @@ export default function MentorPage() {
   useEffect(() => {
     if (selectedId && view === 'detail') {
       fetchTasks(selectedId);
-      fetchDailyFeedback(selectedId, format(currentDate, 'yyyy-MM-dd'));
+      const dateStr = format(currentDate, 'yyyy-MM-dd');
+      fetchDailyFeedback(selectedId, dateStr);
     }
   }, [selectedId, view, currentDate]);
 
@@ -294,26 +316,6 @@ export default function MentorPage() {
     } finally {
       setTaskToDelete(null);
     }
-  };
-
-  const handleFeedbackSubmit = async () => {
-    if (!selectedMentee) return;
-    try {
-      const dateStr = format(currentDate, 'yyyy-MM-dd');
-      const summary = feedbackSummary === 'GOOD' ? '잘 이해했어요.' : feedbackSummary === 'PRACTICE' ? '조금 더 연습해요.' : '다시 확인해요.';
-      
-      let res;
-      if (dailyFeedback) {
-        res = await apiPut(`/api/mentor/daily-feedbacks/${dailyFeedback.id}`, { content: feedbackText, summary });
-      } else {
-        res = await apiPost('/api/mentor/daily-feedbacks', { menteeId: selectedMentee.id, date: dateStr, summary, content: feedbackText });
-      }
-
-      if (!res.ok) throw new Error('피드백 저장 실패');
-      toast.success(dailyFeedback ? '데일리 종합 피드백이 수정되었습니다.' : '데일리 종합 피드백이 전송되었습니다.');
-      setFeedbackOpen(false);
-      fetchDailyFeedback(selectedMentee.id, dateStr);
-    } catch (err) { toast.error('실패했습니다.'); }
   };
 
   return (
@@ -389,7 +391,7 @@ export default function MentorPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" onClick={() => router.push(`/mentor/calendar?menteeId=${selectedMentee.id}`)} className="h-8 rounded-lg border border-gray-200 px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">캘린더</button>
                 <button type="button" onClick={() => router.push('/mentor/tasks/new')} className="h-8 rounded-lg border border-gray-200 bg-white px-3 text-[12px] font-semibold text-gray-600 hover:bg-gray-50 transition-colors">과제 등록</button>
-                <button type="button" onClick={() => setFeedbackOpen(true)} className="h-8 rounded-lg bg-amber-500 px-3 text-[12px] font-semibold text-white shadow-sm flex items-center gap-1 hover:bg-amber-600 transition-colors">✨ 피드백</button>
+                <button type="button" onClick={() => setFeedbackOpen(true)} className="h-8 rounded-lg bg-amber-500 px-3 text-[12px] font-semibold text-white shadow-sm flex items-center gap-1 hover:bg-amber-600 transition-colors">✨ 데일리 피드백</button>
                 <button type="button" onClick={() => router.push(`/mentor/mentees/${selectedMentee.id}`)} className="h-8 rounded-lg bg-gray-900 px-3 text-[12px] font-semibold text-white hover:bg-gray-800 transition-colors">상세 관리</button>
               </div>
             </div>
@@ -484,6 +486,25 @@ export default function MentorPage() {
             variant="danger"
           />
 
+          {editModalOpen && (
+            <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40">
+              <div className="w-[480px] bg-white rounded-[32px] p-8">
+                <h2 className="text-lg font-bold mb-6">과제 수정</h2>
+                <div className="space-y-4">
+                  <input type="text" value={editFormData.title} onChange={e => setEditFormData({...editFormData, title: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl" placeholder="과제명" />
+                  <select value={editFormData.subject} onChange={e => setEditFormData({...editFormData, subject: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl">
+                    <option value="KOREAN">국어</option><option value="ENGLISH">영어</option><option value="MATH">수학</option>
+                  </select>
+                  <input type="date" value={editFormData.date} onChange={e => setEditFormData({...editFormData, date: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl" />
+                </div>
+                <div className="flex gap-3 mt-8">
+                  <button onClick={() => setEditModalOpen(false)} className="flex-1 py-3 bg-gray-100 rounded-xl font-bold">취소</button>
+                  <button onClick={handleUpdateTask} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold">수정 완료</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {feedbackOpen && (
             <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40">
               <div className="w-[600px] bg-white rounded-[32px] overflow-hidden shadow-2xl">
@@ -514,25 +535,6 @@ export default function MentorPage() {
                     <button onClick={() => setFeedbackOpen(false)} className="flex-1 py-4 bg-gray-100 text-gray-500 font-bold rounded-2xl">취소</button>
                     <button onClick={handleFeedbackSubmit} className="flex-[2] py-4 bg-amber-500 text-white font-bold rounded-2xl shadow-lg shadow-amber-200">{dailyFeedback ? '수정 완료' : '피드백 전송하기'}</button>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {editModalOpen && (
-            <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40">
-              <div className="w-[480px] bg-white rounded-[32px] p-8">
-                <h2 className="text-lg font-bold mb-6">과제 수정</h2>
-                <div className="space-y-4">
-                  <input type="text" value={editFormData.title} onChange={e => setEditFormData({...editFormData, title: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl" placeholder="과제명" />
-                  <select value={editFormData.subject} onChange={e => setEditFormData({...editFormData, subject: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl">
-                    <option value="KOREAN">국어</option><option value="ENGLISH">영어</option><option value="MATH">수학</option>
-                  </select>
-                  <input type="date" value={editFormData.date} onChange={e => setEditFormData({...editFormData, date: e.target.value})} className="w-full p-3 bg-gray-50 rounded-xl" />
-                </div>
-                <div className="flex gap-3 mt-8">
-                  <button onClick={() => setEditModalOpen(false)} className="flex-1 py-3 bg-gray-100 rounded-xl font-bold">취소</button>
-                  <button onClick={handleUpdateTask} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold">수정 완료</button>
                 </div>
               </div>
             </div>

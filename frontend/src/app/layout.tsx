@@ -4,6 +4,8 @@ import "./globals.css";
 import ApiInitializer from "@/components/ApiInitializer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ToastProvider } from "@/components/ToastProvider";
+import QueryProvider from "@/components/QueryProvider";
+import NetworkStatusBanner from "@/components/NetworkStatusBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -82,9 +84,12 @@ export default function RootLayout({
         style={{ colorScheme: 'light', fontFamily: 'var(--font-pretendard)' }}
       >
         <ApiInitializer />
-        <ErrorBoundary>
-          {children}
-        </ErrorBoundary>
+        <QueryProvider>
+          <NetworkStatusBanner />
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
+        </QueryProvider>
         <ToastProvider />
       </body>
     </html>

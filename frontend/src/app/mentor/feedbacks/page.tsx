@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { getApiUrl } from '@/lib/api';
 import { FaCommentAlt, FaCalendar, FaRegComments, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
-import FeedbackChatUI from '@/components/FeedbackChatUI';
 import { toast } from '@/stores/useToastStore';
 
 interface Feedback {
@@ -17,16 +16,6 @@ interface Feedback {
   content: string;
   createdAt: string;
   taskId?: string;
-}
-
-interface Message {
-  id: string;
-  userId: string;
-  userName: string;
-  userRole: 'MENTOR' | 'MENTEE';
-  content: string;
-  createdAt: string;
-  profileImage?: string;
 }
 
 function SubjectPill({ subject }: { subject: string }) {
@@ -69,30 +58,19 @@ export default function FeedbackPage() {
 
 function FeedbackContent() {
   const sp = useSearchParams();
+  const router = useRouter();
   const menteeId = sp.get('menteeId');
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<Feedback | null>(null);
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  
+
   // 페이징 관련 상태
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // 채팅 관련 상태
-  const [chatOpen, setChatOpen] = useState(false);
-  const [currentChatTaskId, setCurrentChatTaskId] = useState<string | null>(null);
-  const [chatMessages, setChatMessages] = useState<Message[]>([]);
-  const [currentUserId, setCurrentUserId] = useState<string>('');
-
   useEffect(() => {
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-      const user = JSON.parse(userStr);
-      setCurrentUserId(user.id);
-    }
-
     const fetchFeedbacks = async () => {
       try {
         const token = localStorage.getItem('token');
@@ -128,48 +106,6 @@ function FeedbackContent() {
     const start = (currentPage - 1) * itemsPerPage;
     return feedbacks.slice(start, start + itemsPerPage);
   }, [feedbacks, currentPage]);
-
-  const fetchChatMessages = async (taskId: string) => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/tasks/${taskId}/messages`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setChatMessages(data);
-      }
-    } catch (error) {
-      console.error('Fetch chat messages error:', error);
-    }
-  };
-
-  const handleSendMessage = async (content: string) => {
-    if (!currentChatTaskId) return;
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/tasks/${currentChatTaskId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ content }),
-      });
-      if (res.ok) {
-        await fetchChatMessages(currentChatTaskId);
-      }
-    } catch (error) {
-      console.error('Send message error:', error);
-      toast.error('메시지 전송에 실패했습니다.');
-    }
-  };
-
-  const openChat = (taskId: string) => {
-    setCurrentChatTaskId(taskId);
-    fetchChatMessages(taskId);
-    setChatOpen(true);
-  };
 
   const handleDelete = async (feedbackId: string) => {
     if (!confirm('정말 이 피드백을 삭제하시겠습니까?')) return;
@@ -236,7 +172,7 @@ function FeedbackContent() {
                   <div className="flex items-center gap-2">
                     {f.taskId && (
                       <button
-                        onClick={() => openChat(f.taskId!)}
+                        onClick={() => router.push(`/mentor/tasks/${f.taskId}`)}
                         className="p-2.5 rounded-xl bg-gray-50 text-gray-400 hover:bg-blue-50 hover:text-blue-500 transition-all"
                         title="피드백 대화"
                       >
@@ -362,35 +298,6 @@ function FeedbackContent() {
                   확인
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 채팅 모달 */}
-      {chatOpen && currentChatTaskId && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setChatOpen(false)} />
-          <div className="relative w-full max-w-lg rounded-[32px] bg-white shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-            <div className="px-8 py-6 border-b border-gray-50 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-500 flex items-center justify-center">
-                  <FaRegComments size={20} />
-                </div>
-                <h2 className="text-lg font-bold text-slate-800">피드백 대화</h2>
-              </div>
-              <button onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-gray-600">
-                <span className="text-2xl">×</span>
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-hidden">
-              <FeedbackChatUI
-                taskId={currentChatTaskId}
-                messages={chatMessages}
-                currentUserId={currentUserId}
-                onSendMessage={handleSendMessage}
-              />
             </div>
           </div>
         </div>

@@ -10,13 +10,16 @@ import mentorRoutes from './routes/mentor';
 import uploadRoutes from './routes/upload';
 import notificationRoutes from './routes/notification';
 import tasksRoutes from './routes/tasks';
+import errorsRoutes from './routes/errors';
+import reportsRoutes from './routes/reports';
 import { startScheduler } from './lib/scheduler';
+import logger from './lib/logger';
+import { requestLoggerMiddleware, globalErrorHandler } from './lib/error-handler';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
 
 // Middleware
-// 개발 환경에서는 모든 origin 허용 (모바일 테스트 지원)
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
     ? (process.env.FRONTEND_URL || 'http://localhost:3000')
@@ -24,6 +27,9 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json());
+
+// 요청 로깅 미들웨어
+app.use(requestLoggerMiddleware);
 
 // 정적 파일 서빙 (업로드된 이미지, PDF 등)
 app.use('/uploads', express.static('uploads'));
@@ -40,10 +46,24 @@ app.use('/api/mentor', mentorRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api', tasksRoutes);
+app.use('/api/errors', errorsRoutes);
+app.use('/api/reports', reportsRoutes);
+
+// 글로벌 에러 핸들러 (라우트 등록 후 마지막에)
+app.use(globalErrorHandler);
+
+// 미처리 에러 핸들링
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception', { error: error.message, stack: error.stack });
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled Rejection', { reason: String(reason) });
+});
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`서버가 포트 ${PORT}에서 실행 중입니다.`);
-  console.log(`모든 네트워크 인터페이스에서 접근 가능합니다.`);
+  logger.info(`서버가 포트 ${PORT}에서 실행 중입니다.`);
+  logger.info(`모든 네트워크 인터페이스에서 접근 가능합니다.`);
 
   // 스케줄러 시작
   startScheduler();

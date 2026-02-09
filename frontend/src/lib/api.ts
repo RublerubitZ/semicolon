@@ -142,12 +142,40 @@ export async function refreshAccessToken(): Promise<string | null> {
 }
 
 /**
- * 자동 토큰 갱신 기능이 포함된 fetch 래퍼
- * 401 에러 발생 시 자동으로 토큰을 갱신하고 요청을 재시도합니다.
- *
- * @param url - 요청 URL
- * @param options - fetch 옵션
- * @returns fetch Response
+ * 지연 함수 (재시도 간격용)
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 네트워크 에러인지 판별
+ */
+function isNetworkError(error: unknown): boolean {
+  return error instanceof TypeError && (
+    (error.message?.includes('fetch') || error.message?.includes('network') || error.message === 'Failed to fetch')
+  );
+}
+
+/**
+ * 지연 로딩으로 에러 추적 (순환 참조 방지)
+ */
+function trackApiError(url: string, status: number, errorId?: string): void {
+  import('./error-tracker').then(({ trackError }) => {
+    trackError(`API ${status} Error`, {
+      url,
+      status,
+      errorId,
+      source: 'fetchWithAuth',
+    });
+  }).catch(() => {});
+}
+
+/**
+ * 자동 토큰 갱신 + 재시도 기능이 포함된 fetch 래퍼
+ * - 네트워크 에러: 최대 3회 재시도 (exponential backoff)
+ * - 5xx 서버 에러: 최대 2회 재시도
+ * - 401 에러: 자동 토큰 갱신 후 재시도
  */
 let isRefreshing = false;
 let refreshPromise: Promise<string | null> | null = null;
@@ -156,7 +184,11 @@ export async function fetchWithAuth(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  // 첫 번째 요청
+  // 오프라인 감지
+  if (typeof window !== 'undefined' && !navigator.onLine) {
+    throw new Error('offline');
+  }
+
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   const headers = new Headers(options.headers);
@@ -167,64 +199,76 @@ export async function fetchWithAuth(
     headers.set('Content-Type', 'application/json');
   }
 
-  let response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  // 네트워크/서버 에러 재시도 로직
+  const MAX_RETRIES = 3;
+  let lastError: unknown;
 
-  // 401 에러가 아니면 그대로 반환
-  if (response.status !== 401) {
-    return response;
-  }
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      let response = await fetch(url, { ...options, headers });
 
-  // 401 에러 발생 - 토큰 갱신 시도
-  console.log('[Auth] 401 error detected, attempting token refresh...');
-
-  // 이미 다른 요청이 토큰을 갱신 중이면 그 결과를 기다림
-  if (isRefreshing && refreshPromise) {
-    const newToken = await refreshPromise;
-    if (!newToken) {
-      // 토큰 갱신 실패 - 로그인 페이지로 리다이렉트
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login?reason=expired';
+      // 5xx 서버 에러 → 재시도 (최대 2회)
+      if (response.status >= 500 && attempt < 2) {
+        await delay(1000 * 2 ** attempt);
+        continue;
       }
-      return response;
-    }
 
-    // 새 토큰으로 재시도
-    headers.set('Authorization', `Bearer ${newToken}`);
-    return fetch(url, { ...options, headers });
-  }
-
-  // 토큰 갱신 시작
-  isRefreshing = true;
-  refreshPromise = refreshAccessToken();
-
-  try {
-    const newToken = await refreshPromise;
-
-    if (!newToken) {
-      // Refresh token도 만료됨 - 로그인 페이지로 리다이렉트
-      console.error('[Auth] Token refresh failed, redirecting to login');
-      if (typeof window !== 'undefined') {
-        window.location.href = '/login?reason=expired';
+      // 5xx 에러 로깅 (재시도 소진 후)
+      if (response.status >= 500) {
+        const body = await response.clone().json().catch(() => ({}));
+        trackApiError(url, response.status, body?.errorId);
       }
-      return response;
+
+      // 401 에러가 아니면 그대로 반환
+      if (response.status !== 401) {
+        return response;
+      }
+
+      // 401 에러 발생 - 토큰 갱신 시도
+      if (isRefreshing && refreshPromise) {
+        const newToken = await refreshPromise;
+        if (!newToken) {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login?reason=expired';
+          }
+          return response;
+        }
+        headers.set('Authorization', `Bearer ${newToken}`);
+        return fetch(url, { ...options, headers });
+      }
+
+      isRefreshing = true;
+      refreshPromise = refreshAccessToken();
+
+      try {
+        const newToken = await refreshPromise;
+
+        if (!newToken) {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login?reason=expired';
+          }
+          return response;
+        }
+
+        headers.set('Authorization', `Bearer ${newToken}`);
+        response = await fetch(url, { ...options, headers });
+        return response;
+      } finally {
+        isRefreshing = false;
+        refreshPromise = null;
+      }
+    } catch (error) {
+      lastError = error;
+      // 네트워크 에러만 재시도
+      if (isNetworkError(error) && attempt < MAX_RETRIES - 1) {
+        await delay(1000 * 2 ** attempt);
+        continue;
+      }
+      throw error;
     }
-
-    // 새 토큰으로 원래 요청 재시도
-    console.log('[Auth] Retrying request with new token');
-    headers.set('Authorization', `Bearer ${newToken}`);
-    response = await fetch(url, {
-      ...options,
-      headers,
-    });
-
-    return response;
-  } finally {
-    isRefreshing = false;
-    refreshPromise = null;
   }
+
+  throw lastError;
 }
 
 /**

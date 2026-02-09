@@ -1,17 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { IoIosArrowBack, IoIosArrowForward } from 'react-icons/io';
 import { MdTrendingUp, MdTrendingDown, MdOutlineDataUsage } from 'react-icons/md';
+import { HiOutlineChartBarSquare } from 'react-icons/hi2';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { getApiUrl } from '@/lib/api';
-import { getAuthHeaders } from '@/lib/auth';
 import { toYYYYMMDD, addDays } from '@/lib/dateUtils';
 import { DEFAULT_SUBJECTS } from '@/constants/subjects';
+import { useWeeklyReportData, useMonthlyReportData, useWeeklyFeedback, useMonthlyFeedback, useDetailedWeeklyReport } from '@/lib/queries/use-reports';
+import { useHeatmap, useWeeklyRanking } from '@/lib/queries/use-stats';
 import Heatmap, { HeatmapData } from '@/components/heatmap/Heatmap';
 import WeeklyRanking, { WeeklyRankingItem } from '@/components/ranking/WeeklyRanking';
+import StudyPatternCard from '@/components/reports/StudyPatternCard';
+import ReportPDFButton from '@/components/reports/ReportPDFButton';
 
 // Interfaces
 interface StudyLog {
@@ -23,7 +26,7 @@ interface Task {
   subject: string;
   isFixed: boolean;
   date: string;
-  submissions: any[];
+  submissions: unknown[];
   studyLogs: StudyLog[];
 }
 
@@ -55,222 +58,159 @@ const formatMinutesToHours = (minutes: number) => {
   return `${Math.floor(minutes / 60)}시간`;
 };
 
+// 주의 시작일(월요일) 계산
+function getWeekStart(date: Date): Date {
+  const day = date.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  return addDays(date, mondayOffset);
+}
+
 export default function ReportsPage() {
   const router = useRouter();
+  const reportRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<'weekly' | 'monthly'>('weekly');
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [isLoading, setIsLoading] = useState(true);
-  
-  // Data states
-  const [weeklyData, setWeeklyData] = useState<PeriodData | null>(null);
-  const [monthlyData, setMonthlyData] = useState<PeriodData | null>(null);
-  
-  // Feedback states
-  const [weeklyFeedback, setWeeklyFeedback] = useState<any>(null);
-  const [monthlyFeedback, setMonthlyFeedback] = useState<any>(null);
-  
-  // Heatmap & Ranking states
-  const [heatmapData, setHeatmapData] = useState<HeatmapData[]>([]);
   const [selectedHeatmapYear, setSelectedHeatmapYear] = useState(new Date().getFullYear());
-  const [rankingData, setRankingData] = useState<WeeklyRankingItem[]>([]);
-  const [user, setUser] = useState<any>(null);
-
-  // Tooltip state
+  const [user, setUser] = useState<{ id: string } | null>(null);
   const [hoveredBar, setHoveredBar] = useState<{ day: string; minutes: number } | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     const userStr = localStorage.getItem('user');
-    if (userStr) {
-      setUser(JSON.parse(userStr));
-    }
-    fetchRanking();
-    fetchHeatmap(selectedHeatmapYear);
+    if (userStr) setUser(JSON.parse(userStr));
   }, []);
 
-  useEffect(() => {
-    if (tab === 'weekly') {
-      fetchWeeklyData();
-    } else {
-      fetchMonthlyData();
+  // --- 날짜 계산 ---
+  const startOfWeek = useMemo(() => getWeekStart(currentDate), [currentDate]);
+  const prevStartOfWeek = useMemo(() => addDays(startOfWeek, -7), [startOfWeek]);
+  const weekYear = startOfWeek.getFullYear();
+  const weekMonth = startOfWeek.getMonth() + 1;
+  const weekNumber = Math.ceil((startOfWeek.getDate() + new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), 1).getDay()) / 7);
+  const monthYear = currentDate.getFullYear();
+  const monthNum = currentDate.getMonth() + 1;
+
+  // --- React Query 훅 ---
+  const weeklyReport = useWeeklyReportData(toYYYYMMDD(startOfWeek), toYYYYMMDD(prevStartOfWeek));
+  const monthlyReport = useMonthlyReportData(monthYear, monthNum);
+  const weeklyFeedbackQuery = useWeeklyFeedback(weekYear, weekMonth, weekNumber);
+  const monthlyFeedbackQuery = useMonthlyFeedback(monthYear, monthNum);
+  const heatmapQuery = useHeatmap(selectedHeatmapYear);
+  const rankingQuery = useWeeklyRanking();
+  const detailedWeeklyReport = useDetailedWeeklyReport(tab === 'weekly' ? toYYYYMMDD(startOfWeek) : '');
+
+  const isLoading = tab === 'weekly' ? weeklyReport.isLoading : monthlyReport.isLoading;
+
+  // --- 주간 데이터 가공 ---
+  const weeklyData: PeriodData | null = useMemo(() => {
+    if (!weeklyReport.currentData || !weeklyReport.prevData) return null;
+
+    const prevTasks: Task[] = weeklyReport.prevData.tasks;
+    const prevTotalMinutes = prevTasks.reduce((sum, task) =>
+      sum + task.studyLogs.reduce((s, log) => s + log.duration, 0), 0
+    );
+    const prevAverage = Math.round(prevTotalMinutes / 7);
+
+    const tasks: Task[] = weeklyReport.currentData.tasks;
+    const dailyStats: Record<string, number> = {};
+    const subjectStats: Record<string, number> = {};
+    let totalTasks = 0;
+    let completedTasks = 0;
+
+    for (let i = 0; i < 7; i++) {
+      dailyStats[toYYYYMMDD(addDays(startOfWeek, i))] = 0;
     }
-  }, [tab, currentDate]);
 
-  useEffect(() => {
-    fetchHeatmap(selectedHeatmapYear);
-  }, [selectedHeatmapYear]);
-
-  const fetchWeeklyData = async () => {
-    setIsLoading(true);
-    try {
-      const day = currentDate.getDay();
-      const mondayOffset = day === 0 ? -6 : 1 - day;
-      const startOfWeek = addDays(currentDate, mondayOffset);
-      const prevStartOfWeek = addDays(startOfWeek, -7);
-      
-      const year = startOfWeek.getFullYear();
-      const month = startOfWeek.getMonth() + 1;
-      // 1일부터의 일수를 7로 나눠서 주차 계산 (정확한 주차 계산 로직은 프로젝트 기준에 따라 다를 수 있음)
-      const weekNumber = Math.ceil((startOfWeek.getDate() + new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), 1).getDay()) / 7);
-
-      const [currentRes, prevRes, feedbackRes] = await Promise.all([
-        fetch(`${getApiUrl()}/api/mentee/planner/weekly?startDate=${toYYYYMMDD(startOfWeek)}`, { headers: getAuthHeaders() }),
-        fetch(`${getApiUrl()}/api/mentee/planner/weekly?startDate=${toYYYYMMDD(prevStartOfWeek)}`, { headers: getAuthHeaders() }),
-        fetch(`${getApiUrl()}/api/mentee/weekly-feedbacks?year=${year}&month=${month}&weekNumber=${weekNumber}`, { headers: getAuthHeaders() })
-      ]);
-      
-      if (!currentRes.ok || !prevRes.ok) throw new Error('Failed to fetch data');
-      
-      const currentData = await currentRes.json();
-      const prevData = await prevRes.json();
-      const feedbackData = feedbackRes.ok ? await feedbackRes.json() : null;
-      
-      setWeeklyFeedback(feedbackData);
-
-      // Process Previous Week
-      const prevTasks: Task[] = prevData.tasks;
-      const prevTotalMinutes = prevTasks.reduce((sum, task) => 
-        sum + task.studyLogs.reduce((s, log) => s + log.duration, 0), 0
-      );
-      const prevAverage = Math.round(prevTotalMinutes / 7);
-
-      // Process Current Week
-      const tasks: Task[] = currentData.tasks;
-      const dailyStats: Record<string, number> = {};
-      const subjectStats: Record<string, number> = {};
-      let totalTasks = 0;
-      let completedTasks = 0;
-
-      for (let i = 0; i < 7; i++) {
-        const d = addDays(startOfWeek, i);
-        dailyStats[toYYYYMMDD(d)] = 0;
+    tasks.forEach(task => {
+      const dateKey = toYYYYMMDD(task.date);
+      const duration = task.studyLogs.reduce((sum, log) => sum + log.duration, 0);
+      if (dailyStats[dateKey] !== undefined) dailyStats[dateKey] += duration;
+      if (task.isFixed) {
+        totalTasks++;
+        if (task.submissions.length > 0) completedTasks++;
       }
+      subjectStats[task.subject] = (subjectStats[task.subject] || 0) + duration;
+    });
 
-      tasks.forEach(task => {
-        const dateKey = toYYYYMMDD(task.date);
-        const duration = task.studyLogs.reduce((sum, log) => sum + log.duration, 0);
-        if (dailyStats[dateKey] !== undefined) dailyStats[dateKey] += duration;
-        if (task.isFixed) {
-          totalTasks++;
-          if (task.submissions.length > 0) completedTasks++;
-        }
-        subjectStats[task.subject] = (subjectStats[task.subject] || 0) + duration;
+    return {
+      totalTasks,
+      completedTasks,
+      dailyData: Object.entries(dailyStats).map(([date, minutes]) => ({
+        date,
+        day: DAYS[(new Date(date).getDay() + 6) % 7],
+        minutes
+      })).sort((a, b) => a.date!.localeCompare(b.date!)),
+      subjectData: DEFAULT_SUBJECTS.map(s => ({
+        subject: s.label,
+        minutes: subjectStats[s.value] || 0,
+        color: s.value === 'KOREAN' ? 'bg-pink-400' : s.value === 'ENGLISH' ? 'bg-yellow-400' : 'bg-blue-300'
+      })),
+      previousAverage: prevAverage,
+    };
+  }, [weeklyReport.currentData, weeklyReport.prevData, startOfWeek]);
+
+  // --- 월간 데이터 가공 ---
+  const monthlyData: PeriodData | null = useMemo(() => {
+    if (!monthlyReport.currentData || !monthlyReport.prevData) return null;
+
+    const prevStats = monthlyReport.prevData.stats;
+    const prevAverage = Math.round(prevStats.totalStudyTime / 4);
+
+    const { stats, tasksByDate } = monthlyReport.currentData;
+    const weeklyMinutes: number[] = [0, 0, 0, 0, 0, 0];
+    Object.entries(tasksByDate).forEach(([dateStr, tasks]: [string, unknown]) => {
+      const date = new Date(dateStr);
+      const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+      const weekIndex = Math.floor((date.getDate() + firstDayOfMonth.getDay() - 1) / 7);
+      let dailyMinutes = 0;
+      (tasks as Task[]).forEach((task) => {
+        dailyMinutes += task.studyLogs.reduce((sum: number, log: StudyLog) => sum + log.duration, 0);
       });
+      if (weekIndex < weeklyMinutes.length) weeklyMinutes[weekIndex] += dailyMinutes;
+    });
 
-      setWeeklyData({
-        totalTasks,
-        completedTasks,
-        dailyData: Object.entries(dailyStats).map(([date, minutes]) => ({
-          date,
-          day: DAYS[(new Date(date).getDay() + 6) % 7],
+    return {
+      totalTasks: stats.totalTasks,
+      completedTasks: stats.completedTasks,
+      dailyData: weeklyMinutes
+        .filter((min, idx) => idx < 5 || min > 0)
+        .map((minutes, idx) => ({
+          day: `${idx + 1}주차`,
           minutes
-        })).sort((a, b) => a.date!.localeCompare(b.date!)),
-        subjectData: DEFAULT_SUBJECTS.map(s => ({
-          subject: s.label,
-          minutes: subjectStats[s.value] || 0,
-          color: s.value === 'KOREAN' ? 'bg-pink-400' : s.value === 'ENGLISH' ? 'bg-yellow-400' : 'bg-blue-300'
         })),
-        previousAverage: prevAverage,
-      });
-    } catch (error) {
-      console.error('Error fetching weekly data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      subjectData: DEFAULT_SUBJECTS.map(s => ({
+        subject: s.label,
+        minutes: (stats.subjectStats[s.value]?.studyTime) || 0,
+        color: s.value === 'KOREAN' ? 'bg-pink-400' : s.value === 'ENGLISH' ? 'bg-yellow-400' : 'bg-blue-300'
+      })),
+      previousAverage: prevAverage,
+    };
+  }, [monthlyReport.currentData, monthlyReport.prevData]);
 
-  const fetchMonthlyData = async () => {
-    setIsLoading(true);
-    try {
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth() + 1;
-      
-      const prevMonthDate = new Date(currentDate);
-      prevMonthDate.setMonth(currentDate.getMonth() - 1);
-      const prevYear = prevMonthDate.getFullYear();
-      const prevMonth = prevMonthDate.getMonth() + 1;
-      
-      const [currentRes, prevRes, feedbackRes] = await Promise.all([
-        fetch(`${getApiUrl()}/api/mentee/planner/monthly?year=${year}&month=${month}`, { headers: getAuthHeaders() }),
-        fetch(`${getApiUrl()}/api/mentee/planner/monthly?year=${prevYear}&month=${prevMonth}`, { headers: getAuthHeaders() }),
-        fetch(`${getApiUrl()}/api/mentee/monthly-feedbacks?year=${year}&month=${month}`, { headers: getAuthHeaders() })
-      ]);
-      
-      if (!currentRes.ok || !prevRes.ok) throw new Error('Failed to fetch monthly data');
-      const currentData = await currentRes.json();
-      const prevData = await prevRes.json();
-      const feedbackData = feedbackRes.ok ? await feedbackRes.json() : null;
+  // --- 파생 데이터 ---
+  const currentPeriodData = tab === 'weekly' ? weeklyData : monthlyData;
+  const currentFeedback = tab === 'weekly' ? weeklyFeedbackQuery.data : monthlyFeedbackQuery.data;
+  const isWeekly = tab === 'weekly';
+  const heatmapData: HeatmapData[] = heatmapQuery.data?.data || [];
+  const rankingData: WeeklyRankingItem[] = rankingQuery.data?.rankings || [];
 
-      setMonthlyFeedback(feedbackData);
-      
-      // Previous Month Average (Weekly based)
-      const prevStats = prevData.stats;
-      const prevAverage = Math.round(prevStats.totalStudyTime / 4); // Average per week
+  const totalMinutes = currentPeriodData?.subjectData.reduce((sum, s) => sum + s.minutes, 0) || 0;
+  const completionRate = currentPeriodData?.totalTasks
+    ? Math.round((currentPeriodData.completedTasks / currentPeriodData.totalTasks) * 100)
+    : 0;
 
-      const { stats, tasksByDate } = currentData;
-      const weeklyMinutes: number[] = [0, 0, 0, 0, 0, 0];
-      Object.entries(tasksByDate).forEach(([dateStr, tasks]: [string, any]) => {
-        const date = new Date(dateStr);
-        const firstDayOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-        const weekIndex = Math.floor((date.getDate() + firstDayOfMonth.getDay() - 1) / 7);
-        let dailyMinutes = 0;
-        tasks.forEach((task: any) => {
-          dailyMinutes += task.studyLogs.reduce((sum: number, log: any) => sum + log.duration, 0);
-        });
-        if (weekIndex < weeklyMinutes.length) weeklyMinutes[weekIndex] += dailyMinutes;
-      });
+  const currentAverage = currentPeriodData?.dailyData.length
+    ? Math.round(totalMinutes / currentPeriodData.dailyData.length)
+    : 0;
 
-      setMonthlyData({
-        totalTasks: stats.totalTasks,
-        completedTasks: stats.completedTasks,
-        dailyData: weeklyMinutes
-          .filter((min, idx) => idx < 5 || min > 0)
-          .map((minutes, idx) => ({
-            day: `${idx + 1}주차`,
-            minutes
-          })),
-        subjectData: DEFAULT_SUBJECTS.map(s => ({
-          subject: s.label,
-          minutes: (stats.subjectStats[s.value]?.studyTime) || 0,
-          color: s.value === 'KOREAN' ? 'bg-pink-400' : s.value === 'ENGLISH' ? 'bg-yellow-400' : 'bg-blue-300'
-        })),
-        previousAverage: prevAverage,
-      });
-    } catch (error) {
-      console.error('Error fetching monthly data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const previousAverage = currentPeriodData?.previousAverage || 0;
+  const changeRate = previousAverage > 0
+    ? Math.round(((currentAverage - previousAverage) / previousAverage) * 100)
+    : 0;
 
-  const fetchHeatmap = async (year: number) => {
-    try {
-      const res = await fetch(`${getApiUrl()}/api/mentee/heatmap?year=${year}`, {
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setHeatmapData(data.data || []);
-      }
-    } catch (err) {
-      console.error('Heatmap error:', err);
-    }
-  };
+  const maxValue = Math.max(...(currentPeriodData?.dailyData.map(d => d.minutes) || [60]), 60);
+  const hasData = currentPeriodData && (totalMinutes > 0 || currentPeriodData.totalTasks > 0);
 
-  const fetchRanking = async () => {
-    try {
-      const res = await fetch(`${getApiUrl()}/api/mentee/ranking`, {
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setRankingData(data.rankings || []);
-      }
-    } catch (err) {
-      console.error('Ranking error:', err);
-    }
-  };
-
+  // --- 핸들러 ---
   const handlePrev = () => {
     if (tab === 'weekly') {
       setCurrentDate(addDays(currentDate, -7));
@@ -291,33 +231,9 @@ export default function ReportsPage() {
     }
   };
 
-  const currentPeriodData = tab === 'weekly' ? weeklyData : monthlyData;
-  const isWeekly = tab === 'weekly';
-
-  const totalMinutes = currentPeriodData?.subjectData.reduce((sum, s) => sum + s.minutes, 0) || 0;
-  const completionRate = currentPeriodData?.totalTasks 
-    ? Math.round((currentPeriodData.completedTasks / currentPeriodData.totalTasks) * 100) 
-    : 0;
-  
-  const currentAverage = currentPeriodData?.dailyData.length 
-    ? Math.round(totalMinutes / currentPeriodData.dailyData.length) 
-    : 0;
-
-  const previousAverage = currentPeriodData?.previousAverage || 0;
-  const changeRate = previousAverage > 0 
-    ? Math.round(((currentAverage - previousAverage) / previousAverage) * 100)
-    : 0;
-
-  const maxValue = Math.max(...(currentPeriodData?.dailyData.map(d => d.minutes) || [60]), 60);
-
-  // 데이터 존재 여부 판별
-  const hasData = currentPeriodData && (totalMinutes > 0 || currentPeriodData.totalTasks > 0);
-
   const getPeriodLabel = () => {
     if (isWeekly) {
-      const day = currentDate.getDay();
-      const mondayOffset = day === 0 ? -6 : 1 - day;
-      const monday = addDays(currentDate, mondayOffset);
+      const monday = startOfWeek;
       const month = monday.getMonth() + 1;
       const weekOfMonth = Math.ceil((monday.getDate() + new Date(monday.getFullYear(), monday.getMonth(), 1).getDay()) / 7);
       return `${monday.getFullYear()}년 ${month}월 ${weekOfMonth}주차 리포트`;
@@ -333,10 +249,26 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 pb-32 font-['Pretendard']">
+    <div ref={reportRef} className="min-h-screen bg-gray-50 p-4 pb-32 font-['Pretendard']">
       {/* 헤더 */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">리포트</h1>
+        <div className="flex gap-2">
+          <ReportPDFButton
+            targetRef={reportRef}
+            fileName={tab === 'weekly'
+              ? `설스터디_주간리포트_${toYYYYMMDD(startOfWeek)}`
+              : `설스터디_월간리포트_${monthYear}년${monthNum}월`
+            }
+          />
+          <button
+            onClick={() => router.push('/mentee/reports/trends')}
+            className="flex items-center gap-1 px-3 py-1.5 bg-white text-gray-600 text-xs font-bold rounded-xl border border-gray-100 shadow-sm hover:bg-gray-50 transition-all active:scale-95"
+          >
+            <HiOutlineChartBarSquare className="w-3.5 h-3.5" />
+            트렌드
+          </button>
+        </div>
       </div>
 
       {/* 주간/월간 탭 */}
@@ -401,7 +333,7 @@ export default function ReportsPage() {
             해당 기간에는 기록된 학습 활동이 없습니다.<br/>
             다른 날짜를 선택하거나 공부를 시작해 보세요!
           </p>
-          
+
           <div className="mt-10 w-full max-w-xs space-y-4">
             <div className="w-full h-1 bg-gray-100 rounded-full"></div>
             <div className="w-2/3 h-1 bg-gray-100 rounded-full mx-auto"></div>
@@ -409,7 +341,6 @@ export default function ReportsPage() {
 
           <div className="mt-20 w-full">
              <div className="w-full h-px bg-gray-100 mb-10"></div>
-             {/* 히트맵은 월간에서만, 랭킹은 주간에서만 보여줌 (데이터 없을 때) */}
              {tab === 'monthly' && (
                <div className="text-left">
                   <div className="flex items-center gap-2 mb-6">
@@ -484,15 +415,14 @@ export default function ReportsPage() {
                       : formatMinutesToHours(currentAverage)}
                   </h3>
                 </div>
-                
-                {/* 동적 성장 지표 */}
+
                 <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-2xl">
                   <div className={`w-8 h-8 ${changeRate >= 0 ? 'bg-red-500' : 'bg-blue-500'} text-white rounded-full flex items-center justify-center shadow-sm transition-colors`}>
                     {changeRate >= 0 ? <MdTrendingUp className="w-5 h-5" /> : <MdTrendingDown className="w-5 h-5" />}
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] text-gray-400 font-bold leading-none mb-1">
-                      {isWeekly 
+                      {isWeekly
                         ? (changeRate >= 0 ? '지난주 대비 상승' : '지난주 대비 하락')
                         : (changeRate >= 0 ? '지난달 대비 상승' : '지난달 대비 하락')
                       }
@@ -507,27 +437,25 @@ export default function ReportsPage() {
               {/* 그래프 섹션 */}
               <div className="mt-8 flex gap-2">
                 <div className="flex-1 relative h-48 border border-gray-100 rounded-2xl bg-gray-50/30 overflow-hidden">
-                  {/* Y축 기준선 */}
                   <div className="absolute left-0 top-0 bottom-0 w-full flex flex-col justify-between pointer-events-none px-2">
                     <div className="w-full border-t border-gray-100/50"></div>
                     <div className="w-full border-t border-gray-100/50"></div>
                     <div className="w-full border-t border-gray-100/50"></div>
                   </div>
 
-                  {/* 막대 그래프 영역 */}
                   <div className="h-full flex items-end justify-between gap-2 relative z-10 px-4">
                     {currentPeriodData?.dailyData.map((data, index) => {
                       const heightPercent = Math.max((data.minutes / maxValue) * 100, 5);
                       return (
                         <div key={index} className="flex-1 flex flex-col items-center justify-end h-full group">
-                          <motion.div 
+                          <motion.div
                             initial={{ height: 0 }}
                             animate={{ height: `${heightPercent}%` }}
                             onMouseEnter={(e) => handleBarMouseEnter(data, e)}
                             onMouseLeave={() => setHoveredBar(null)}
                             className={`w-full max-w-[28px] rounded-t-lg transition-all duration-300 cursor-pointer ${
-                              data.minutes === maxValue 
-                                ? 'bg-[#B0D4FF] shadow-md shadow-blue-200/50' 
+                              data.minutes === maxValue
+                                ? 'bg-[#B0D4FF] shadow-md shadow-blue-200/50'
                                 : 'bg-blue-100 group-hover:bg-blue-300'
                             }`}
                           ></motion.div>
@@ -540,17 +468,14 @@ export default function ReportsPage() {
                       );
                     })}
 
-                    {/* 평균선 (테두리 안쪽만) */}
-                    <div 
+                    <div
                       className="absolute left-0 right-0 border-t-2 border-dashed border-blue-400/20 pointer-events-none transition-all duration-500"
                       style={{ bottom: `${(currentAverage / maxValue) * 100}%` }}
                     ></div>
                   </div>
                 </div>
 
-                {/* 지표 라벨 영역 (테두리 밖 우측) */}
                 <div className="w-8 relative h-48 flex flex-col justify-between py-1">
-                  {/* MAX 라벨 */}
                   <div className="text-left">
                     <span className="text-[8px] font-black text-gray-300 uppercase tracking-tighter block leading-none">
                       MAX
@@ -560,8 +485,7 @@ export default function ReportsPage() {
                     </span>
                   </div>
 
-                  {/* 동적 AVG 라벨 (평균선 높이에 맞춰 이동) */}
-                  <div 
+                  <div
                     className="absolute right-0 transition-all duration-500"
                     style={{ bottom: `calc(${(currentAverage / maxValue) * 100}% - 10px)` }}
                   >
@@ -574,7 +498,7 @@ export default function ReportsPage() {
             </div>
 
             {/* 과목별 공부 시간 */}
-            <div className="bg-white rounded-3xl p-6 mb-10 shadow-sm border border-gray-50">
+            <div className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-50">
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 bg-pink-50 rounded-xl flex items-center justify-center">
@@ -625,9 +549,16 @@ export default function ReportsPage() {
               </div>
             </div>
 
+            {/* 학습 패턴 - 주간 탭에서만 표시 */}
+            {tab === 'weekly' && detailedWeeklyReport.data?.studyPattern && (
+              <div className="mb-10">
+                <StudyPatternCard pattern={detailedWeeklyReport.data.studyPattern} />
+              </div>
+            )}
+
             {/* 멘토 리포트 섹션 */}
-            {(isWeekly ? weeklyFeedback : monthlyFeedback) && (
-              <motion.div 
+            {currentFeedback && (
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-white rounded-3xl p-6 mb-6 shadow-sm border border-gray-50"
@@ -643,7 +574,7 @@ export default function ReportsPage() {
                   <div className="bg-blue-50/30 rounded-2xl p-4 border border-blue-100/30">
                     <p className="text-[10px] font-black text-blue-500 mb-2 uppercase tracking-wider">Overall Comment</p>
                     <p className="text-sm text-gray-700 leading-relaxed font-semibold">
-                      {(isWeekly ? weeklyFeedback : monthlyFeedback).overallComment}
+                      {currentFeedback.overallComment}
                     </p>
                   </div>
 
@@ -651,13 +582,13 @@ export default function ReportsPage() {
                     <div className="bg-green-50/30 rounded-2xl p-4 border border-green-100/30">
                       <p className="text-[10px] font-black text-green-600 mb-2 uppercase tracking-wider">Strengths</p>
                       <p className="text-sm text-gray-700 leading-relaxed font-semibold">
-                        {(isWeekly ? weeklyFeedback : monthlyFeedback).strengths}
+                        {currentFeedback.strengths}
                       </p>
                     </div>
                     <div className="bg-orange-50/30 rounded-2xl p-4 border border-orange-100/30">
                       <p className="text-[10px] font-black text-orange-600 mb-2 uppercase tracking-wider">Improvements</p>
                       <p className="text-sm text-gray-700 leading-relaxed font-semibold">
-                        {(isWeekly ? weeklyFeedback : monthlyFeedback).improvements}
+                        {currentFeedback.improvements}
                       </p>
                     </div>
                   </div>
@@ -667,26 +598,26 @@ export default function ReportsPage() {
                       {isWeekly ? 'Next Week Goals' : 'Next Month Goals'}
                     </p>
                     <p className="text-sm text-gray-700 leading-relaxed font-semibold">
-                      {(isWeekly ? weeklyFeedback : monthlyFeedback)[isWeekly ? 'nextWeekGoals' : 'nextMonthGoals']}
+                      {currentFeedback[isWeekly ? 'nextWeekGoals' : 'nextMonthGoals']}
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="mt-6 pt-6 border-t border-gray-50 flex items-center justify-between">
                    <div className="flex items-center gap-2">
                       <div className="w-7 h-7 bg-gray-100 rounded-full flex items-center justify-center text-[12px] shadow-inner">
-                        { (isWeekly ? weeklyFeedback : monthlyFeedback).mentor?.profileImage ? (
-                          <img 
-                            src={(isWeekly ? weeklyFeedback : monthlyFeedback).mentor.profileImage} 
-                            alt="Mentor" 
+                        { currentFeedback.mentor?.profileImage ? (
+                          <img
+                            src={currentFeedback.mentor.profileImage}
+                            alt="Mentor"
                             className="w-full h-full rounded-full object-cover"
                           />
                         ) : "👤" }
                       </div>
-                      <span className="text-[11px] font-black text-gray-400">{(isWeekly ? weeklyFeedback : monthlyFeedback).mentor?.name || '담당'} 멘토님</span>
+                      <span className="text-[11px] font-black text-gray-400">{currentFeedback.mentor?.name || '담당'} 멘토님</span>
                    </div>
                    <span className="text-[10px] font-bold text-gray-300 bg-gray-50 px-2 py-1 rounded-lg">
-                     {new Date((isWeekly ? weeklyFeedback : monthlyFeedback).updatedAt).toLocaleDateString('ko-KR')}
+                     {new Date(currentFeedback.updatedAt).toLocaleDateString('ko-KR')}
                    </span>
                 </div>
               </motion.div>

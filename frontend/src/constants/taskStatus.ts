@@ -1,6 +1,4 @@
-import { format } from 'date-fns';
-
-export type TaskStatus = 'FEEDBACK_DONE' | 'SUBMITTED' | 'NOT_SUBMITTED' | 'BEFORE_SUBMISSION';
+export type TaskStatus = 'FEEDBACK_DONE' | 'SUBMITTED' | 'NOT_SUBMITTED' | 'IN_PROGRESS' | 'BEFORE_SUBMISSION';
 
 export interface TaskStatusInfo {
   label: string;
@@ -19,6 +17,10 @@ export const TASK_STATUS_CONFIG: Record<TaskStatus, TaskStatusInfo> = {
   NOT_SUBMITTED: {
     label: '미제출',
     style: 'bg-red-100 text-red-500',
+  },
+  IN_PROGRESS: {
+    label: '진행중',
+    style: 'bg-yellow-100 text-yellow-600',
   },
   BEFORE_SUBMISSION: {
     label: '제출전',
@@ -44,18 +46,23 @@ export function getTaskStatus(task: {
     return 'SUBMITTED';
   }
 
-  // 3. 미제출 또는 제출전 판별 (날짜 기준)
+  // 3. 미제출, 진행중, 제출전 판별 (날짜 기준)
   const taskDate = new Date(task.date);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   // task.date에서 시간 정보를 제거하고 날짜만 비교하기 위해 처리
   const compareDate = new Date(taskDate);
   compareDate.setHours(0, 0, 0, 0);
 
-  if (compareDate < today) {
+  if (compareDate.getTime() === today.getTime()) {
+    // 오늘 날짜인 경우 진행중
+    return 'IN_PROGRESS';
+  } else if (compareDate < today) {
+    // 오늘보다 이전 날짜인 경우 미제출
     return 'NOT_SUBMITTED';
   } else {
+    // 미래 날짜인 경우 제출전
     return 'BEFORE_SUBMISSION';
   }
 }

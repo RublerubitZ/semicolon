@@ -1,11 +1,11 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
 import { EditIcon, DeleteIcon } from '@/components/icons';
-import { getSubjectLabel, getSubjectBadgeColor, SUBJECT_LABELS } from '@/constants/subjects';
+import { getSubjectLabel, getSubjectBadgeColor } from '@/constants/subjects';
 import { getSelfCheckInfo, type SelfCheckStatus } from '@/constants/selfCheck';
 import { getTaskStatusInfo } from '@/constants/taskStatus';
 import StreakBadge from '@/components/streak/StreakBadge';
-import Heatmap, { HeatmapData } from '@/components/heatmap/Heatmap';
+import Heatmap from '@/components/heatmap/Heatmap';
 import { toast } from '@/stores/useToastStore';
 
 import { useEffect, useState, useMemo } from 'react';
@@ -17,7 +17,7 @@ import { motion } from 'framer-motion';
 
 type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
 type ViewMode = 'daily' | 'weekly' | 'monthly';
-type ActiveTab = 'tasks' | 'calendar' | 'dailyFeedback' | 'menteeDetails' | 'newTask';
+type ActiveTab = 'tasks' | 'menteeDetails';
 
 interface Task {
   id: string;
@@ -62,16 +62,16 @@ export default function MenteePlannerPage() {
   const menteeId = params.id as string;
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('tasks');
+  const [showNewTaskForm, setShowNewTaskForm] = useState(false);
 
   // 쿼리 파라미터 처리
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const dateParam = urlParams.get('date');
-      const openFeedbackParam = urlParams.get('openFeedback');
       const tabParam = urlParams.get('tab') as ActiveTab;
 
-      if (tabParam) {
+      if (tabParam && (tabParam === 'tasks' || tabParam === 'menteeDetails')) {
         setActiveTab(tabParam);
       }
 
@@ -82,16 +82,11 @@ export default function MenteePlannerPage() {
           setViewMode('daily');
         }
       }
-
-      if (openFeedbackParam === 'true') {
-        setActiveTab('dailyFeedback');
-      }
     }
   }, [menteeId]);
 
   const [mentee, setMentee] = useState<Mentee | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [stats, setStats] = useState<any>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('daily');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [isLoading, setIsLoading] = useState(true);
@@ -104,27 +99,10 @@ export default function MenteePlannerPage() {
     date: '',
   });
 
-  // 일일 전체 피드백 관련 상태
-  const [dailyFeedback, setDailyFeedback] = useState<any>(null);
-  const [dailyFeedbackForm, setDailyFeedbackForm] = useState({
-    content: '',
-    summary: '',
-  });
-
   // 스트릭 & 히트맵 상태
   const [streakData, setStreakData] = useState<{ currentStreak: number; longestStreak: number } | null>(null);
   const [heatmapData, setHeatmapData] = useState<any[]>([]);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [isLoadingStreak, setIsLoadingStreak] = useState(false);
-  const [isLoadingHeatmap, setIsLoadingHeatmap] = useState(false);
-
-  // 캘린더 관련 상태 (integrated from calendar page)
-  const [tasksByDate, setTasksByDate] = useState<Record<string, any[]>>({});
-  const [feedbacksByDate, setFeedbacksByDate] = useState<Record<string, any>>({});
-  const [{ calendarYear, calendarMonth }, setCalendarYm] = useState(() => {
-    const now = new Date();
-    return { calendarYear: now.getFullYear(), calendarMonth: now.getMonth() + 1 };
-  });
 
   // 멘티 정보 가져오기
   const fetchMentee = async () => {
@@ -145,7 +123,6 @@ export default function MenteePlannerPage() {
 
   // 스트릭 데이터 조회
   const fetchStreak = async () => {
-    setIsLoadingStreak(true);
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}/streak`, {
@@ -156,14 +133,11 @@ export default function MenteePlannerPage() {
       setStreakData(data || null);
     } catch (err) {
       console.error('Streak error:', err);
-    } finally {
-      setIsLoadingStreak(false);
     }
   };
 
   // 히트맵 데이터 조회
   const fetchHeatmap = async (year: number) => {
-    setIsLoadingHeatmap(true);
     try {
       const token = localStorage.getItem('token');
       const res = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}/heatmap?year=${year}`, {
@@ -174,8 +148,6 @@ export default function MenteePlannerPage() {
       setHeatmapData(data.data || []);
     } catch (err) {
       console.error('Heatmap error:', err);
-    } finally {
-      setIsLoadingHeatmap(false);
     }
   };
 
@@ -207,7 +179,6 @@ export default function MenteePlannerPage() {
 
       const data = await res.json();
       setTasks(data.tasks || []);
-      setStats(data.stats || null);
     } catch (err) {
       console.error('Fetch planner error:', err);
     } finally {
@@ -215,73 +186,21 @@ export default function MenteePlannerPage() {
     }
   };
 
-  // 캘린더 전용 월간 데이터 가져오기
-  const fetchCalendarMonthlyData = async (y: number, m: number) => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}/planner/monthly?year=${y}&month=${m}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTasksByDate(data.tasksByDate || {});
-        setFeedbacksByDate(data.feedbacksByDate || {});
-      }
-    } catch (err) {
-      console.error('Fetch monthly calendar data error:', err);
-    }
-  };
-
-  // 일일 전체 피드백 조회
-  const fetchDailyFeedback = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-
-      const res = await fetch(
-        `${getApiUrl()}/api/mentor/mentees/${menteeId}/daily-feedbacks?date=${dateStr}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
-
-      if (res.ok) {
-        const data = await res.json();
-        setDailyFeedback(data);
-        if (data) {
-          setDailyFeedbackForm({
-            content: data.content,
-            summary: data.summary || '',
-          });
-        } else {
-          setDailyFeedbackForm({ content: '', summary: '' });
-        }
-      } else {
-        setDailyFeedback(null);
-        setDailyFeedbackForm({ content: '', summary: '' });
-      }
-    } catch (err) {
-      console.error('Fetch daily feedback error:', err);
-      setDailyFeedback(null);
-    }
-  };
 
   useEffect(() => {
     fetchMentee();
     fetchStreak();
-    fetchHeatmap(selectedYear);
   }, [menteeId]);
+
+  useEffect(() => {
+    fetchHeatmap(selectedYear);
+  }, [menteeId, selectedYear]);
 
   useEffect(() => {
     if (activeTab === 'tasks') {
       fetchPlanner();
-      fetchDailyFeedback();
-    } else if (activeTab === 'calendar') {
-      fetchCalendarMonthlyData(calendarYear, calendarMonth);
-    } else if (activeTab === 'dailyFeedback') {
-      fetchDailyFeedback();
     }
-  }, [activeTab, viewMode, selectedDate, calendarYear, calendarMonth, menteeId]);
+  }, [activeTab, viewMode, selectedDate, menteeId]);
 
   // 수정 모달 열기
   const openEditModal = (task: Task) => {
@@ -300,44 +219,6 @@ export default function MenteePlannerPage() {
     setEditingTask(null);
   };
 
-  const handleSubmitDailyFeedback = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!dailyFeedbackForm.content || !dailyFeedbackForm.summary) {
-      toast.warning('모든 필드를 입력해주세요.');
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('token');
-      const dateStr = format(selectedDate, 'yyyy-MM-dd');
-      const method = dailyFeedback ? 'PUT' : 'POST';
-      const url = dailyFeedback
-        ? `${getApiUrl()}/api/mentor/daily-feedbacks/${dailyFeedback.id}`
-        : `${getApiUrl()}/api/mentor/daily-feedbacks`;
-
-      const body = dailyFeedback
-        ? dailyFeedbackForm
-        : { ...dailyFeedbackForm, menteeId, date: dateStr };
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) throw new Error('일일 피드백 저장에 실패했습니다.');
-      toast.success(dailyFeedback ? '수정되었습니다.' : '작성되었습니다.');
-      fetchDailyFeedback();
-      if (activeTab === 'dailyFeedback') {
-        setActiveTab('tasks');
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '오류가 발생했습니다.');
-    }
-  };
 
   const handleUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -421,17 +302,14 @@ export default function MenteePlannerPage() {
     <div className="flex flex-wrap gap-2 mb-8 p-1.5 bg-gray-50 rounded-[24px] w-fit">
       {[
         { id: 'tasks', label: '과제 관리', icon: '📋' },
-        { id: 'calendar', label: '캘린더', icon: '📅' },
-        { id: 'dailyFeedback', label: '데일리 종합 피드백', icon: '✨' },
         { id: 'menteeDetails', label: '멘티 상세 관리', icon: '👤' },
-        { id: 'newTask', label: '과제 등록', icon: '➕' },
       ].map((tab) => (
         <button
           key={tab.id}
           onClick={() => setActiveTab(tab.id as ActiveTab)}
           className={`px-6 py-3 rounded-2xl text-[13px] font-bold transition-all flex items-center gap-2 ${
-            activeTab === tab.id 
-              ? 'bg-white text-slate-800 shadow-md transform scale-[1.02]' 
+            activeTab === tab.id
+              ? 'bg-white text-slate-800 shadow-md transform scale-[1.02]'
               : 'text-gray-400 hover:text-gray-600 hover:bg-white/50'
           }`}
         >
@@ -511,46 +389,71 @@ export default function MenteePlannerPage() {
 
   const renderTaskView = () => (
     <div className="space-y-8">
-      <div className="flex gap-2 p-1.5 bg-gray-50 rounded-2xl w-fit">
-        {(['daily', 'weekly', 'monthly'] as ViewMode[]).map((mode) => (
-          <button
-            key={mode}
-            onClick={() => setViewMode(mode)}
-            className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
-              viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-gray-400'
-            }`}
-          >
-            {mode === 'daily' ? '일일' : mode === 'weekly' ? '주간' : '월간'}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex items-center justify-between p-5 bg-white rounded-2xl border border-gray-100 shadow-sm">
-        <button onClick={() => changeDate('prev')} className="p-2 hover:bg-gray-50 rounded-full transition-colors"><IoIosArrowBack size={20} className="text-gray-400" /></button>
-        <h3 className="text-lg font-bold text-slate-800">{formatDateDisplay()}</h3>
-        <button onClick={() => changeDate('next')} className="p-2 hover:bg-gray-50 rounded-full transition-colors"><IoIosArrowForward size={20} className="text-gray-400" /></button>
-      </div>
-
-      {isLoading ? (
-        <div className="py-20 flex items-center justify-center text-gray-400">데이터를 불러오는 중...</div>
-      ) : tasks.length === 0 ? (
-        <div className="py-20 text-center bg-gray-50 rounded-3xl border border-dashed border-gray-200">
-          <p className="text-gray-400 font-medium">배정된 과제가 없습니다.</p>
-        </div>
-      ) : viewMode === 'daily' ? (
-        <div className="grid grid-cols-1 gap-4">{tasks.map((task) => renderTaskCard(task))}</div>
-      ) : (
-        <div className="space-y-12">
-          {sortedDates.map((date) => (
-            <div key={date}>
-              <div className="flex items-center gap-2 mb-6 px-1">
-                <div className="h-4 w-1 rounded-full bg-blue-500" />
-                <h4 className="text-base font-bold text-slate-800">{format(new Date(date), 'yyyy년 M월 d일 (E)', { locale: ko })}</h4>
-              </div>
-              <div className="grid grid-cols-1 gap-4">{groupedTasks[date].map((task) => renderTaskCard(task))}</div>
-            </div>
+      <div className="flex items-center justify-between">
+        <div className="flex gap-2 p-1.5 bg-gray-50 rounded-2xl w-fit">
+          {(['daily', 'weekly', 'monthly'] as ViewMode[]).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-gray-400'
+              }`}
+            >
+              {mode === 'daily' ? '일일' : mode === 'weekly' ? '주간' : '월간'}
+            </button>
           ))}
         </div>
+        <button
+          onClick={() => setShowNewTaskForm(!showNewTaskForm)}
+          className={`px-6 py-3 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 ${
+            showNewTaskForm
+              ? 'bg-slate-800 text-white shadow-lg'
+              : 'bg-blue-500 text-white hover:bg-blue-600 shadow-md'
+          }`}
+        >
+          <span>{showNewTaskForm ? '목록으로' : '➕ 과제 등록'}</span>
+        </button>
+      </div>
+
+      {showNewTaskForm ? (
+        <NewTaskInTab
+          menteeId={menteeId}
+          menteeName={mentee?.name || ''}
+          onSuccess={() => {
+            setShowNewTaskForm(false);
+            fetchPlanner();
+          }}
+        />
+      ) : (
+        <>
+          <div className="flex items-center justify-between p-5 bg-white rounded-2xl border border-gray-100 shadow-sm">
+            <button onClick={() => changeDate('prev')} className="p-2 hover:bg-gray-50 rounded-full transition-colors"><IoIosArrowBack size={20} className="text-gray-400" /></button>
+            <h3 className="text-lg font-bold text-slate-800">{formatDateDisplay()}</h3>
+            <button onClick={() => changeDate('next')} className="p-2 hover:bg-gray-50 rounded-full transition-colors"><IoIosArrowForward size={20} className="text-gray-400" /></button>
+          </div>
+
+          {isLoading ? (
+            <div className="py-20 flex items-center justify-center text-gray-400">데이터를 불러오는 중...</div>
+          ) : tasks.length === 0 ? (
+            <div className="py-20 text-center bg-gray-50 rounded-3xl border border-dashed border-gray-200">
+              <p className="text-gray-400 font-medium">배정된 과제가 없습니다.</p>
+            </div>
+          ) : viewMode === 'daily' ? (
+            <div className="grid grid-cols-1 gap-4">{tasks.map((task) => renderTaskCard(task))}</div>
+          ) : (
+            <div className="space-y-12">
+              {sortedDates.map((date) => (
+                <div key={date}>
+                  <div className="flex items-center gap-2 mb-6 px-1">
+                    <div className="h-4 w-1 rounded-full bg-blue-500" />
+                    <h4 className="text-base font-bold text-slate-800">{format(new Date(date), 'yyyy년 M월 d일 (E)', { locale: ko })}</h4>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">{groupedTasks[date].map((task) => renderTaskCard(task))}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -602,33 +505,6 @@ export default function MenteePlannerPage() {
     </div>
   );
 
-  const renderDailyFeedbackView = () => (
-    <div className="max-w-2xl mx-auto py-10">
-      <div className="bg-white rounded-[40px] border border-amber-100 shadow-xl overflow-hidden">
-        <div className="px-10 py-8 bg-amber-50/50 border-b border-amber-100 flex items-center gap-4">
-          <div className="w-14 h-14 rounded-3xl bg-amber-100 text-amber-600 flex items-center justify-center shadow-inner"><span className="text-2xl">✨</span></div>
-          <div>
-            <h2 className="text-xl font-black text-slate-800">{format(selectedDate, 'M월 d일')} 데일리 종합 피드백</h2>
-            <p className="text-sm text-amber-600 font-bold mt-0.5">{dailyFeedback ? '기존 피드백을 수정합니다' : '오늘의 학습 기록을 남겨주세요'}</p>
-          </div>
-        </div>
-        <form onSubmit={handleSubmitDailyFeedback} className="p-10 space-y-8">
-          <div className="space-y-3">
-            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">오늘의 한 줄 요약</label>
-            <input type="text" value={dailyFeedbackForm.summary} onChange={(e) => setDailyFeedbackForm({ ...dailyFeedbackForm, summary: e.target.value })} className="w-full px-6 py-4 rounded-2xl bg-gray-50 border-2 border-transparent focus:border-amber-400 focus:bg-white text-base font-semibold text-slate-700 transition-all outline-none" placeholder="오늘의 학습 성과를 한 줄로 요약해주세요" required />
-          </div>
-          <div className="space-y-3">
-            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest ml-1">상세 코멘트</label>
-            <textarea value={dailyFeedbackForm.content} onChange={(e) => setDailyFeedbackForm({ ...dailyFeedbackForm, content: e.target.value })} className="w-full px-6 py-5 rounded-3xl bg-gray-50 border-2 border-transparent focus:border-amber-400 focus:bg-white text-base font-medium text-slate-600 leading-relaxed transition-all h-60 resize-none outline-none" placeholder="멘티가 오늘 하루 어떻게 학습했는지, 칭찬과 격려의 메시지를 남겨주세요." required />
-          </div>
-          <button type="submit" className="w-full py-5 rounded-2xl bg-amber-500 text-white font-black text-lg hover:bg-amber-600 transition-all shadow-lg shadow-amber-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
-            <span>{dailyFeedback ? '수정 완료' : '피드백 전송하기'}</span>
-            <span>🚀</span>
-          </button>
-        </form>
-      </div>
-    </div>
-  );
 
   return (
     <div className="w-full min-h-screen bg-white font-['Pretendard'] pb-32">
@@ -652,10 +528,7 @@ export default function MenteePlannerPage() {
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           {activeTab === 'tasks' && renderTaskView()}
-          {activeTab === 'calendar' && <MentorCalendarInTab menteeId={menteeId} year={calendarYear} month={calendarMonth} setYm={(y: number, m: number) => setCalendarYm({ calendarYear: y, calendarMonth: m })} tasksByDate={tasksByDate} feedbacksByDate={feedbacksByDate} onDateClick={(date: string) => { setSelectedDate(new Date(date)); setViewMode('daily'); setActiveTab('tasks'); }} />}
-          {activeTab === 'dailyFeedback' && renderDailyFeedbackView()}
           {activeTab === 'menteeDetails' && renderMenteeDetailsView()}
-          {activeTab === 'newTask' && <NewTaskInTab menteeId={menteeId} menteeName={mentee?.name || ''} onSuccess={() => setActiveTab('tasks')} />}
         </motion.div>
       </div>
 
@@ -666,73 +539,7 @@ export default function MenteePlannerPage() {
 
 // ----------------- Sub-components for Tabs -----------------
 
-function MentorCalendarInTab({ menteeId, year, month, setYm, tasksByDate, feedbacksByDate, onDateClick }: any) {
-  const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
-  const COLORS = { KOREAN: '#FFA6CE', ENGLISH: '#F9CA42', MATH: '#B4D6FF', OTHER: '#A28FFF', FEEDBACK: '#9AF2BF' };
-
-  const moveMonth = (delta: number) => {
-    let y = year;
-    let m = month + delta;
-    if (m < 1) { y -= 1; m = 12; } else if (m > 12) { y += 1; m = 1; }
-    setYm(y, m);
-  };
-
-  const cells = useMemo(() => {
-    const first = new Date(year, month - 1, 1);
-    const last = new Date(year, month, 0);
-    const daysInMonth = last.getDate();
-    const firstDow = (first.getDay() + 6) % 7;
-    const total = 42;
-    const cells = [];
-    for (let i = 0; i < total; i++) {
-      const dayNum = i - firstDow + 1;
-      const inMonth = dayNum >= 1 && dayNum <= daysInMonth;
-      let key = inMonth ? `${year}-${String(month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}` : '';
-      const dayTasks = inMonth ? (tasksByDate[key] || []) : [];
-      const bars = [];
-      const hasDailyFeedback = inMonth && feedbacksByDate && feedbacksByDate[key];
-      const types = new Set<string>();
-      dayTasks.forEach((t: any) => types.add(t.subject === 'KOREAN' || t.subject === 'ENGLISH' || t.subject === 'MATH' ? t.subject : 'OTHER'));
-      if (types.has('KOREAN')) bars.push('KOREAN');
-      if (types.has('ENGLISH')) bars.push('ENGLISH');
-      if (types.has('MATH')) bars.push('MATH');
-      if (types.has('OTHER')) bars.push('OTHER');
-      if (hasDailyFeedback) bars.push('FEEDBACK');
-      cells.push({ key, day: inMonth ? dayNum : dayNum < 1 ? new Date(year, month - 1, 0).getDate() + dayNum : dayNum - daysInMonth, inMonth, bars });
-    }
-    return cells;
-  }, [year, month, tasksByDate, feedbacksByDate]);
-
-  return (
-    <div className="bg-white rounded-[40px] border border-gray-100 p-10 shadow-sm">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-4">
-          <button onClick={() => moveMonth(-1)} className="p-3 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors"><IoIosArrowBack /></button>
-          <div className="text-3xl font-black text-slate-800 tracking-tighter">{year}.{String(month).padStart(2, '0')}</div>
-          <button onClick={() => moveMonth(1)} className="p-3 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-colors"><IoIosArrowForward /></button>
-        </div>
-        <div className="flex gap-4">
-          {Object.entries(COLORS).map(([key, color]) => (
-            <div key={key} className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} /><span className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">{key === 'FEEDBACK' ? 'Review' : key}</span></div>
-          ))}
-        </div>
-      </div>
-      <div className="grid grid-cols-7 gap-2 mb-2">{WEEKDAYS.map(w => <div key={w} className="h-12 flex items-center justify-center text-xs font-black text-slate-400 uppercase tracking-[0.2em]">{w}</div>)}</div>
-      <div className="grid grid-cols-7 border border-gray-100 rounded-[32px] overflow-hidden bg-white shadow-inner">
-        {cells.map((c, idx) => (
-          <button key={idx} onClick={() => c.inMonth && onDateClick(c.key)} disabled={!c.inMonth} className={`h-[140px] border-r border-b border-gray-50 p-4 relative flex flex-col items-stretch transition-all ${c.inMonth ? 'hover:bg-blue-50/30 active:scale-[0.98]' : 'bg-gray-50/30'}`} style={{ borderRightWidth: (idx + 1) % 7 === 0 ? 0 : 1, borderBottomWidth: idx >= 35 ? 0 : 1 }}>
-            <div className={`text-sm font-black mb-3 ${c.inMonth ? 'text-slate-700' : 'text-slate-200'}`}>{c.day}</div>
-            <div className="flex flex-col gap-1.5 px-0.5">
-              {c.bars.map((b: string) => <div key={b} className="h-[7px] w-full rounded-full shadow-sm" style={{ backgroundColor: COLORS[b as keyof typeof COLORS] }} />)}
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function NewTaskInTab({ menteeId, menteeName, onSuccess }: any) {
+function NewTaskInTab({ menteeId, onSuccess }: any) {
   // Integrated simplified logic from NewTaskPage
   const [taskName, setTaskName] = useState('');
   const [goal, setGoal] = useState('');
