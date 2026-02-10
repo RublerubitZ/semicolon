@@ -3,6 +3,15 @@
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { IoIosNotifications, IoIosArrowBack } from "react-icons/io";
+import { 
+  MdAssignment, 
+  MdCheckCircle, 
+  MdChatBubble, 
+  MdSms,
+  MdThumbUp, 
+  MdWarning, 
+  MdNotifications 
+} from 'react-icons/md';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useOverlayStore } from '@/stores/useOverlayStore';
 import { Z_INDEX } from '@/constants/zIndex';
@@ -19,9 +28,20 @@ interface Notification {
   createdAt: string;
 }
 
+const ENCOURAGING_MESSAGES = [
+  "오늘도 책상 지키는 당신, 이미 반은 성공했어요",
+  "지금 앉아 있는 것만으로도 대단해요. 같이 달려봐요!",
+  "한 페이지라도 넘기면 그게 바로 승리",
+  "집중 ON, 잡생각 OFF! 오늘도 잘 해봅시다",
+  "지금의 노력이 내일의 나를 살려줘요. 파이팅!",
+  "완벽 말고 꾸준함! 오늘도 조금씩 가요",
+  "시작했으면 이미 이긴 거예요. 열공 모드 가동!"
+];
+
 export default function NotificationBell() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
+  const [randomMessage, setRandomMessage] = useState(ENCOURAGING_MESSAGES[0]);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { setOverlay } = useOverlayStore();
 
@@ -33,6 +53,10 @@ export default function NotificationBell() {
 
   const handleToggle = () => {
     const next = !isOpen;
+    if (next) {
+      const idx = Math.floor(Math.random() * ENCOURAGING_MESSAGES.length);
+      setRandomMessage(ENCOURAGING_MESSAGES[idx]);
+    }
     setIsOpen(next);
     setOverlay('notifications', next);
   };
@@ -79,15 +103,15 @@ export default function NotificationBell() {
     }
   };
 
-  // 알림 타입에 따른 이모지 반환
+  // 알림 타입에 따른 아이콘 반환
   const getNotificationEmoji = (type: string) => {
     switch (type) {
-      case 'NEW_TASK': return '📝';
-      case 'TASK_SUBMITTED': return '✅';
-      case 'NEW_FEEDBACK': return '💬';
-      case 'TASK_APPROVED': return '👍';
-      case 'TASK_INCOMPLETE': return '⚠️';
-      default: return '🔔';
+      case 'NEW_TASK': return <MdAssignment className="text-sky-300" />;
+      case 'TASK_SUBMITTED': return <MdCheckCircle className="text-emerald-200" />;
+      case 'NEW_FEEDBACK': return <MdSms className="text-indigo-200" />;
+      case 'TASK_APPROVED': return <MdThumbUp className="text-amber-200" />;
+      case 'TASK_INCOMPLETE': return <MdWarning className="text-rose-300" />;
+      default: return <MdNotifications className="text-orange-300" />;
     }
   };
 
@@ -178,7 +202,7 @@ export default function NotificationBell() {
                         <span className="text-lg font-bold text-blue-600">!</span>
                       </div>
                       <div className="text-sm font-semibold text-gray-700 leading-tight">
-                        오늘의 학습 목표를 확인하고<br/>열공해볼까요?
+                        {randomMessage}
                       </div>
                     </div>
                   </div>

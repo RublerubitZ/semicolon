@@ -1,5 +1,6 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
+import RichTextEditor from '@/components/RichTextEditor';
 import { useEffect, useState } from 'react';
 import { AiOutlineSave } from 'react-icons/ai';
 import { toast } from '@/stores/useToastStore';
@@ -159,49 +160,48 @@ export default function MonthlyFeedbackForm({ menteeId }: { menteeId: string }) 
         {/* 이번달 총평 */}
         <div>
           <div className="text-[12px] font-bold text-gray-800 mb-2">이번달 총평</div>
-          <div className="relative">
-            <textarea
-              value={overallComment}
-              onChange={(e) => setOverallComment(e.target.value.slice(0, CONTENT_LIMITS.FEEDBACK_COMMENT))}
-              placeholder="이번 달 전반적인 학습 상황에 대한 총평을 작성해주세요."
-              className="w-full h-[180px] resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-[12px] leading-6 text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all"
-            />
-            <div className="text-right text-[10px] text-gray-400 mt-1">
-              {overallComment.length}/1000
-            </div>
-          </div>
+          <RichTextEditor
+            value={overallComment}
+            onChange={setOverallComment}
+            placeholder="이번 달 전반적인 학습 상황에 대한 총평을 작성해주세요."
+            minHeight="180px"
+            maxLength={CONTENT_LIMITS.FEEDBACK_COMMENT}
+          />
         </div>
 
         {/* 잘한 점 */}
         <div>
           <div className="text-[12px] font-bold text-gray-800 mb-2">잘한 점</div>
-          <textarea
+          <RichTextEditor
             value={strengths}
-            onChange={(e) => setStrengths(e.target.value)}
+            onChange={setStrengths}
             placeholder="이번 달 학습에서 잘한 부분을 작성해주세요."
-            className="w-full h-[100px] resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-[12px] leading-6 text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all"
+            minHeight="120px"
+            maxLength={CONTENT_LIMITS.FEEDBACK_COMMENT}
           />
         </div>
 
         {/* 개선할 점 */}
         <div>
           <div className="text-[12px] font-bold text-gray-800 mb-2">개선할 점</div>
-          <textarea
+          <RichTextEditor
             value={improvements}
-            onChange={(e) => setImprovements(e.target.value)}
+            onChange={setImprovements}
             placeholder="개선이 필요한 부분과 구체적인 방법을 작성해주세요."
-            className="w-full h-[100px] resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-[12px] leading-6 text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all"
+            minHeight="120px"
+            maxLength={CONTENT_LIMITS.FEEDBACK_COMMENT}
           />
         </div>
 
         {/* 다음달 목표 */}
         <div>
           <div className="text-[12px] font-bold text-gray-800 mb-2">다음달 목표</div>
-          <textarea
+          <RichTextEditor
             value={nextMonthGoals}
-            onChange={(e) => setNextMonthGoals(e.target.value)}
+            onChange={setNextMonthGoals}
             placeholder="다음 달에 달성할 학습 목표를 작성해주세요."
-            className="w-full h-[100px] resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-[12px] leading-6 text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 transition-all"
+            minHeight="120px"
+            maxLength={CONTENT_LIMITS.FEEDBACK_COMMENT}
           />
         </div>
 

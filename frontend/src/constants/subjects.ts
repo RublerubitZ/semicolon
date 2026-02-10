@@ -3,7 +3,7 @@
  * 모든 컴포넌트에서 이 파일의 상수를 사용해야 합니다.
  */
 
-export type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
+export type Subject = 'KOREAN' | 'ENGLISH' | 'MATH' | 'ETC';
 
 export interface SubjectConfig {
   value: Subject;
@@ -14,7 +14,7 @@ export interface SubjectConfig {
 
 /**
  * 기본 과목 목록
- * 색상 테마: 국어-핑크/빨강, 영어-노랑, 수학-파랑
+ * 색상 테마: 국어-핑크/빨강, 영어-노랑, 수학-파랑, 기타-회색
  */
 export const DEFAULT_SUBJECTS: SubjectConfig[] = [
   {
@@ -35,6 +35,12 @@ export const DEFAULT_SUBJECTS: SubjectConfig[] = [
     color: 'bg-blue-200/60 outline-blue-200',
     textColor: 'text-black',
   },
+  {
+    value: 'ETC',
+    label: '기타',
+    color: 'bg-gray-100 outline-gray-300/50',
+    textColor: 'text-gray-900',
+  },
 ];
 
 /**
@@ -44,6 +50,7 @@ export const SUBJECT_LABELS: Record<Subject, string> = {
   KOREAN: '국어',
   ENGLISH: '영어',
   MATH: '수학',
+  ETC: '기타',
 };
 
 /**
@@ -65,6 +72,11 @@ export const SUBJECT_COLORS: Record<Subject, { primary: string; secondary: strin
     secondary: 'bg-blue-50',
     text: 'text-blue-700',
   },
+  ETC: {
+    primary: 'bg-gray-100',
+    secondary: 'bg-gray-50',
+    text: 'text-gray-700',
+  },
 };
 
 /**
@@ -74,6 +86,7 @@ export const SUBJECT_BADGE_COLORS: Record<Subject, string> = {
   KOREAN: 'bg-pink-100 text-pink-800',
   ENGLISH: 'bg-amber-100 text-amber-800',
   MATH: 'bg-blue-100 text-blue-800',
+  ETC: 'bg-gray-100 text-gray-800',
 };
 
 /**
@@ -106,4 +119,4 @@ export function getSubjectBadgeColor(subject: string): string {
 /**
  * 기본 과목 목록 (값만)
  */
-export const DEFAULT_SUBJECT_VALUES: Subject[] = ['KOREAN', 'ENGLISH', 'MATH'];
+export const DEFAULT_SUBJECT_VALUES: Subject[] = ['KOREAN', 'ENGLISH', 'MATH', 'ETC'];

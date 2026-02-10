@@ -43,6 +43,7 @@ router.post('/login', async (req: Request, res: Response) => {
         gender: true,
         birthDate: true,
         goal: true,
+        targetSchool: true,
         phone: true,
       },
     });
@@ -84,6 +85,7 @@ router.post('/login', async (req: Request, res: Response) => {
         gender: user.gender,
         birthDate: user.birthDate,
         goal: user.goal,
+        targetSchool: user.targetSchool,
         phone: user.phone,
       },
     });
@@ -101,7 +103,11 @@ router.get('/me', async (req: Request, res: Response) => {
       return res.status(401).json({ error: '인증이 필요합니다.' });
     }
 
-    const token = authHeader.split(' ')[1];
+    const parts = authHeader.split(' ');
+    if (parts.length !== 2 || !parts[1]) {
+      return res.status(401).json({ error: '잘못된 인증 헤더 형식입니다.' });
+    }
+    const token = parts[1];
     const decoded = jwt.verify(token, getJwtSecret()) as { userId: string };
 
     const user = await prisma.user.findUnique({
@@ -117,6 +123,7 @@ router.get('/me', async (req: Request, res: Response) => {
         gender: true,
         birthDate: true,
         goal: true,
+        targetSchool: true,
         phone: true,
       },
     });
@@ -150,6 +157,7 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res: Response) =
         gender: true,
         birthDate: true,
         goal: true,
+        targetSchool: true,
         phone: true,
       },
     });
@@ -195,7 +203,7 @@ router.get('/profile', authMiddleware, async (req: AuthRequest, res: Response) =
 router.patch('/update-profile', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const {  profileImage, grade, gender, birthDate, goal, phone } = req.body;
+    const { profileImage, grade, gender, birthDate, goal, targetSchool, phone } = req.body;
 
     type UpdateProfileData = Partial<{
       profileImage: string | null;
@@ -203,6 +211,7 @@ router.patch('/update-profile', authMiddleware, async (req: AuthRequest, res: Re
       gender: string;
       birthDate: string;
       goal: string;
+      targetSchool: string;
       phone: string;
     }>;
 
@@ -213,6 +222,7 @@ router.patch('/update-profile', authMiddleware, async (req: AuthRequest, res: Re
     if (gender !== undefined) updateData.gender = gender;
     if (birthDate !== undefined) updateData.birthDate = birthDate;
     if (goal !== undefined) updateData.goal = goal;
+    if (targetSchool !== undefined) updateData.targetSchool = targetSchool;
     if (phone !== undefined) updateData.phone = phone;
 
     const updatedUser = await prisma.user.update({
@@ -229,6 +239,7 @@ router.patch('/update-profile', authMiddleware, async (req: AuthRequest, res: Re
         gender: true,
         birthDate: true,
         goal: true,
+        targetSchool: true,
         phone: true,
       },
     });

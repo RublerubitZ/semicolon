@@ -4,13 +4,13 @@
 
 export const CONTENT_LIMITS = {
   // 과제 관련
-  LEARNING_GOAL: 500,
-  COLUMN_CONTENT: 1000,
+  LEARNING_GOAL: 1500,
+  COLUMN_CONTENT: 5000,
 
   // 학습지 관련
   WORKSHEET_NAME: 50,
   WORKSHEET_TITLE: 50,
 
   // 피드백 관련
-  FEEDBACK_COMMENT: 1000,
+  FEEDBACK_COMMENT: 2000,
 } as const;

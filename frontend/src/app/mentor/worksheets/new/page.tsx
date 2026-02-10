@@ -7,14 +7,16 @@ import { CgFileDocument } from "react-icons/cg";
 import { getApiUrl } from "@/lib/api";
 import { toast } from '@/stores/useToastStore';
 import { CONTENT_LIMITS } from '@/constants/contentLimits';
+import RichTextEditor from '@/components/RichTextEditor';
 
-type SubjectUI = "국어" | "영어" | "수학";
-type SubjectType = "KOREAN" | "ENGLISH" | "MATH";
+type SubjectUI = "국어" | "영어" | "수학" | "기타";
+type SubjectType = "KOREAN" | "ENGLISH" | "MATH" | "ETC";
 
 const SUBJECT_MAP: Record<SubjectUI, SubjectType> = {
     "국어": "KOREAN",
     "영어": "ENGLISH",
     "수학": "MATH",
+    "기타": "ETC",
 };
 
 function SubjectBtn({
@@ -106,7 +108,6 @@ export default function LibraryNewPage() {
 
     const nameCount = useMemo(() => name.length, [name]);
     const titleCount = useMemo(() => title.length, [title]);
-    const contentCount = useMemo(() => content.length, [content]);
 
     // PDF와 칼럼 동시 입력 방지
     const hasPdf = uploadedFiles.length > 0;
@@ -235,7 +236,7 @@ export default function LibraryNewPage() {
             {/* 학습 과목 */}
             <div className="mt-8 text-[12px] font-bold text-gray-800">학습 과목</div>
             <div className="mt-3 flex gap-3">
-                {(["국어", "영어", "수학"] as SubjectUI[]).map((s) => (
+                {(["국어", "영어", "수학", "기타"] as SubjectUI[]).map((s) => (
                     <SubjectBtn key={s} active={subject === s} label={s} onClick={() => setSubject(s)} />
                 ))}
             </div>
@@ -259,13 +260,15 @@ export default function LibraryNewPage() {
                         />
                         <div className="mt-1 text-right text-[10px] text-gray-400">{titleCount}/50</div>
 
-                        <textarea
-                            value={content}
-                            onChange={(e) => setContent(e.target.value.slice(0, CONTENT_LIMITS.COLUMN_CONTENT))}
-                            placeholder="내용 입력"
-                            className="mt-3 h-[260px] w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-3 text-[12px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-200"
-                        />
-                        <div className="mt-1 text-right text-[10px] text-gray-400">{contentCount}/1000</div>
+                        <div className="mt-3">
+                            <RichTextEditor
+                                value={content}
+                                onChange={setContent}
+                                placeholder="내용 입력"
+                                minHeight="260px"
+                                maxLength={CONTENT_LIMITS.COLUMN_CONTENT}
+                            />
+                        </div>
                     </div>
                 </Accordion>
             </div>

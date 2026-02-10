@@ -15,6 +15,7 @@ import Heatmap, { HeatmapData } from '@/components/heatmap/Heatmap';
 import WeeklyRanking, { WeeklyRankingItem } from '@/components/ranking/WeeklyRanking';
 import StudyPatternCard from '@/components/reports/StudyPatternCard';
 import ReportPDFButton from '@/components/reports/ReportPDFButton';
+import HtmlContent from '@/components/HtmlContent';
 
 // Interfaces
 interface StudyLog {
@@ -573,23 +574,17 @@ export default function ReportsPage() {
                 <div className="space-y-6">
                   <div className="bg-blue-50/30 rounded-2xl p-4 border border-blue-100/30">
                     <p className="text-[10px] font-black text-blue-500 mb-2 uppercase tracking-wider">Overall Comment</p>
-                    <p className="text-sm text-gray-700 leading-relaxed font-semibold">
-                      {currentFeedback.overallComment}
-                    </p>
+                    <HtmlContent html={currentFeedback.overallComment} className="text-sm text-gray-700 leading-relaxed font-semibold" />
                   </div>
 
                   <div className="grid grid-cols-1 gap-4">
                     <div className="bg-green-50/30 rounded-2xl p-4 border border-green-100/30">
                       <p className="text-[10px] font-black text-green-600 mb-2 uppercase tracking-wider">Strengths</p>
-                      <p className="text-sm text-gray-700 leading-relaxed font-semibold">
-                        {currentFeedback.strengths}
-                      </p>
+                      <HtmlContent html={currentFeedback.strengths} className="text-sm text-gray-700 leading-relaxed font-semibold" />
                     </div>
                     <div className="bg-orange-50/30 rounded-2xl p-4 border border-orange-100/30">
                       <p className="text-[10px] font-black text-orange-600 mb-2 uppercase tracking-wider">Improvements</p>
-                      <p className="text-sm text-gray-700 leading-relaxed font-semibold">
-                        {currentFeedback.improvements}
-                      </p>
+                      <HtmlContent html={currentFeedback.improvements} className="text-sm text-gray-700 leading-relaxed font-semibold" />
                     </div>
                   </div>
 
@@ -597,9 +592,7 @@ export default function ReportsPage() {
                     <p className="text-[10px] font-black text-purple-600 mb-2 uppercase tracking-wider">
                       {isWeekly ? 'Next Week Goals' : 'Next Month Goals'}
                     </p>
-                    <p className="text-sm text-gray-700 leading-relaxed font-semibold">
-                      {currentFeedback[isWeekly ? 'nextWeekGoals' : 'nextMonthGoals']}
-                    </p>
+                    <HtmlContent html={currentFeedback[isWeekly ? 'nextWeekGoals' : 'nextMonthGoals']} className="text-sm text-gray-700 leading-relaxed font-semibold" />
                   </div>
                 </div>
 

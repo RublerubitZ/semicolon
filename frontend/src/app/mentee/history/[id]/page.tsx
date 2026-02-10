@@ -1,6 +1,7 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/dateUtils';
+import HtmlContent from '@/components/HtmlContent';
 
 import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -197,7 +198,7 @@ export default function FeedbackDetail() {
                 </div>
               )}
 
-              <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{feedback.content}</div>
+              <HtmlContent html={feedback.content} className="text-sm text-gray-700 dark:text-gray-300" />
             </div>
           ))}
         </div>

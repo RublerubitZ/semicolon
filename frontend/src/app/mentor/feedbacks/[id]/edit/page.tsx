@@ -1,5 +1,6 @@
 'use client';
 import { getApiUrl } from '@/lib/api';
+import RichTextEditor from '@/components/RichTextEditor';
 
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -271,16 +272,27 @@ function FeedbackEditForm() {
           <label className="block text-sm font-medium mb-2">
             상세 피드백 <span className="text-red-600">*</span>
           </label>
-          <textarea
+          <RichTextEditor
             value={formData.content}
-            onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-            className="w-full px-3 py-2 border rounded-md resize-none"
-            rows={12}
-            placeholder="구체적인 피드백을 작성하세요.&#10;&#10;학생의 코멘트에 답변:&#10;- &#10;&#10;잘한 점:&#10;- &#10;&#10;개선할 점:&#10;- &#10;&#10;다음 학습 방향:&#10;- "
-            required
+            onChange={(html) => setFormData({ ...formData, content: html })}
+            placeholder="구체적인 피드백을 작성하세요...
+
+학생의 코멘트에 답변:
+-
+
+잘한 점:
+-
+
+개선할 점:
+-
+
+다음 학습 방향:
+- "
+            minHeight="350px"
+            maxLength={5000}
           />
-          <p className="text-xs text-gray-900 mt-1">
-            학생의 코멘트에 답변하거나 피드백 내용을 자유롭게 수정하세요
+          <p className="text-xs text-gray-900 mt-2">
+            💡 학생의 코멘트에 답변하거나 피드백 내용을 자유롭게 수정하세요
           </p>
         </div>
 

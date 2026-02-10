@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { toast } from '@/stores/useToastStore';
+import HtmlContent from '@/components/HtmlContent';
 
 export interface Message {
   id: string;
@@ -115,13 +116,20 @@ export default function FeedbackChatUI({
 
                 {/* 메시지 말풍선 */}
                 <div
-                  className={`px-3 py-2 rounded-lg whitespace-pre-wrap break-words ${
+                  className={`px-3 py-2 rounded-lg break-words ${
                     isCurrentUser
-                      ? 'bg-blue-500 text-white rounded-br-none'
-                      : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-none border dark:border-gray-700'
+                      ? 'bg-sky-200 rounded-br-none'
+                      : 'bg-white dark:bg-gray-800 rounded-bl-none border dark:border-gray-700'
                   }`}
                 >
-                  {message.content}
+                  <HtmlContent
+                    html={message.content}
+                    className={`text-sm ${
+                      isCurrentUser
+                        ? 'text-gray-900'
+                        : 'text-gray-900 dark:text-white'
+                    }`}
+                  />
                 </div>
 
                 {/* 시간 */}

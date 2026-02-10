@@ -3,12 +3,12 @@
  * 프론트엔드와 동일한 Subject 타입 사용
  */
 
-export type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
+export type Subject = 'KOREAN' | 'ENGLISH' | 'MATH' | 'ETC';
 
 /**
  * 유효한 과목 목록
  */
-export const VALID_SUBJECTS: Subject[] = ['KOREAN', 'ENGLISH', 'MATH'];
+export const VALID_SUBJECTS: Subject[] = ['KOREAN', 'ENGLISH', 'MATH', 'ETC'];
 
 /**
  * 과목별 한글 라벨
@@ -17,6 +17,7 @@ export const SUBJECT_LABELS: Record<Subject, string> = {
   KOREAN: '국어',
   ENGLISH: '영어',
   MATH: '수학',
+  ETC: '기타',
 };
 
 /**

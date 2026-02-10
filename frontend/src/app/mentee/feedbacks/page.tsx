@@ -2,6 +2,7 @@
 import { getApiUrl } from '@/lib/api';
 import { formatDate } from '@/lib/dateUtils';
 import { getSubjectLabel, getSubjectBadgeColor, DEFAULT_SUBJECT_VALUES } from '@/constants/subjects';
+import HtmlContent from '@/components/HtmlContent';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -27,7 +28,7 @@ interface Task {
   feedbacks: Feedback[];
 }
 
-type SubjectFilter = 'ALL' | 'KOREAN' | 'ENGLISH' | 'MATH';
+type SubjectFilter = 'ALL' | 'KOREAN' | 'ENGLISH' | 'MATH' | 'ETC';
 
 export default function FeedbackListPage() {
   const router = useRouter();
@@ -152,9 +153,7 @@ export default function FeedbackListPage() {
                   </p>
                 )}
 
-                <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2">
-                  {feedback.content}
-                </p>
+                <HtmlContent html={feedback.content} className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2" />
 
                 <p className="mt-3 text-xs text-blue-600 dark:text-blue-400">
                   상세보기 →

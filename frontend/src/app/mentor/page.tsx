@@ -13,7 +13,6 @@ import { toast } from '@/stores/useToastStore';
 import type { TaskSubmission, Feedback, DailyFeedback } from '@/types';
 
 import { RiUserFill } from 'react-icons/ri';
-import { FaBook } from 'react-icons/fa';
 import { GiGraduateCap } from 'react-icons/gi';
 import { PiPushPinDuotone } from 'react-icons/pi';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -27,7 +26,6 @@ interface Mentee {
   totalTasks: number;
   completedTasks: number;
   gender?: string;
-  track?: string;
   school?: string;
 }
 
@@ -208,8 +206,9 @@ export default function MentorPage() {
       const res = await apiGet(`/api/mentor/mentees/${menteeId}/daily-feedbacks?date=${dateStr}`);
       if (res.ok) {
         const data = await res.json();
-        if (data && data.length > 0) {
-          const fb = data[0];
+        // 백엔드가 단일 객체 또는 배열을 반환할 수 있으므로 둘 다 처리
+        const fb = Array.isArray(data) ? data[0] : data;
+        if (fb) {
           setDailyFeedback(fb);
           setFeedbackText(fb.content || '');
           const summaryMap: Record<string, 'GOOD' | 'PRACTICE' | 'RECHECK'> = {
@@ -364,9 +363,8 @@ export default function MentorPage() {
                   <div className="text-[18px] font-bold text-gray-900">{selectedMentee.name}</div>
                   <div className="text-[13px] text-gray-400">{selectedMentee.gender || '성별 미설정'}</div>
                 </div>
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-x-4 gap-y-1.5 text-[12px] text-gray-500">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-x-4 gap-y-1.5 text-[12px] text-gray-500">
                   <div className="flex items-center gap-2"><RiUserFill className="text-gray-400" />{selectedMentee.grade || '학년 미설정'}</div>
-                  <div className="flex items-center gap-2"><FaBook className="text-gray-400" />{selectedMentee.track || '트랙 미설정'}</div>
                   <div className="flex items-center gap-2"><GiGraduateCap className="text-gray-400" />{selectedMentee.school || '학교 미설정'}</div>
                 </div>
               </div>

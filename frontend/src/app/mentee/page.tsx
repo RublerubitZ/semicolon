@@ -765,6 +765,18 @@ export default function MenteeDashboard() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // 과제 상세에서 돌아올 때만 날짜 복원 (새로고침 시에는 오늘 날짜)
+  useEffect(() => {
+    const flag = sessionStorage.getItem('mentee_returnDate');
+    if (flag) {
+      const parsed = new Date(flag);
+      sessionStorage.removeItem('mentee_returnDate');
+      if (!isNaN(parsed.getTime()) && parsed.toDateString() !== currentDate.toDateString()) {
+        setCurrentDate(parsed);
+      }
+    }
+  }, []);
+
   // 날짜 자동 업데이트 (자정 지나면 오늘로 이동, 한국 시간대 기준)
   useEffect(() => {
     const checkDate = () => {
@@ -1082,6 +1094,7 @@ export default function MenteeDashboard() {
                                                 showToast('미래의 과제는 해당 날짜가 되어야 접근할 수 있습니다.', 'info');
                                                 return;
                                               }
+                                              sessionStorage.setItem('mentee_returnDate', currentDate.toISOString());
                                               router.push(`/mentee/tasks/${task.id}`);
                                             }}
                                           >
@@ -1823,6 +1836,7 @@ export default function MenteeDashboard() {
         }}
         onConfirm={() => {
           if (taskToNavigate) {
+            sessionStorage.setItem('mentee_returnDate', currentDate.toISOString());
             router.push(`/mentee/tasks/${taskToNavigate.id}`);
           }
         }}

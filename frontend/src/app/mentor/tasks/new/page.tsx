@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation';
 import { FILE_LIMITS } from '@/constants/fileLimits';
 import { CONTENT_LIMITS } from '@/constants/contentLimits';
 import { toast } from '@/stores/useToastStore';
+import RichTextEditor from '@/components/RichTextEditor';
+import HtmlContent from '@/components/HtmlContent';
 
-type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
+type Subject = 'KOREAN' | 'ENGLISH' | 'MATH' | 'ETC';
 type DateMode = 'single' | 'range';
 type AssignMode = 'one' | 'all';
 type MaterialType = 'PDF' | 'COLUMN';
@@ -656,9 +658,9 @@ export default function NewTaskPage() {
           {/* 학습 과목 */}
           <div className="mt-10 text-[12px] font-bold text-gray-800">학습 과목</div>
           <div className="mt-3 flex gap-3">
-            {(['KOREAN', 'ENGLISH', 'MATH'] as Subject[]).map((s) => {
+            {(['KOREAN', 'ENGLISH', 'MATH', 'ETC'] as Subject[]).map((s) => {
               const active = subject === s;
-              const label = s === 'KOREAN' ? '국어' : s === 'ENGLISH' ? '영어' : '수학';
+              const label = s === 'KOREAN' ? '국어' : s === 'ENGLISH' ? '영어' : s === 'MATH' ? '수학' : '기타';
               return (
                 <button
                   key={s}
@@ -698,22 +700,24 @@ export default function NewTaskPage() {
 
             {libraryOpen && (
               <div className="mt-3 rounded-md bg-white p-3 max-h-[300px] overflow-y-auto">
-                {worksheets.filter((w) => w.subject === subject).length === 0 ? (
+                {worksheets.filter((w) => w.subject === subject || w.subject === 'ETC').length === 0 ? (
                   <div className="text-[12px] text-gray-500 text-center py-4">
-                    {subject === 'KOREAN' ? '국어' : subject === 'ENGLISH' ? '영어' : '수학'} 과목의 등록된 학습지가 없습니다.
+                    {subject === 'KOREAN' ? '국어' : subject === 'ENGLISH' ? '영어' : subject === 'MATH' ? '수학' : '기타'} 과목의 등록된 학습지가 없습니다.
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {worksheets
-                      .filter((w) => w.subject === subject)
+                      .filter((w) => w.subject === subject || w.subject === 'ETC')
                       .map((worksheet) => {
                         const subjectLabel =
                           worksheet.subject === 'KOREAN' ? '국어' :
-                          worksheet.subject === 'ENGLISH' ? '영어' : '수학';
+                          worksheet.subject === 'ENGLISH' ? '영어' :
+                          worksheet.subject === 'MATH' ? '수학' : '기타';
                         const subjectColor =
                           worksheet.subject === 'KOREAN' ? 'bg-pink-100 text-pink-600' :
                           worksheet.subject === 'ENGLISH' ? 'bg-yellow-100 text-yellow-600' :
-                          'bg-blue-100 text-blue-600';
+                          worksheet.subject === 'MATH' ? 'bg-blue-100 text-blue-600' :
+                          'bg-gray-100 text-gray-600';
                         const typeLabel = worksheet.type === 'PDF' ? '📄 PDF' : '📝 칼럼';
                         const typeColor =
                           worksheet.type === 'PDF' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600';
@@ -787,15 +791,13 @@ export default function NewTaskPage() {
                       </div>
                     </div>
                     <div>
-                      <textarea
+                      <RichTextEditor
                         value={material.columnContent || ''}
-                        onChange={(e) => updateMaterial(index, 'columnContent', e.target.value.slice(0, CONTENT_LIMITS.COLUMN_CONTENT))}
+                        onChange={(html) => updateMaterial(index, 'columnContent', html)}
                         placeholder="내용 입력"
-                        className="h-[120px] w-full resize-none rounded-md border border-gray-200 bg-white px-3 py-3 text-[12px] text-gray-700 outline-none focus:ring-2 focus:ring-blue-200"
+                        minHeight="120px"
+                        maxLength={CONTENT_LIMITS.COLUMN_CONTENT}
                       />
-                      <div className="mt-1 text-right text-[10px] text-gray-400">
-                        {(material.columnContent || '').length}/1000
-                      </div>
                     </div>
                   </div>
                 )}
@@ -806,7 +808,9 @@ export default function NewTaskPage() {
                       <div className="font-semibold">{material.columnTitle}</div>
                     )}
                     {material.columnContent && (
-                      <div className="text-gray-500 line-clamp-2">{material.columnContent}</div>
+                      <div className="text-gray-500">
+                        <HtmlContent html={material.columnContent} className="line-clamp-3 text-[11px]" />
+                      </div>
                     )}
                   </div>
                 )}

@@ -35,7 +35,11 @@ export const authMiddleware = (
       return res.status(401).json({ error: '인증이 필요합니다.' });
     }
 
-    const token = authHeader.split(' ')[1];
+    const parts = authHeader.split(' ');
+    if (parts.length !== 2 || !parts[1]) {
+      return res.status(401).json({ error: '잘못된 인증 헤더 형식입니다.' });
+    }
+    const token = parts[1];
     const decoded = jwt.verify(token, getJwtSecret()) as {
       userId: string;
       email: string;

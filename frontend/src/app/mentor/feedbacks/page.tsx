@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { getApiUrl } from '@/lib/api';
 import { FaCommentAlt, FaCalendar, FaRegComments, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { toast } from '@/stores/useToastStore';
+import HtmlContent from '@/components/HtmlContent';
 
 interface Feedback {
   id: string;
@@ -192,9 +193,7 @@ function FeedbackContent() {
                 </div>
 
                 <div className="mt-4 pl-16">
-                  <p className="text-[14px] text-slate-600 line-clamp-2 leading-relaxed">
-                    {f.content}
-                  </p>
+                  <HtmlContent html={f.content} className="text-[14px] text-slate-600 line-clamp-2 leading-relaxed" />
                 </div>
               </div>
             ))}
@@ -279,8 +278,8 @@ function FeedbackContent() {
 
               <div>
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">상세 피드백 내용</label>
-                <div className="bg-gray-50 rounded-2xl p-6 text-[15px] text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  {selected.content}
+                <div className="bg-gray-50 rounded-2xl p-6">
+                  <HtmlContent html={selected.content} className="text-[15px] text-slate-700 leading-relaxed" />
                 </div>
               </div>
 

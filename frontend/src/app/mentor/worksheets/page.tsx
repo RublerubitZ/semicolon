@@ -9,7 +9,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from '@/stores/useToastStore';
 
-type Subject = 'KOREAN' | 'ENGLISH' | 'MATH';
+type Subject = 'KOREAN' | 'ENGLISH' | 'MATH' | 'ETC';
 type WorksheetType = 'COLUMN' | 'PDF';
 
 interface Worksheet {
@@ -48,6 +48,7 @@ function FilterChip({
 function subjectIconBg(subject: Subject) {
   if (subject === 'MATH') return 'bg-blue-100 text-blue-600';
   if (subject === 'ENGLISH') return 'bg-yellow-100 text-yellow-700';
+  if (subject === 'ETC') return 'bg-gray-100 text-gray-600';
   return 'bg-pink-100 text-pink-600';
 }
 
@@ -157,6 +158,7 @@ export default function WorksheetsPage() {
             onClick={() => setFilteredSubject('ENGLISH')}
           />
           <FilterChip active={filteredSubject === 'MATH'} label="수학" onClick={() => setFilteredSubject('MATH')} />
+          <FilterChip active={filteredSubject === 'ETC'} label="기타" onClick={() => setFilteredSubject('ETC')} />
         </div>
 
         {/* 리스트 */}

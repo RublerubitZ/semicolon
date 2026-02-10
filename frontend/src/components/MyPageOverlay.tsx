@@ -25,6 +25,7 @@ interface User {
   gender?: string;
   birthDate?: string;
   goal?: string;
+  targetSchool?: string;
   phone?: string;
   subjects?: string[];
   mentorName?: string;
@@ -67,6 +68,7 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
     gender: '',
     birthDate: '',
     goal: '',
+    targetSchool: '',
     phone: '',
   });
 
@@ -138,6 +140,7 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
               gender: u.gender || '',
               birthDate: u.birthDate || '',
               goal: u.goal || '',
+              targetSchool: u.targetSchool || '',
               phone: u.phone || '',
             });
             
@@ -434,7 +437,24 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
                               ))}
                             </div>
                           </div>
+                          <div className="space-y-3">
+                            <label className="text-gray-400 text-xs font-bold uppercase ml-1">성별</label>
+                            <div className="grid grid-cols-2 gap-2">
+                              {['남성', '여성'].map((g) => (
+                                <button
+                                  key={g}
+                                  onClick={() => setEditData({...editData, gender: g})}
+                                  className={`h-11 rounded-xl text-sm font-bold transition-all ${
+                                    editData.gender === g ? 'bg-slate-800 text-white shadow-md' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+                                  }`}
+                                >
+                                  {g}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <EditField label="나의 목표" value={editData.goal} onChange={(val) => setEditData({...editData, goal: val})} placeholder="예: 수능 만점!" />
+                          <EditField label="목표 학교" value={editData.targetSchool} onChange={(val) => setEditData({...editData, targetSchool: val})} placeholder="예: 서울대학교" />
                           <EditField label="연락처" value={editData.phone} onChange={(val) => setEditData({...editData, phone: val})} placeholder="010-0000-0000" />
                         </div>
                       </div>

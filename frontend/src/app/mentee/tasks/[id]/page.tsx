@@ -4,6 +4,7 @@ import { getApiUrl } from '@/lib/api';
 import ImageModal from '@/components/ImageModal';
 import { getSubjectLabel } from '@/constants/subjects';
 import { type SelfCheckStatus } from '@/constants/selfCheck';
+import HtmlContent from '@/components/HtmlContent';
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -879,15 +880,18 @@ export default function TaskDetailPage() {
         )}
 
         {messages.map((m) => {
-          const isMe = currentUser && m.userId === currentUser.id;
+          const isMe = !!(currentUser && m.userId === currentUser.id);
           return (
             <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[75%] px-4 py-3 rounded-2xl ${
-                isMe 
-                  ? 'bg-slate-800 text-white rounded-tr-none' 
-                  : 'bg-slate-100 text-slate-800 rounded-tl-none'
+                isMe
+                  ? 'bg-sky-200 rounded-tr-none'
+                  : 'bg-slate-100 rounded-tl-none'
               }`}>
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                <HtmlContent
+                  html={m.content}
+                  className="text-sm leading-relaxed text-slate-800"
+                />
               </div>
             </div>
           );

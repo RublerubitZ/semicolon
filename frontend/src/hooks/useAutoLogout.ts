@@ -27,6 +27,7 @@ export function useAutoLogout(options: AutoLogoutOptions = {}) {
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
   const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const scheduleTokenRefreshRef = useRef<(() => void) | null>(null);
   const [showWarning, setShowWarning] = useState(false);
 
   const handleLogout = useCallback((reason: string) => {
@@ -63,7 +64,7 @@ export function useAutoLogout(options: AutoLogoutOptions = {}) {
         const newToken = await refreshAccessToken();
         if (newToken) {
           console.log('[AutoLogout] Token refreshed, scheduling next refresh');
-          scheduleTokenRefresh();
+          scheduleTokenRefreshRef.current?.();
         } else {
           console.error('[AutoLogout] Token refresh failed, redirecting to login');
           handleLogout('expired');
@@ -74,6 +75,8 @@ export function useAutoLogout(options: AutoLogoutOptions = {}) {
       }
     }, TIMEOUTS.TOKEN_REFRESH_INTERVAL);
   }, [enableTokenRefresh, handleLogout]);
+
+  scheduleTokenRefreshRef.current = scheduleTokenRefresh;
 
   const extendSession = useCallback(() => {
     resetIdleTimer();

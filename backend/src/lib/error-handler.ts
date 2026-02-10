@@ -4,7 +4,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import logger, { generateErrorId, logApiRequest } from './logger';
+import logger, { generateErrorId } from './logger';
+import type { AuthRequest } from '../middleware/auth';
 
 export interface ErrorLogContext {
   endpoint: string;
@@ -81,7 +82,7 @@ export function requestLoggerMiddleware(req: Request, res: Response, next: NextF
 
   res.on('finish', () => {
     const duration = Date.now() - start;
-    const userId = (req as any).user?.userId;
+    const userId = (req as AuthRequest).user?.userId;
     const status = res.statusCode;
     const isError = status >= 400;
     const isSlow = duration > 1000;
@@ -118,7 +119,7 @@ export function requestLoggerMiddleware(req: Request, res: Response, next: NextF
  */
 export function globalErrorHandler(err: Error, req: Request, res: Response, _next: NextFunction): void {
   const errorId = generateErrorId();
-  const userId = (req as any).user?.userId;
+  const userId = (req as AuthRequest).user?.userId;
 
   logger.error('Unhandled error', {
     errorId,

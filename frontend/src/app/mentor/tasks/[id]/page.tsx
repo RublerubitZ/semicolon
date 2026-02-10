@@ -2,6 +2,8 @@
 
 import { getApiUrl } from '@/lib/api';
 import { getSubjectLabel } from '@/constants/subjects';
+import RichTextEditor from '@/components/RichTextEditor';
+import HtmlContent from '@/components/HtmlContent';
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { format } from 'date-fns';
@@ -367,13 +369,25 @@ export default function MentorTaskDetailPage() {
 
                   <div>
                     <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-1">상세 피드백</label>
-                    <textarea
+                    <RichTextEditor
                       value={feedbackForm.content}
-                      onChange={(e) => setFeedbackForm({ ...feedbackForm, content: e.target.value })}
-                      className="w-full px-5 py-4 rounded-xl bg-slate-50 border-slate-200 text-sm font-medium placeholder:text-slate-300 focus:bg-white focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all h-[300px] resize-none leading-relaxed"
-                      placeholder="학습 내용에 대해 구체적이고 전문적인 피드백을 남겨주세요."
-                      required
+                      onChange={(html) => setFeedbackForm({ ...feedbackForm, content: html })}
+                      placeholder="학습 내용에 대해 구체적이고 전문적인 피드백을 남겨주세요.
+
+잘한 점:
+-
+
+개선할 점:
+-
+
+다음 학습 방향:
+- "
+                      minHeight="300px"
+                      maxLength={5000}
                     />
+                    <p className="text-xs text-gray-500 mt-2 px-1">
+                      💡 <strong>볼드</strong>, <em>이탤릭</em>, 목록 등의 서식을 활용하여 피드백을 작성하세요
+                    </p>
                   </div>
                 </div>
 
@@ -407,12 +421,15 @@ export default function MentorTaskDetailPage() {
                       <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[85%] space-y-1 ${isMe ? 'items-end' : 'items-start'}`}>
                           {!isMe && <span className="text-[10px] font-bold text-slate-400 ml-2 mb-1 block">{m.userName}</span>}
-                          <div className={`rounded-2xl px-4 py-2.5 shadow-sm text-sm leading-relaxed whitespace-pre-wrap ${
-                            isMe 
-                              ? 'bg-slate-800 text-white rounded-tr-none' 
-                              : 'bg-slate-100 text-slate-800 rounded-tl-none'
+                          <div className={`rounded-2xl px-4 py-2.5 shadow-sm ${
+                            isMe
+                              ? 'bg-sky-200 rounded-tr-none'
+                              : 'bg-slate-100 rounded-tl-none'
                           }`}>
-                            {m.content}
+                            <HtmlContent
+                              html={m.content}
+                              className="text-sm leading-relaxed text-slate-800"
+                            />
                           </div>
                           <span className="text-[9px] text-slate-400 px-2">
                             {format(new Date(m.createdAt), 'HH:mm')}
