@@ -1,6 +1,6 @@
 'use client';
 
-import { getApiUrl } from '@/lib/api';
+import { apiGet } from '@/lib/api';
 import MonthlyFeedbackForm from './MonthlyFeedbackForm';
 import WeeklyFeedbackForm from './WeeklyFeedbackForm';
 import MentorDashboard from './MentorDashboard';
@@ -159,10 +159,7 @@ export default function MentorReportsPage() {
   useEffect(() => {
     const fetchMentees = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const res = await fetch(`${getApiUrl()}/api/mentor/mentees`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiGet('/api/mentor/mentees');
         if (!res.ok) throw new Error();
         const data = await res.json();
         setMentees(data);
@@ -183,18 +180,14 @@ export default function MentorReportsPage() {
 
     const fetchReports = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const headers = { Authorization: `Bearer ${token}` };
-
         // 월간 리포트 조회 (최근 6개월)
         const mReports: MonthlyReport[] = [];
         for (let i = 0; i < 6; i++) {
           const date = new Date(currentYear, currentMonth - 1 - i, 1);
           const y = date.getFullYear();
           const m = date.getMonth() + 1;
-          const res = await fetch(
-            `${getApiUrl()}/api/mentor/mentees/${selectedMenteeId}/monthly-feedbacks?year=${y}&month=${m}`,
-            { headers }
+          const res = await apiGet(
+            `/api/mentor/mentees/${selectedMenteeId}/monthly-feedbacks?year=${y}&month=${m}`
           );
           if (res.ok) {
             const data = await res.json();
@@ -209,9 +202,8 @@ export default function MentorReportsPage() {
           const date = new Date(currentYear, currentMonth - 1 - i, 1);
           const y = date.getFullYear();
           const m = date.getMonth() + 1;
-          const res = await fetch(
-            `${getApiUrl()}/api/mentor/mentees/${selectedMenteeId}/weekly-feedbacks?year=${y}&month=${m}`,
-            { headers }
+          const res = await apiGet(
+            `/api/mentor/mentees/${selectedMenteeId}/weekly-feedbacks?year=${y}&month=${m}`
           );
           if (res.ok) {
             const data = await res.json();

@@ -1,5 +1,5 @@
 'use client';
-import { getApiUrl } from '@/lib/api';
+import { apiGet, apiDelete } from '@/lib/api';
 import { EditIcon, DeleteIcon } from '@/components/icons';
 import { getSubjectLabel, SUBJECT_LABELS } from '@/constants/subjects';
 import { FiSearch } from 'react-icons/fi';
@@ -62,15 +62,12 @@ export default function WorksheetsPage() {
   const fetchWorksheets = async (subject?: Subject | 'ALL') => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const url =
+      const endpoint =
         subject && subject !== 'ALL'
-          ? `${getApiUrl()}/api/mentor/worksheets?subject=${subject}`
-          : `${getApiUrl()}/api/mentor/worksheets`;
+          ? `/api/mentor/worksheets?subject=${subject}`
+          : `/api/mentor/worksheets`;
 
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(endpoint);
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -102,14 +99,7 @@ export default function WorksheetsPage() {
     if (!confirm('정말 삭제하시겠습니까?')) return;
 
     try {
-      const token = localStorage.getItem('token');
-
-      const res = await fetch(`${getApiUrl()}/api/mentor/worksheets/${worksheetId}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const res = await apiDelete(`/api/mentor/worksheets/${worksheetId}`);
 
       if (!res.ok) throw new Error('학습지 삭제에 실패했습니다.');
 

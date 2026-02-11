@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { getApiUrl } from '@/lib/api';
+import { apiGet, apiDelete } from '@/lib/api';
 import { FaCommentAlt, FaCalendar, FaRegComments, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
 import { toast } from '@/stores/useToastStore';
 import HtmlContent from '@/components/HtmlContent';
@@ -74,14 +74,11 @@ function FeedbackContent() {
   useEffect(() => {
     const fetchFeedbacks = async () => {
       try {
-        const token = localStorage.getItem('token');
         const url = menteeId
-          ? `${getApiUrl()}/api/mentor/mentees/${menteeId}/feedbacks`
-          : `${getApiUrl()}/api/mentor/feedbacks`;
+          ? `/api/mentor/mentees/${menteeId}/feedbacks`
+          : `/api/mentor/feedbacks`;
 
-        const res = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiGet(url);
         if (!res.ok) {
           console.warn('피드백 목록을 불러오는데 실패했습니다:', res.status);
           setFeedbacks([]);
@@ -112,11 +109,7 @@ function FeedbackContent() {
     if (!confirm('정말 이 피드백을 삭제하시겠습니까?')) return;
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/feedbacks/${feedbackId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiDelete(`/api/mentor/feedbacks/${feedbackId}`);
 
       if (!res.ok) throw new Error('피드백 삭제에 실패했습니다.');
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { isTimeOverlapping, validateStudyTime } from "@/lib/timeUtils";
 
 interface TimeInputModalProps {
   open: boolean;
@@ -29,27 +30,10 @@ export function TimeInputModal({
     }
   }, [open]);
 
-  // 시간을 분으로 변환
-  const timeToMinutes = (time: string): number => {
-    const [hours, minutes] = time.split(":").map(Number);
-    return hours * 60 + minutes;
-  };
-
   // 시간 중복 체크
   const checkTimeOverlap = (start: string, end: string): boolean => {
-    const startMin = timeToMinutes(start);
-    const endMin = timeToMinutes(end);
-
     for (const existing of existingTimes) {
-      const existingStart = timeToMinutes(existing.start);
-      const existingEnd = timeToMinutes(existing.end);
-
-      // 시간 겹침 체크
-      if (
-        (startMin >= existingStart && startMin < existingEnd) ||
-        (endMin > existingStart && endMin <= existingEnd) ||
-        (startMin <= existingStart && endMin >= existingEnd)
-      ) {
+      if (isTimeOverlapping(start, end, existing.start, existing.end)) {
         setError(`"${existing.title}"와 시간이 겹칩니다 (${existing.start}~${existing.end})`);
         return true;
       }
@@ -66,11 +50,9 @@ export function TimeInputModal({
       return;
     }
 
-    const startMin = timeToMinutes(startTime);
-    const endMin = timeToMinutes(endTime);
-
-    if (startMin >= endMin) {
-      setError("종료 시간은 시작 시간보다 늦어야 합니다.");
+    const timeError = validateStudyTime(startTime, endTime);
+    if (timeError) {
+      setError(timeError);
       return;
     }
 

@@ -1,5 +1,5 @@
 'use client';
-import { getApiUrl } from '@/lib/api';
+import { apiGet, apiPost, apiUpload } from '@/lib/api';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { FILE_LIMITS } from '@/constants/fileLimits';
@@ -174,10 +174,7 @@ export default function NewTaskPage() {
 
   const fetchMentees = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/mentees`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet('/api/mentor/mentees');
       if (!res.ok) throw new Error('멘티 목록을 불러오는데 실패했습니다.');
       const data = await res.json();
       setMentees(data);
@@ -189,10 +186,7 @@ export default function NewTaskPage() {
 
   const fetchWorksheets = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/worksheets`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet('/api/mentor/worksheets');
       if (!res.ok) throw new Error('학습지 목록을 불러오는데 실패했습니다.');
       const data = await res.json();
       setWorksheets(data);
@@ -310,7 +304,6 @@ export default function NewTaskPage() {
 
     setIsUploading(true);
     try {
-      const token = localStorage.getItem('token');
       const uploadedUrls: string[] = [];
 
       // 다중 PDF 업로드
@@ -320,11 +313,7 @@ export default function NewTaskPage() {
           formData.append('pdfs', file);
         });
 
-        const res = await fetch(`${getApiUrl()}/api/upload/pdfs`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
+        const res = await apiUpload('/api/upload/pdfs', formData);
 
         if (!res.ok) throw new Error('PDF 업로드에 실패했습니다.');
         const data = await res.json();
@@ -334,11 +323,7 @@ export default function NewTaskPage() {
         const formData = new FormData();
         formData.append('pdf', pdfFilesArray[0]);
 
-        const res = await fetch(`${getApiUrl()}/api/upload/pdf`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        });
+        const res = await apiUpload('/api/upload/pdf', formData);
 
         if (!res.ok) throw new Error('PDF 업로드에 실패했습니다.');
         const data = await res.json();
@@ -459,7 +444,6 @@ export default function NewTaskPage() {
 
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
       const dates = dateMode === 'single' ? [singleDate] : calculateRepeatDates();
       if (dates.length === 0) {
         toast.warning('선택한 요일에 해당하는 날짜가 없습니다.');
@@ -471,20 +455,13 @@ export default function NewTaskPage() {
 
       for (const mId of targetMenteeIds) {
         for (const dateStr of dates) {
-          const res = await fetch(`${getApiUrl()}/api/mentor/tasks`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              menteeId: mId,
-              title: taskName,
-              description: goal,
-              subject,
-              date: dateStr,
-              materials: validMaterials, // 새로운 materials 배열
-            }),
+          const res = await apiPost('/api/mentor/tasks', {
+            menteeId: mId,
+            title: taskName,
+            description: goal,
+            subject,
+            date: dateStr,
+            materials: validMaterials,
           });
           if (!res.ok) throw new Error('할 일 생성에 실패했습니다.');
         }

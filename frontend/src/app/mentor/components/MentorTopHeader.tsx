@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { useRouter, usePathname } from 'next/navigation';
 import NotificationBell from '@/components/NotificationBell';
-import { getApiUrl } from '@/lib/api';
+import { apiGet } from '@/lib/api';
 
 interface MentorTopHeaderProps {
   isMobileMenuOpen: boolean;
@@ -27,11 +27,7 @@ export default function MentorTopHeader({
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const response = await fetch(`${getApiUrl()}/api/auth/profile`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiGet('/api/auth/profile');
 
         if (response.ok) {
           const data = await response.json();

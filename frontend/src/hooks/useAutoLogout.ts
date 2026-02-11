@@ -76,7 +76,9 @@ export function useAutoLogout(options: AutoLogoutOptions = {}) {
     }, TIMEOUTS.TOKEN_REFRESH_INTERVAL);
   }, [enableTokenRefresh, handleLogout]);
 
-  scheduleTokenRefreshRef.current = scheduleTokenRefresh;
+  useEffect(() => {
+    scheduleTokenRefreshRef.current = scheduleTokenRefresh;
+  }, [scheduleTokenRefresh]);
 
   const extendSession = useCallback(() => {
     resetIdleTimer();

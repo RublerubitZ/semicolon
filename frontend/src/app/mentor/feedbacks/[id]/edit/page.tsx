@@ -1,5 +1,5 @@
 'use client';
-import { getApiUrl } from '@/lib/api';
+import { apiGet, apiPut } from '@/lib/api';
 import RichTextEditor from '@/components/RichTextEditor';
 
 import { useEffect, useState, Suspense } from 'react';
@@ -62,11 +62,7 @@ function FeedbackEditForm() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-
-      const res = await fetch(`${getApiUrl()}/api/mentor/feedbacks/${feedbackId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/mentor/feedbacks/${feedbackId}`);
 
       if (!res.ok) throw new Error('피드백 정보를 불러오는데 실패했습니다.');
 
@@ -103,18 +99,9 @@ function FeedbackEditForm() {
 
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-
-      const res = await fetch(`${getApiUrl()}/api/mentor/feedbacks/${feedbackId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          content: formData.content,
-          summary: formData.summary,
-        }),
+      const res = await apiPut(`/api/mentor/feedbacks/${feedbackId}`, {
+        content: formData.content,
+        summary: formData.summary,
       });
 
       if (!res.ok) throw new Error('피드백 수정에 실패했습니다.');

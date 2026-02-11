@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FiChevronDown } from "react-icons/fi";
 import { CgFileDocument } from "react-icons/cg";
-import { getApiUrl } from "@/lib/api";
+import { apiPost, apiUpload } from "@/lib/api";
 import { toast } from '@/stores/useToastStore';
 import { CONTENT_LIMITS } from '@/constants/contentLimits';
 import RichTextEditor from '@/components/RichTextEditor';
@@ -124,20 +124,13 @@ export default function LibraryNewPage() {
 
         setIsUploading(true);
         try {
-            const token = localStorage.getItem('token');
             const newUploadedFiles: UploadedFile[] = [...uploadedFiles];
 
             for (const file of pdfFiles) {
                 const formData = new FormData();
                 formData.append('pdf', file);
 
-                const res = await fetch(`${getApiUrl()}/api/upload/pdf`, {
-                    method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: formData,
-                });
+                const res = await apiUpload('/api/upload/pdf', formData);
 
                 if (!res.ok) {
                     const errorData = await res.json().catch(() => ({}));
@@ -189,21 +182,13 @@ export default function LibraryNewPage() {
 
         setIsSubmitting(true);
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${getApiUrl()}/api/mentor/worksheets`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    title: name,
-                    subject: SUBJECT_MAP[subject],
-                    type,
-                    content: type === 'COLUMN' ? JSON.stringify({ topics: [{ title, description: content }] }) : null,
-                    pdfUrl: pdfUrlsStr || null,
-                    pdfFileName: pdfFileNamesStr || null,
-                }),
+            const res = await apiPost('/api/mentor/worksheets', {
+                title: name,
+                subject: SUBJECT_MAP[subject],
+                type,
+                content: type === 'COLUMN' ? JSON.stringify({ topics: [{ title, description: content }] }) : null,
+                pdfUrl: pdfUrlsStr || null,
+                pdfFileName: pdfFileNamesStr || null,
             });
 
             if (!res.ok) throw new Error('학습지 생성에 실패했습니다.');

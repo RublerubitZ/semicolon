@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { TimeInputModal } from "./TimeInputModal";
-import { getApiUrl } from "@/lib/api";
+import { apiPost } from "@/lib/api";
 import { toast } from "@/stores/useToastStore";
+import { calculateDuration } from "@/lib/timeUtils";
 
 export interface AssignmentItem {
   id: string;
@@ -45,26 +46,14 @@ export function AssignmentCard({ item, existingTimes, onTimeAdded }: AssignmentC
     setIsSubmitting(true);
 
     try {
-      const token = localStorage.getItem("token");
       const today = new Date().toISOString().split("T")[0];
+      const duration = calculateDuration(startTime, endTime);
 
-      // 시작/종료 시간으로 duration 계산 (분 단위)
-      const [startHour, startMin] = startTime.split(":").map(Number);
-      const [endHour, endMin] = endTime.split(":").map(Number);
-      const duration = (endHour * 60 + endMin) - (startHour * 60 + startMin);
-
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${item.id}/time`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          date: today,
-          startTime,
-          endTime,
-          duration,
-        }),
+      const res = await apiPost(`/api/mentee/tasks/${item.id}/time`, {
+        date: today,
+        startTime,
+        endTime,
+        duration,
       });
 
       if (!res.ok) {

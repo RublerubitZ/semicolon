@@ -1,5 +1,5 @@
 'use client';
-import { getApiUrl, apiGet, apiPost, apiPatch, apiPut, apiDelete } from '@/lib/api';
+import { getApiUrl, apiGet, apiPost, apiPatch, apiPut, apiDelete, fetchWithAuth } from '@/lib/api';
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { HiDotsVertical } from 'react-icons/hi';
@@ -23,6 +23,7 @@ import { useOverlayStore } from '@/stores/useOverlayStore';
 import { Z_INDEX } from '@/constants/zIndex';
 import { TIMEOUTS } from '@/constants/timeouts';
 import { formatDateForApi } from '@/lib/dateUtils';
+import { calculateDuration, isTimeOverlapping, validateStudyTime } from '@/lib/timeUtils';
 import { AlertModal } from '@/components/AlertModal';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { toast } from '@/stores/useToastStore';
@@ -401,24 +402,13 @@ export default function MenteeDashboard() {
   const checkTimeOverlap = (startTime: string, endTime: string, excludeTaskId?: string): { overlaps: boolean; message?: string } => {
     if (!plannerData || !startTime || !endTime) return { overlaps: false };
 
-    const startMin = parseInt(startTime.split(':')[0]) * 60 + parseInt(startTime.split(':')[1]);
-    const endMin = parseInt(endTime.split(':')[0]) * 60 + parseInt(endTime.split(':')[1]);
-
     for (const task of plannerData.tasks) {
       if (task.id === excludeTaskId) continue;
 
       for (const log of task.studyLogs) {
         if (!log.startTime || !log.endTime) continue;
 
-        const logStartMin = parseInt(log.startTime.split(':')[0]) * 60 + parseInt(log.startTime.split(':')[1]);
-        const logEndMin = parseInt(log.endTime.split(':')[0]) * 60 + parseInt(log.endTime.split(':')[1]);
-
-        // 시간 겹침 체크
-        if (
-          (startMin >= logStartMin && startMin < logEndMin) ||
-          (endMin > logStartMin && endMin <= logEndMin) ||
-          (startMin <= logStartMin && endMin >= logEndMin)
-        ) {
+        if (isTimeOverlapping(startTime, endTime, log.startTime, log.endTime)) {
           const subjectLabel = getSubjectLabel(task.subject);
           return { 
             overlaps: true, 
@@ -439,10 +429,9 @@ export default function MenteeDashboard() {
       if (overlap.overlaps) {
         setTimeOverlapError(overlap.message || '시간이 겹칩니다.');
       } else {
-        const [startH, startM] = newRecord.startTime.split(':').map(Number);
-        const [endH, endM] = newRecord.endTime.split(':').map(Number);
-        if ((endH * 60 + endM) - (startH * 60 + startM) <= 0) {
-          setTimeOverlapError('종료 시간은 시작 시간보다 늦어야 합니다.');
+        const timeError = validateStudyTime(newRecord.startTime, newRecord.endTime);
+        if (timeError) {
+          setTimeOverlapError(timeError);
         } else {
           setTimeOverlapError(null);
         }
@@ -466,17 +455,16 @@ export default function MenteeDashboard() {
   const handleSubmitStudyTime = async () => {
     if (!timeRecord.startTime || !timeRecord.endTime || timeOverlapError) return;
 
-    const [startH, startM] = timeRecord.startTime.split(':').map(Number);
-    const [endH, endM] = timeRecord.endTime.split(':').map(Number);
-    const duration = (endH * 60 + endM) - (startH * 60 + startM);
+    const duration = calculateDuration(timeRecord.startTime, timeRecord.endTime);
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${timeRecord.taskId}/time`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ duration, startTime: timeRecord.startTime, endTime: timeRecord.endTime, date: formatDateForApi(currentDate) }),
+      const res = await apiPost(`/api/mentee/tasks/${timeRecord.taskId}/time`, {
+        duration, 
+        startTime: timeRecord.startTime, 
+        endTime: timeRecord.endTime, 
+        date: formatDateForApi(currentDate) 
       });
+
       if (res.ok) {
         setShowStudyTimeModal(false);
         
@@ -489,11 +477,7 @@ export default function MenteeDashboard() {
 
         // 자가점검도 완료로 업데이트 (API 호출 후 리스트 갱신)
         if (selectedTask && selectedTask.selfCheck !== 'DONE') {
-          await fetch(`${getApiUrl()}/api/mentee/tasks/${timeRecord.taskId}/self-check`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ selfCheck: 'DONE' }),
-          });
+          await apiPatch(`/api/mentee/tasks/${timeRecord.taskId}/self-check`, { selfCheck: 'DONE' });
         }
         
         fetchPlannerData(currentDate);
@@ -505,13 +489,12 @@ export default function MenteeDashboard() {
     setIsUploading(true);
     const urls: string[] = [];
     try {
-      const token = localStorage.getItem('token');
       for (const file of files) {
         const formData = new FormData();
         formData.append('image', file);
-        const res = await fetch(`${getApiUrl()}/api/upload/image`, {
+        // apiPost는 JSON을 강제하므로 FormData는 fetchWithAuth를 직접 사용
+        const res = await fetchWithAuth(`${getApiUrl()}/api/upload/image`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
           body: formData,
         });
         if (res.ok) { 
@@ -561,39 +544,26 @@ export default function MenteeDashboard() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-
       // 시간 기록이 없는 경우에만 시간 기록 API 호출
       if (selectedTask.studyLogs.length === 0) {
-        const [startH, startM] = timeRecord.startTime.split(':').map(Number);
-        const [endH, endM] = timeRecord.endTime.split(':').map(Number);
-        const duration = (endH * 60 + endM) - (startH * 60 + startM);
+        const duration = calculateDuration(timeRecord.startTime, timeRecord.endTime);
 
-        await fetch(`${getApiUrl()}/api/mentee/tasks/${selectedTask.id}/time`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            duration,
-            startTime: timeRecord.startTime,
-            endTime: timeRecord.endTime,
-            date: formatDateForApi(currentDate)
-          }),
+        await apiPost(`/api/mentee/tasks/${selectedTask.id}/time`, {
+          duration,
+          startTime: timeRecord.startTime,
+          endTime: timeRecord.endTime,
+          date: formatDateForApi(currentDate)
         });
 
         // 자가점검도 완료로 업데이트
         if (selectedTask.selfCheck !== 'DONE') {
-          await fetch(`${getApiUrl()}/api/mentee/tasks/${selectedTask.id}/self-check`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ selfCheck: 'DONE' }),
-          });
+          await apiPatch(`/api/mentee/tasks/${selectedTask.id}/self-check`, { selfCheck: 'DONE' });
         }
       }
 
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${selectedTask.id}/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ imageUrls: uploadedImageUrls, comment: submitComment }),
+      const res = await apiPost(`/api/mentee/tasks/${selectedTask.id}/submit`, { 
+        imageUrls: uploadedImageUrls, 
+        comment: submitComment 
       });
 
       if (res.ok) {
@@ -625,7 +595,7 @@ export default function MenteeDashboard() {
         if (log.startTime && log.endTime) {
           const [startH, startM] = log.startTime.split(':').map(Number);
           const [endH, endM] = log.endTime.split(':').map(Number);
-          let startMin = startH * 60 + startM;
+          const startMin = startH * 60 + startM;
           let endMin = endH * 60 + endM;
           
           // 종료 시간이 시작 시간보다 빠른 경우 (자정 넘김 처리)
@@ -1680,7 +1650,7 @@ export default function MenteeDashboard() {
                     ) || []
                   }
                   startHour={5}
-                  endHour={23}
+                  endHour={4}
                 />
               </div>
             </motion.div>

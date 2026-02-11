@@ -1,5 +1,5 @@
 'use client';
-import { getApiUrl } from '@/lib/api';
+import { apiGet } from '@/lib/api';
 import { formatDate } from '@/lib/dateUtils';
 import { getSubjectLabel, getSubjectBadgeColor, DEFAULT_SUBJECT_VALUES } from '@/constants/subjects';
 import HtmlContent from '@/components/HtmlContent';
@@ -39,11 +39,8 @@ export default function FeedbackListPage() {
   const fetchFeedbacks = async (subject?: string) => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
       const params = subject ? `?subject=${subject}` : '';
-      const res = await fetch(`${getApiUrl()}/api/mentee/feedbacks${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/mentee/feedbacks${params}`);
 
       if (!res.ok) throw new Error('피드백을 불러오는데 실패했습니다.');
       const data = await res.json();

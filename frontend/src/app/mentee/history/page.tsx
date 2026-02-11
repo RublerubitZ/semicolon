@@ -1,6 +1,6 @@
 'use client';
 
-import { getApiUrl } from '@/lib/api';
+import { apiGet } from '@/lib/api';
 import { formatDate } from '@/lib/dateUtils';
 import { DEFAULT_SUBJECT_VALUES, getSubjectLabel, getSubjectBadgeColor } from '@/constants/subjects';
 import { getTaskStatusInfo } from '@/constants/taskStatus';
@@ -106,15 +106,10 @@ export default function TaskHistoryPage() {
   const fetchTasks = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
       const year = selectedDate.getFullYear();
       const month = selectedDate.getMonth() + 1;
-      
-      const res = await fetch(`${getApiUrl()}/api/mentee/planner/monthly?year=${year}&month=${month}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+
+      const res = await apiGet(`/api/mentee/planner/monthly?year=${year}&month=${month}`);
 
       if (!res.ok) {
         throw new Error('과제 목록을 불러오는데 실패했습니다.');
