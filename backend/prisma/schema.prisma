@@ -3,10 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  // Connection pool settings for Railway and production
-  // Add ?connection_limit=10&pool_timeout=30 to DATABASE_URL if needed
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // 사용자
