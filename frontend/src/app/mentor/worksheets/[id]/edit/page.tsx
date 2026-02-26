@@ -151,7 +151,7 @@ export default function LibraryEditPage() {
                 const res = await apiGet('/api/mentor/worksheets');
                 if (!res.ok) throw new Error('학습지를 불러오는데 실패했습니다.');
                 const data = await res.json();
-                const worksheet = data.find((w: any) => w.id === id);
+                const worksheet = data.find((w: { id: string }) => w.id === id);
                 
                 if (!worksheet) {
                     toast.error('학습지를 찾을 수 없습니다.');

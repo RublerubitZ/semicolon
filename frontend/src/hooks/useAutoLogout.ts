@@ -102,7 +102,7 @@ export function useAutoLogout(options: AutoLogoutOptions = {}) {
         document.addEventListener(event, resetIdleTimer);
       });
 
-      resetIdleTimer();
+      setTimeout(resetIdleTimer, 0);
     }
 
     if (enableTokenRefresh) {

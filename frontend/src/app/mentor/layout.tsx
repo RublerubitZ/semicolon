@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MentorSidebar from './components/MentorSidebar';
 import MentorTopHeader from './components/MentorTopHeader';
@@ -13,30 +13,24 @@ export default function MentorLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const [user] = useState<{ role: string; name?: string; email?: string; profileImage?: string } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const token = localStorage.getItem('token');
+      const userStr = localStorage.getItem('user');
+      if (!token || !userStr) return null;
+      return JSON.parse(userStr);
+    } catch {
+      return null;
+    }
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-
-    if (!token || !userStr) {
-      router.push('/login');
-      return;
-    }
-
-    try {
-      const parsedUser = JSON.parse(userStr);
-      setUser(parsedUser);
-      if (parsedUser.role !== 'MENTOR') {
-        router.push('/mentee');
-      }
-    } catch (error) {
-      console.error('Failed to parse user:', error);
-      router.push('/login');
-    }
-  }, [router]);
+  useLayoutEffect(() => {
+    if (!user) { router.push('/login'); return; }
+    if (user.role !== 'MENTOR') router.push('/mentee');
+  }, [user, router]);
 
   const handleLogout = () => {
     setShowLogoutModal(true);

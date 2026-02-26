@@ -44,7 +44,7 @@ const COLORS = {
 type BarData = { id: string; type: string; title: string; isFeedback?: boolean };
 type DayCell = { key: string; day: number; inMonth: boolean; bars: BarData[] };
 
-function buildMonthCells(year: number, month1to12: number, tasksByDate: Record<string, any[]>, feedbacksByDate: Record<string, any>) {
+function buildMonthCells(year: number, month1to12: number, tasksByDate: Record<string, BarData[]>, feedbacksByDate: Record<string, unknown>) {
   const first = new Date(year, month1to12 - 1, 1);
   const last = new Date(year, month1to12, 0);
   const daysInMonth = last.getDate();
@@ -108,8 +108,8 @@ function MentorCalendarContent() {
   const menteeId = sp.get('menteeId');
 
   const [mentee, setMentee] = useState<Mentee | null>(null);
-  const [tasksByDate, setTasksByDate] = useState<Record<string, any[]>>({});
-  const [feedbacksByDate, setFeedbacksByDate] = useState<Record<string, any>>({});
+  const [tasksByDate, setTasksByDate] = useState<Record<string, BarData[]>>({});
+  const [feedbacksByDate, setFeedbacksByDate] = useState<Record<string, unknown>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isTasksLoading, setIsTasksLoading] = useState(false);
 
@@ -215,7 +215,7 @@ function MentorCalendarContent() {
   }, [year, month, menteeId]);
 
   // 특정 날짜의 일일 피드백 조회 함수
-  const [currentDailyFeedback, setCurrentDailyFeedback] = useState<any>(null);
+  const [currentDailyFeedback, setCurrentDailyFeedback] = useState<{ id: string; content: string; date: string } | null>(null);
   const fetchDailyFeedback = async (date: string) => {
     if (!menteeId) return;
     try {

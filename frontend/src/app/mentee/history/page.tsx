@@ -17,7 +17,7 @@ import {
 } from 'react-icons/hi2';
 import { PiPushPinFill, PiPencilLineLight } from "react-icons/pi";
 import { AlertModal } from '@/components/AlertModal';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 
 type Subject = 'KOREAN' | 'ENGLISH' | 'MATH' | 'OTHER';
 type SortOrder = 'LATEST' | 'OLDEST';
@@ -118,7 +118,7 @@ export default function TaskHistoryPage() {
       const data = await res.json();
       const tasks: Task[] = [];
       if (data.tasksByDate) {
-        Object.values(data.tasksByDate).forEach((dateTasks: any) => {
+        Object.values(data.tasksByDate).forEach((dateTasks: Task[]) => {
           tasks.push(...dateTasks);
         });
       }
@@ -174,7 +174,7 @@ export default function TaskHistoryPage() {
     // 과목 필터
     if (selectedSubject !== 'ALL') {
       if (selectedSubject === 'OTHER') {
-        filtered = filtered.filter(t => !DEFAULT_SUBJECT_VALUES.includes(t.subject as any));
+        filtered = filtered.filter(t => !DEFAULT_SUBJECT_VALUES.includes(t.subject as Subject));
       } else {
         filtered = filtered.filter(t => t.subject === selectedSubject);
       }
@@ -231,16 +231,16 @@ export default function TaskHistoryPage() {
     setIsDatePickerOpen(false);
   };
 
-  const handleDragEnd = (event: any, info: any) => {
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const threshold = 50;
     const currentIndex = SUBJECT_TABS.findIndex(tab => tab.id === selectedSubject);
-    
+
     if (info.offset.x < -threshold && currentIndex < SUBJECT_TABS.length - 1) {
       // Swipe Left -> Next Tab
-      setSelectedSubject(SUBJECT_TABS[currentIndex + 1].id as any);
+      setSelectedSubject(SUBJECT_TABS[currentIndex + 1].id as Subject | 'ALL');
     } else if (info.offset.x > threshold && currentIndex > 0) {
       // Swipe Right -> Previous Tab
-      setSelectedSubject(SUBJECT_TABS[currentIndex - 1].id as any);
+      setSelectedSubject(SUBJECT_TABS[currentIndex - 1].id as Subject | 'ALL');
     }
   };
 
@@ -277,7 +277,7 @@ export default function TaskHistoryPage() {
           {SUBJECT_TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setSelectedSubject(tab.id as any)}
+              onClick={() => setSelectedSubject(tab.id as Subject | 'ALL')}
               className={`flex-1 min-w-[60px] py-4 text-center text-base font-semibold transition-colors relative z-10 ${
                 selectedSubject === tab.id ? 'text-black' : 'text-[#94A3B8]'
               }`}

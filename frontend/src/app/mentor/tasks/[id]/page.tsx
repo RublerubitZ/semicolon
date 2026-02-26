@@ -92,7 +92,7 @@ export default function MentorTaskDetailPage() {
 
   const [task, setTask] = useState<Task | null>(null);
   const [comments, setComments] = useState<FeedbackComment[]>([]);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const [imageModalOpen, setImageModalOpen] = useState(false);

@@ -12,7 +12,7 @@ import { PiAlignBottomFill } from "react-icons/pi";
 import { apiGet } from '@/lib/api';
 
 interface MentorSidebarProps {
-  user: any;
+  user: { role: string; name?: string; email?: string; profileImage?: string } | null;
   isMobileMenuOpen: boolean;
   setIsMobileMenuOpen: (open: boolean) => void;
   handleLogout: () => void;

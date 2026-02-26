@@ -137,7 +137,7 @@ export default function MenteeDashboard() {
   const [showStudyTimeModal, setShowStudyTimeModal] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showWorksheetModal, setShowWorksheetModal] = useState(false);
-  const [selectedWorksheet, setSelectedWorksheet] = useState<any>(null);
+  const [selectedWorksheet, setSelectedWorksheet] = useState<{ id: string; title: string; pdfUrl?: string; type: 'PDF' | 'COLUMN'; content?: string; materials?: unknown[] } | null>(null);
   const [showFeedbackSummary, setShowFeedbackSummary] = useState(false);
   const [showTimeTablePopup, setShowTimeTablePopup] = useState(false);
   const [showConfirmTimeModal, setShowConfirmTimeModal] = useState(false);

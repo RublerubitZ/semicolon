@@ -24,10 +24,7 @@ export function AutoLogoutWarning({
   const [timeLeft, setTimeLeft] = useState(remainingSeconds);
 
   useEffect(() => {
-    if (!show) {
-      setTimeLeft(remainingSeconds);
-      return;
-    }
+    if (!show) return;
 
     // 카운트다운
     const interval = setInterval(() => {
@@ -42,7 +39,7 @@ export function AutoLogoutWarning({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [show, remainingSeconds]);
+  }, [show, onLogout]);
 
   if (!show) return null;
 

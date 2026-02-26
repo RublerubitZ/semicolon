@@ -1,5 +1,4 @@
 'use client';
-import { useEffect, useState } from 'react';
 
 interface StreakBadgeProps {
   currentStreak: number;
@@ -12,24 +11,12 @@ export default function StreakBadge({
   longestStreak,
   variant = 'compact',
 }: StreakBadgeProps) {
-  const [shouldAnimate, setShouldAnimate] = useState(false);
-  const [prevStreak, setPrevStreak] = useState(currentStreak);
-
-  // 스트릭 증가 시 애니메이션 트리거
-  useEffect(() => {
-    if (currentStreak > prevStreak && currentStreak > 0) {
-      setShouldAnimate(true);
-      const timer = setTimeout(() => setShouldAnimate(false), 1000);
-      return () => clearTimeout(timer);
-    }
-    setPrevStreak(currentStreak);
-  }, [currentStreak, prevStreak]);
 
   if (variant === 'compact') {
     return (
       <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-orange-500 to-red-500 rounded-full shadow-md">
         <span
-          className={`text-lg ${shouldAnimate ? 'animate-pulse' : ''}`}
+          className="text-lg"
           role="img"
           aria-label="불꽃"
         >
@@ -49,7 +36,7 @@ export default function StreakBadge({
       <div className="flex items-center justify-center mb-4">
         <div className="flex items-center gap-3">
           <span
-            className={`text-5xl ${shouldAnimate ? 'animate-bounce' : ''}`}
+            className="text-5xl"
             role="img"
             aria-label="불꽃"
           >

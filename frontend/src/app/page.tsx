@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { motion, useScroll, useSpring } from 'framer-motion';
@@ -10,7 +10,20 @@ import { Z_INDEX } from '@/constants/zIndex';
 
 export default function Home() {
   const router = useRouter();
-  const [isChecking, setIsChecking] = useState(true);
+  const [redirectTo] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const token = localStorage.getItem('token');
+      const userStr = localStorage.getItem('user');
+      if (!token || !userStr) return null;
+      const user = JSON.parse(userStr);
+      return user.role === 'MENTOR' ? '/mentor' : '/mentee';
+    } catch {
+      return null;
+    }
+  });
+  const isChecking = redirectTo !== null;
+
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, {
     stiffness: 100,
@@ -18,25 +31,9 @@ export default function Home() {
     restDelta: 0.001
   });
 
-  useEffect(() => {
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-
-    if (token && userStr) {
-      try {
-        const user = JSON.parse(userStr);
-        if (user.role === 'MENTOR') {
-          router.push('/mentor');
-        } else {
-          router.push('/mentee');
-        }
-      } catch {
-        setIsChecking(false);
-      }
-    } else {
-      setIsChecking(false);
-    }
-  }, [router]);
+  useLayoutEffect(() => {
+    if (redirectTo) router.push(redirectTo);
+  }, [redirectTo, router]);
 
   if (isChecking) {
     return (

@@ -19,7 +19,7 @@ export default function MentorTopHeader({
 }: MentorTopHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{ role: string; name?: string; email?: string; profileImage?: string } | null>(null);
 
   useEffect(() => {
     const fetchProfile = async () => {

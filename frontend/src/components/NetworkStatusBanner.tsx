@@ -6,7 +6,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { MdWifiOff, MdWifi } from 'react-icons/md';
 
 export default function NetworkStatusBanner() {
-  const [isOffline, setIsOffline] = useState(false);
+  const [isOffline, setIsOffline] = useState(() =>
+    typeof navigator !== 'undefined' ? !navigator.onLine : false
+  );
   const [showReconnected, setShowReconnected] = useState(false);
   const queryClient = useQueryClient();
 
@@ -19,11 +21,6 @@ export default function NetworkStatusBanner() {
       queryClient.invalidateQueries();
       setTimeout(() => setShowReconnected(false), 3000);
     };
-
-    // 초기 상태
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      setIsOffline(true);
-    }
 
     window.addEventListener('offline', handleOffline);
     window.addEventListener('online', handleOnline);

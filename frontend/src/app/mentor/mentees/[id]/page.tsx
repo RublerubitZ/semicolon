@@ -38,8 +38,8 @@ interface Task {
     id: string;
     title: string;
   } | null;
-  submissions: any[];
-  feedbacks: any[];
+  submissions: Record<string, unknown>[];
+  feedbacks: Record<string, unknown>[];
   studyLogs: { duration: number }[];
 }
 
@@ -101,7 +101,7 @@ export default function MenteePlannerPage() {
 
   // 스트릭 & 히트맵 상태
   const [streakData, setStreakData] = useState<{ currentStreak: number; longestStreak: number } | null>(null);
-  const [heatmapData, setHeatmapData] = useState<any[]>([]);
+  const [heatmapData, setHeatmapData] = useState<{ date: string; count: number }[]>([]);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   // 멘티 정보 가져오기
@@ -515,7 +515,7 @@ export default function MenteePlannerPage() {
 
 // ----------------- Sub-components for Tabs -----------------
 
-function NewTaskInTab({ menteeId, onSuccess }: any) {
+function NewTaskInTab({ menteeId, onSuccess }: { menteeId: string; onSuccess: () => void }) {
   // Integrated simplified logic from NewTaskPage
   const [taskName, setTaskName] = useState('');
   const [goal, setGoal] = useState('');
@@ -523,7 +523,7 @@ function NewTaskInTab({ menteeId, onSuccess }: any) {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const onSubmit = async (e: any) => {
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!taskName) { toast.warning('과제명을 입력해주세요.'); return; }
     setIsSubmitting(true);
@@ -551,7 +551,13 @@ function NewTaskInTab({ menteeId, onSuccess }: any) {
   );
 }
 
-function EditTaskModal({ task, onClose, onUpdate, formData, setFormData }: any) {
+function EditTaskModal({ task, onClose, onUpdate, formData, setFormData }: {
+  task: Task | null;
+  onClose: () => void;
+  onUpdate: (e: React.FormEvent<HTMLFormElement>) => void;
+  formData: { title: string; description: string; subject: Subject; date: string };
+  setFormData: React.Dispatch<React.SetStateAction<{ title: string; description: string; subject: Subject; date: string }>>;
+}) {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />

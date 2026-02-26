@@ -247,7 +247,7 @@ export default function NewTaskPage() {
         }
 
         // 칼럼 데이터를 materials에 추가 (복사)
-        const newMaterials: Material[] = columnItems.map((topic: any, idx: number) => ({
+        const newMaterials: Material[] = columnItems.map((topic: { title?: string; description?: string }, idx: number) => ({
           type: 'COLUMN',
           order: materials.length + idx,
           columnTitle: topic.title || '',

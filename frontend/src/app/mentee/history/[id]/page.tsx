@@ -37,7 +37,7 @@ interface Task {
   worksheet?: {
     id: string;
     title: string;
-    content: any;
+    content: string | null;
   };
   feedbacks: Feedback[];
   submissions: Submission[];

@@ -31,6 +31,7 @@ export function AutoLogoutProvider({ children }: AutoLogoutProviderProps) {
     <>
       {children}
       <AutoLogoutWarning
+        key={showWarning ? 'shown' : 'hidden'}
         show={showWarning}
         onExtend={extendSession}
         onLogout={handleLogout}

@@ -102,11 +102,11 @@ export default function TrendsPage() {
   );
 }
 
-function LatestMonthSummary({ data }: { data: any[] }) {
+function LatestMonthSummary({ data }: { data: Record<string, unknown>[] }) {
   const latest = data[data.length - 1];
   if (!latest) return null;
 
-  const subjects = Object.entries(latest.subjects) as [string, any][];
+  const subjects = Object.entries(latest.subjects as Record<string, unknown>);
   if (subjects.length === 0) {
     return <p className="text-xs text-gray-400">데이터가 없습니다</p>;
   }

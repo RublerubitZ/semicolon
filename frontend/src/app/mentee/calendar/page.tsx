@@ -6,7 +6,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { FaBell } from "react-icons/fa";
 import { IoIosArrowDown } from "react-icons/io";
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import { SUBJECT_LABELS, DEFAULT_SUBJECT_VALUES } from '@/constants/subjects';
 import { getTaskStatusInfo } from '@/constants/taskStatus';
 import { Z_INDEX } from '@/constants/zIndex';
@@ -27,14 +27,14 @@ interface Task {
   subject: string;
   isCompleted: boolean;
   isFixed: boolean;
-  submissions: any[];
+  submissions: Record<string, unknown>[];
   date: string;
-  feedbacks?: any[];
+  feedbacks?: Record<string, unknown>[];
 }
 
 interface MonthlyData {
   tasksByDate: Record<string, Task[]>;
-  feedbacksByDate: Record<string, any>;
+  feedbacksByDate: Record<string, unknown>;
   year: number;
   month: number;
 }
@@ -183,7 +183,7 @@ export default function CalendarPage() {
     }
   };
 
-  const handleDragEnd = (event: any, info: any) => {
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const threshold = 50;
     if (info.offset.x < -threshold) {
       handleNextMonth();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "@/stores/useToastStore";
 
 interface CommentModalProps {
@@ -12,11 +12,10 @@ interface CommentModalProps {
 export function CommentModal({ open, onClose, onSubmit }: CommentModalProps) {
   const [content, setContent] = useState("");
 
-  useEffect(() => {
-    if (!open) {
-      setContent("");
-    }
-  }, [open]);
+  const handleClose = () => {
+    setContent("");
+    onClose();
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,8 +26,7 @@ export function CommentModal({ open, onClose, onSubmit }: CommentModalProps) {
     }
 
     onSubmit({ content: content.trim() });
-    setContent("");
-    onClose();
+    handleClose();
   };
 
   if (!open) return null;
@@ -36,7 +34,7 @@ export function CommentModal({ open, onClose, onSubmit }: CommentModalProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
@@ -62,7 +60,7 @@ export function CommentModal({ open, onClose, onSubmit }: CommentModalProps) {
           <div className="flex gap-3 pt-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="flex-1 rounded-lg border border-gray-300 py-2.5 font-medium text-gray-700 transition hover:bg-gray-50"
             >
               취소

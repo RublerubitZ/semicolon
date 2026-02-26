@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { isTimeOverlapping, validateStudyTime } from "@/lib/timeUtils";
 
 interface TimeInputModalProps {
@@ -22,13 +22,12 @@ export function TimeInputModal({
   const [endTime, setEndTime] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    if (!open) {
-      setStartTime("");
-      setEndTime("");
-      setError("");
-    }
-  }, [open]);
+  const handleClose = () => {
+    setStartTime("");
+    setEndTime("");
+    setError("");
+    onClose();
+  };
 
   // 시간 중복 체크
   const checkTimeOverlap = (start: string, end: string): boolean => {
@@ -69,7 +68,7 @@ export function TimeInputModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
@@ -114,7 +113,7 @@ export function TimeInputModal({
           <div className="flex gap-3 pt-2">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="flex-1 rounded-lg border border-gray-300 py-2.5 font-medium text-gray-700 transition hover:bg-gray-50"
             >
               취소

@@ -36,7 +36,7 @@ interface Worksheet {
   id: string;
   title: string;
   subject: string;
-  content?: any;
+  content?: string;
   pdfUrl?: string;
   type: 'COLUMN' | 'PDF';
 }
@@ -170,10 +170,10 @@ export default function TaskDetailPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timeOverlapError, setTimeOverlapError] = useState<string | null>(null);
-  const [dailyTasks, setDailyTasks] = useState<any[]>([]);
+  const [dailyTasks, setDailyTasks] = useState<Worksheet[]>([]);
 
   const [showWorksheetModal, setShowWorksheetModal] = useState(false);
-  const [selectedWorksheet, setSelectedWorksheet] = useState<any>(null);
+  const [selectedWorksheet, setSelectedWorksheet] = useState<Worksheet | null>(null);
 
   // 피드백/채팅 상태
   const [comments, setComments] = useState<FeedbackComment[]>([]);
@@ -322,7 +322,7 @@ export default function TaskDetailPage() {
     setShowWorksheetModal(true);
   };
 
-  const handleViewPdf = (worksheetOrUrl: any) => {
+  const handleViewPdf = (worksheetOrUrl: Worksheet | string) => {
     if (!worksheetOrUrl) return;
 
     let pdfUrl = "";
