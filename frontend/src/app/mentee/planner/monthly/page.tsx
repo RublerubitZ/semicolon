@@ -1,5 +1,5 @@
 'use client';
-import { getApiUrl } from '@/lib/api';
+import { apiGet } from '@/lib/api';
 import { getSubjectLabel, getSubjectBadgeColor } from '@/constants/subjects';
 
 import { useEffect, useState } from 'react';
@@ -44,16 +44,7 @@ export default function MonthlyPlanner() {
     setIsLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-
-      const res = await fetch(
-        `${getApiUrl()}/api/mentee/planner/monthly?year=${year}&month=${month}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const res = await apiGet(`/api/mentee/planner/monthly?year=${year}&month=${month}`);
 
       if (!res.ok) {
         throw new Error('월간 플래너를 불러오는데 실패했습니다.');

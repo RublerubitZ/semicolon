@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { FiChevronDown } from "react-icons/fi";
 import { CgFileDocument } from "react-icons/cg";
-import { getApiUrl } from "@/lib/api";
+import { apiGet, apiPut, apiUpload } from "@/lib/api";
 import { toast } from '@/stores/useToastStore';
 import { CONTENT_LIMITS } from '@/constants/contentLimits';
 import RichTextEditor from '@/components/RichTextEditor';
@@ -148,10 +148,7 @@ export default function LibraryEditPage() {
 
         const fetchWorksheet = async () => {
             try {
-                const token = localStorage.getItem('token');
-                const res = await fetch(`${getApiUrl()}/api/mentor/worksheets`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const res = await apiGet('/api/mentor/worksheets');
                 if (!res.ok) throw new Error('학습지를 불러오는데 실패했습니다.');
                 const data = await res.json();
                 const worksheet = data.find((w: any) => w.id === id);
@@ -207,20 +204,13 @@ export default function LibraryEditPage() {
 
         setIsUploading(true);
         try {
-            const token = localStorage.getItem('token');
             const newUploadedFiles: UploadedFile[] = [...uploadedFiles];
 
             for (const file of pdfFiles) {
                 const formData = new FormData();
                 formData.append('pdf', file);
 
-                const res = await fetch(`${getApiUrl()}/api/upload/pdf`, {
-                    method: 'POST',
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: formData,
-                });
+                const res = await apiUpload('/api/upload/pdf', formData);
 
                 if (!res.ok) {
                     const errorData = await res.json().catch(() => ({}));
@@ -269,21 +259,13 @@ export default function LibraryEditPage() {
 
         setIsSubmitting(true);
         try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`${getApiUrl()}/api/mentor/worksheets/${id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    title: name,
-                    subject: SUBJECT_MAP[subject],
-                    type,
-                    content: type === 'COLUMN' ? JSON.stringify({ topics: [{ title, description: content }] }) : null,
-                    pdfUrl: pdfUrlsStr || null,
-                    pdfFileName: pdfFileNamesStr || null,
-                }),
+            const res = await apiPut(`/api/mentor/worksheets/${id}`, {
+                title: name,
+                subject: SUBJECT_MAP[subject],
+                type,
+                content: type === 'COLUMN' ? JSON.stringify({ topics: [{ title, description: content }] }) : null,
+                pdfUrl: pdfUrlsStr || null,
+                pdfFileName: pdfFileNamesStr || null,
             });
 
             if (!res.ok) throw new Error('학습지 수정에 실패했습니다.');

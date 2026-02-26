@@ -1,6 +1,6 @@
 'use client';
 
-import { getApiUrl } from '@/lib/api';
+import { apiGet, apiPost } from '@/lib/api';
 import { getSubjectLabel } from '@/constants/subjects';
 import RichTextEditor from '@/components/RichTextEditor';
 import HtmlContent from '@/components/HtmlContent';
@@ -109,10 +109,7 @@ export default function MentorTaskDetailPage() {
 
   const fetchTask = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/tasks/${taskId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/mentor/tasks/${taskId}`);
       if (!res.ok) throw new Error('과제 정보를 불러오는데 실패했습니다.');
       const data = await res.json();
       setTask(data);
@@ -125,10 +122,7 @@ export default function MentorTaskDetailPage() {
 
   const fetchComments = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/tasks/${taskId}/comments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/tasks/${taskId}/comments`);
       if (res.ok) {
         const data = await res.json();
         setComments(data.comments || []);
@@ -142,15 +136,7 @@ export default function MentorTaskDetailPage() {
   const handleSendComment = async (content: string) => {
     if (!content.trim()) return;
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/tasks/${taskId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ content }),
-      });
+      const res = await apiPost(`/api/tasks/${taskId}/comments`, { content });
       if (res.ok) {
         setChatInput('');
         fetchComments();
@@ -171,20 +157,12 @@ export default function MentorTaskDetailPage() {
 
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/feedbacks`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          taskId: task.id,
-          content: feedbackForm.content,
-          summary: feedbackForm.summary,
-          subject: task.subject,
-          feedbackDate: new Date().toISOString().split('T')[0],
-        }),
+      const res = await apiPost('/api/mentor/feedbacks', {
+        taskId: task.id,
+        content: feedbackForm.content,
+        summary: feedbackForm.summary,
+        subject: task.subject,
+        feedbackDate: new Date().toISOString().split('T')[0],
       });
       if (!res.ok) throw new Error('피드백 작성에 실패했습니다.');
       setFeedbackForm({ summary: '', content: '' });
@@ -301,7 +279,7 @@ export default function MentorTaskDetailPage() {
                 {/* 멘티 코멘트 */}
                 {currentSubmission.comment && (
                   <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-                    <p className="text-[10px] font-black text-blue-500 mb-3 uppercase tracking-widest">Mentee's Note</p>
+                    <p className="text-[10px] font-black text-blue-500 mb-3 uppercase tracking-widest">Mentee&apos;s Note</p>
                     <p className="text-base text-slate-700 leading-relaxed whitespace-pre-wrap">{currentSubmission.comment}</p>
                   </div>
                 )}

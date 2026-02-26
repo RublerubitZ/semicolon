@@ -1,5 +1,5 @@
 'use client';
-import { getApiUrl } from '@/lib/api';
+import { apiGet, apiPost, apiPut } from '@/lib/api';
 import RichTextEditor from '@/components/RichTextEditor';
 import { useEffect, useState } from 'react';
 import { AiOutlineSave } from 'react-icons/ai';
@@ -47,17 +47,12 @@ export default function WeeklyFeedbackForm({ menteeId }: { menteeId: string }) {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const token = localStorage.getItem('token');
-        const headers = { Authorization: `Bearer ${token}` };
-
         const [feedbackRes, allFbRes] = await Promise.all([
-          fetch(
-            `${getApiUrl()}/api/mentor/mentees/${menteeId}/weekly-feedbacks?year=${selectedYear}&month=${selectedMonth}&weekNumber=${selectedWeek}`,
-            { headers }
+          apiGet(
+            `/api/mentor/mentees/${menteeId}/weekly-feedbacks?year=${selectedYear}&month=${selectedMonth}&weekNumber=${selectedWeek}`
           ),
-          fetch(
-            `${getApiUrl()}/api/mentor/mentees/${menteeId}/weekly-feedbacks?year=${selectedYear}&month=${selectedMonth}`,
-            { headers }
+          apiGet(
+            `/api/mentor/mentees/${menteeId}/weekly-feedbacks?year=${selectedYear}&month=${selectedMonth}`
           ),
         ]);
 
@@ -115,32 +110,18 @@ export default function WeeklyFeedbackForm({ menteeId }: { menteeId: string }) {
 
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      };
-
       const body = { overallComment, strengths, improvements, nextWeekGoals };
 
       let res;
       if (feedback) {
-        res = await fetch(`${getApiUrl()}/api/mentor/weekly-feedbacks/${feedback.id}`, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify(body),
-        });
+        res = await apiPut(`/api/mentor/weekly-feedbacks/${feedback.id}`, body);
       } else {
-        res = await fetch(`${getApiUrl()}/api/mentor/weekly-feedbacks`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
+        res = await apiPost('/api/mentor/weekly-feedbacks', {
             ...body,
             menteeId,
             year: selectedYear,
             month: selectedMonth,
             weekNumber: selectedWeek,
-          }),
         });
       }
 
@@ -154,10 +135,8 @@ export default function WeeklyFeedbackForm({ menteeId }: { menteeId: string }) {
       toast.success(feedback ? '주간 총평이 수정되었습니다.' : '주간 총평이 저장되었습니다.');
       
       // Fetch all feedbacks again to update the dots
-      const token2 = localStorage.getItem('token');
-      const allFbRes = await fetch(
-        `${getApiUrl()}/api/mentor/mentees/${menteeId}/weekly-feedbacks?year=${selectedYear}&month=${selectedMonth}`,
-        { headers: { Authorization: `Bearer ${token2}` } }
+      const allFbRes = await apiGet(
+        `/api/mentor/mentees/${menteeId}/weekly-feedbacks?year=${selectedYear}&month=${selectedMonth}`
       );
       if (allFbRes.ok) {
         const allData = await allFbRes.json();

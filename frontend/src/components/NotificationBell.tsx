@@ -18,6 +18,8 @@ import { Z_INDEX } from '@/constants/zIndex';
 import { getUser } from '@/lib/auth';
 import { useNotifications, useUnreadCount, useMarkAsRead, useMarkAllAsRead } from '@/lib/queries/use-notifications';
 
+import { formatRelativeTime } from '@/lib/dateUtils';
+
 interface Notification {
   id: string;
   type: string;
@@ -83,6 +85,7 @@ export default function NotificationBell() {
         router.push(`/mentee/tasks/${notification.relatedId}`);
         break;
       case 'TASK_SUBMITTED':
+        // 멘토가 멘티의 제출물을 확인하는 페이지로 이동
         router.push(`/mentor/tasks/${notification.relatedId}`);
         break;
       case 'NEW_FEEDBACK':
@@ -113,22 +116,6 @@ export default function NotificationBell() {
       case 'TASK_INCOMPLETE': return <MdWarning className="text-rose-300" />;
       default: return <MdNotifications className="text-orange-300" />;
     }
-  };
-
-  // 시간 포맷팅
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffMins < 1) return '방금 전';
-    if (diffMins < 60) return `${diffMins}분 전`;
-    if (diffHours < 24) return `${diffHours}시간 전`;
-    if (diffDays < 7) return `${diffDays}일 전`;
-    return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
   };
 
   return (
@@ -239,7 +226,7 @@ export default function NotificationBell() {
                               {notification.content || '새로운 알림이 도착했습니다.'}
                             </div>
                             <div className="mt-3 flex items-center gap-1 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-                              {formatTime(notification.createdAt)}
+                              {formatRelativeTime(notification.createdAt)}
                             </div>
                           </div>
                         </button>

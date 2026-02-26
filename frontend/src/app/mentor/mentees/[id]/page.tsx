@@ -1,5 +1,5 @@
 'use client';
-import { getApiUrl } from '@/lib/api';
+import { apiGet, apiPost, apiPut, apiDelete } from '@/lib/api';
 import { EditIcon, DeleteIcon } from '@/components/icons';
 import { getSubjectLabel, getSubjectBadgeColor } from '@/constants/subjects';
 import { getSelfCheckInfo, type SelfCheckStatus } from '@/constants/selfCheck';
@@ -107,10 +107,7 @@ export default function MenteePlannerPage() {
   // 멘티 정보 가져오기
   const fetchMentee = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/mentor/mentees/${menteeId}`);
 
       if (!res.ok) throw new Error('멘티 정보를 불러오는데 실패했습니다.');
 
@@ -124,10 +121,7 @@ export default function MenteePlannerPage() {
   // 스트릭 데이터 조회
   const fetchStreak = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}/streak`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/mentor/mentees/${menteeId}/streak`);
       if (!res.ok) throw new Error('스트릭 데이터를 불러오는데 실패했습니다.');
       const data = await res.json();
       setStreakData(data || null);
@@ -139,10 +133,7 @@ export default function MenteePlannerPage() {
   // 히트맵 데이터 조회
   const fetchHeatmap = async (year: number) => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}/heatmap?year=${year}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/mentor/mentees/${menteeId}/heatmap?year=${year}`);
       if (!res.ok) throw new Error('히트맵 데이터를 불러오는데 실패했습니다.');
       const data = await res.json();
       setHeatmapData(data.data || []);
@@ -155,25 +146,22 @@ export default function MenteePlannerPage() {
   const fetchPlanner = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      let url = '';
+      let endpoint = '';
 
       if (viewMode === 'daily') {
         const dateStr = format(selectedDate, 'yyyy-MM-dd');
-        url = `${getApiUrl()}/api/mentor/mentees/${menteeId}/planner/daily?date=${dateStr}`;
+        endpoint = `/api/mentor/mentees/${menteeId}/planner/daily?date=${dateStr}`;
       } else if (viewMode === 'weekly') {
         const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 });
         const dateStr = format(weekStart, 'yyyy-MM-dd');
-        url = `${getApiUrl()}/api/mentor/mentees/${menteeId}/planner/weekly?startDate=${dateStr}`;
+        endpoint = `/api/mentor/mentees/${menteeId}/planner/weekly?startDate=${dateStr}`;
       } else if (viewMode === 'monthly') {
         const year = selectedDate.getFullYear();
         const month = selectedDate.getMonth() + 1;
-        url = `${getApiUrl()}/api/mentor/mentees/${menteeId}/planner/monthly?year=${year}&month=${month}`;
+        endpoint = `/api/mentor/mentees/${menteeId}/planner/monthly?year=${year}&month=${month}`;
       }
 
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(endpoint);
 
       if (!res.ok) throw new Error('플래너를 불러오는데 실패했습니다.');
 
@@ -224,15 +212,7 @@ export default function MenteePlannerPage() {
     e.preventDefault();
     if (!editingTask) return;
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/tasks/${editingTask.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(editFormData),
-      });
+      const res = await apiPut(`/api/mentor/tasks/${editingTask.id}`, editFormData);
       if (!res.ok) throw new Error('과제 수정에 실패했습니다.');
       toast.success('과제가 수정되었습니다.');
       closeEditModal();
@@ -245,11 +225,7 @@ export default function MenteePlannerPage() {
   const handleDeleteTask = async (task: Task) => {
     if (!confirm('정말 삭제하시겠습니까?')) return;
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/tasks/${task.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiDelete(`/api/mentor/tasks/${task.id}`);
       if (!res.ok) throw new Error('과제 삭제에 실패했습니다.');
       toast.success('과제가 삭제되었습니다.');
       fetchPlanner();
@@ -552,12 +528,7 @@ function NewTaskInTab({ menteeId, onSuccess }: any) {
     if (!taskName) { toast.warning('과제명을 입력해주세요.'); return; }
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/tasks`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ menteeId, title: taskName, description: goal, subject, date, materials: [] })
-      });
+      const res = await apiPost('/api/mentor/tasks', { menteeId, title: taskName, description: goal, subject, date, materials: [] });
       if (!res.ok) throw new Error('과제 등록 실패');
       toast.success('등록되었습니다.');
       onSuccess();

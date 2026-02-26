@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getApiUrl } from '@/lib/api';
+import { getApiUrl, apiGet, apiPatch, fetchWithAuth } from '@/lib/api';
 import { IoIosArrowBack, IoIosArrowForward } from 'react-icons/io';
 import { FiLogOut, FiEdit3 } from 'react-icons/fi';
 import { HiOutlineAcademicCap, HiOutlineFlag } from 'react-icons/hi';
@@ -102,12 +102,10 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
   const fetchData = async () => {
     setIsLoadingStats(true);
     try {
-      const token = localStorage.getItem('token');
-
       const [streakRes, statsRes, notifRes] = await Promise.all([
-        fetch(`${getApiUrl()}/api/mentee/streak`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${getApiUrl()}/api/mentee/stats`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${getApiUrl()}/api/mentee/notification-settings`, { headers: { Authorization: `Bearer ${token}` } })
+        apiGet('/api/mentee/streak'),
+        apiGet('/api/mentee/stats'),
+        apiGet('/api/mentee/notification-settings')
       ]);
 
       if (streakRes.ok) setStreakData(await streakRes.json());
@@ -126,10 +124,7 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
       const init = async () => {
         setIsLoading(true);
         try {
-          const token = localStorage.getItem('token');
-          const res = await fetch(`${getApiUrl()}/api/auth/profile`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+          const res = await apiGet('/api/auth/profile');
           if (res.ok) {
             const data = await res.json();
             const u = data.user;
@@ -172,12 +167,8 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
 
     try {
       setIsUpdating(true);
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/upload/image`, {
+      const res = await fetchWithAuth(`${getApiUrl()}/api/upload/image`, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
         body: formData,
       });
 
@@ -195,15 +186,7 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
   const handleUpdateProfile = async () => {
     setIsUpdating(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/auth/update-profile`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(editData),
-      });
+      const res = await apiPatch('/api/auth/update-profile', editData);
       if (!res.ok) throw new Error('프로필 업데이트 실패');
       const data = await res.json();
       
@@ -226,17 +209,9 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
     }
     setIsChangingPassword(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/auth/change-password`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          currentPassword: passwordData.current,
-          newPassword: passwordData.new,
-        }),
+      const res = await apiPatch('/api/auth/change-password', {
+        currentPassword: passwordData.current,
+        newPassword: passwordData.new,
       });
       if (!res.ok) {
         const data = await res.json();
@@ -255,15 +230,7 @@ export default function MyPageOverlay({ isOpen, onClose }: MyPageOverlayProps) {
   const handleUpdateNotifications = async () => {
     setIsUpdatingNotifications(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentee/notification-settings`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(notificationSettings),
-      });
+      const res = await apiPatch('/api/mentee/notification-settings', notificationSettings);
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || '알림 설정 업데이트 실패');

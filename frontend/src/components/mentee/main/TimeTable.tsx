@@ -48,26 +48,31 @@ export function TimeTable({ items, startHour = 0, endHour = 24 }: TimeTableProps
   // 아이템의 위치와 높이 계산
   const getItemStyle = (item: TimelineItem) => {
     const itemStart = timeToMinutes(item.start);
-    const itemEnd = timeToMinutes(item.end);
+    let itemEnd = timeToMinutes(item.end);
+
+    // 종료 시간이 시작 시간보다 작으면 다음날로 간주 (+24시간)
+    if (itemEnd < itemStart) {
+      itemEnd += 24 * 60;
+    }
 
     // 범위를 벗어나는 아이템은 잘라냄
     let adjustedStart = itemStart;
     let adjustedEnd = itemEnd;
 
-    // 다음날까지 걸치는 경우 처리
+    // 다음날까지 걸치는 경우 처리 (예: 05:00 ~ 02:00)
     if (endHour < startHour) {
-      // 자정을 넘는 경우
-      if (itemStart < startHour * 60 && itemStart < endHour * 60) {
-        adjustedStart = itemStart + 24 * 60;
-      }
-      if (itemEnd < startHour * 60 && itemEnd <= endHour * 60) {
-        adjustedEnd = itemEnd + 24 * 60;
-      }
-
-      // 범위 확인
+      // 뷰의 범위: startHour ~ (24 + endHour)
       const rangeStart = startHour * 60;
       const rangeEnd = (24 + endHour) * 60;
 
+      // 아이템의 시간이 뷰의 범위를 벗어나는 경우 보정 (예: 01:00 -> 25:00)
+      if (adjustedStart < rangeStart) adjustedStart += 24 * 60;
+      if (adjustedEnd < rangeStart) adjustedEnd += 24 * 60;
+
+      // start만 보정되고 end는 안 된 경우 (경계를 넘는 아이템) 추가 보정
+      if (adjustedEnd < adjustedStart) adjustedEnd += 24 * 60;
+
+      // 범위 확인
       if (adjustedEnd <= rangeStart || adjustedStart >= rangeEnd) {
         return null; // 범위 밖
       }
@@ -80,14 +85,18 @@ export function TimeTable({ items, startHour = 0, endHour = 24 }: TimeTableProps
 
       return { top: `${top}%`, height: `${height}%` };
     } else {
-      if (adjustedEnd <= startMinutes || adjustedStart >= endHour * 60) {
+      // 일반적인 당일 뷰 (예: 00:00 ~ 24:00)
+      const rangeStart = startHour * 60;
+      const rangeEnd = endHour * 60;
+
+      if (adjustedEnd <= rangeStart || adjustedStart >= rangeEnd) {
         return null;
       }
 
-      adjustedStart = Math.max(adjustedStart, startMinutes);
-      adjustedEnd = Math.min(adjustedEnd, endHour * 60);
+      adjustedStart = Math.max(adjustedStart, rangeStart);
+      adjustedEnd = Math.min(adjustedEnd, rangeEnd);
 
-      const top = ((adjustedStart - startMinutes) / totalMinutes) * 100;
+      const top = ((adjustedStart - rangeStart) / totalMinutes) * 100;
       const height = ((adjustedEnd - adjustedStart) / totalMinutes) * 100;
 
       return { top: `${top}%`, height: `${height}%` };

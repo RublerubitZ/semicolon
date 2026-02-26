@@ -1,6 +1,6 @@
 'use client';
 
-import { getApiUrl } from '@/lib/api';
+import { apiGet } from '@/lib/api';
 import { formatDate } from '@/lib/dateUtils';
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -123,10 +123,7 @@ export default function CalendarPage() {
     }
 
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentee/planner/monthly?year=${y}&month=${m}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/mentee/planner/monthly?year=${y}&month=${m}`);
       if (res.ok) {
         const data = await res.json();
         setMonthlyData(data);

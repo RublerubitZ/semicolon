@@ -1,5 +1,5 @@
 'use client';
-import { getApiUrl } from '@/lib/api';
+import { apiGet, apiPost, apiPut } from '@/lib/api';
 import RichTextEditor from '@/components/RichTextEditor';
 import { useEffect, useState } from 'react';
 import { AiOutlineSave } from 'react-icons/ai';
@@ -38,12 +38,8 @@ export default function MonthlyFeedbackForm({ menteeId }: { menteeId: string }) 
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const token = localStorage.getItem('token');
-        const headers = { Authorization: `Bearer ${token}` };
-
-        const res = await fetch(
-          `${getApiUrl()}/api/mentor/mentees/${menteeId}/monthly-feedbacks?year=${selectedYear}&month=${selectedMonth}`,
-          { headers }
+        const res = await apiGet(
+          `/api/mentor/mentees/${menteeId}/monthly-feedbacks?year=${selectedYear}&month=${selectedMonth}`
         );
 
         if (res.ok) {
@@ -94,31 +90,17 @@ export default function MonthlyFeedbackForm({ menteeId }: { menteeId: string }) 
 
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      };
-
       const body = { overallComment, strengths, improvements, nextMonthGoals };
 
       let res;
       if (feedback) {
-        res = await fetch(`${getApiUrl()}/api/mentor/monthly-feedbacks/${feedback.id}`, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify(body),
-        });
+        res = await apiPut(`/api/mentor/monthly-feedbacks/${feedback.id}`, body);
       } else {
-        res = await fetch(`${getApiUrl()}/api/mentor/monthly-feedbacks`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
+        res = await apiPost('/api/mentor/monthly-feedbacks', {
             ...body,
             menteeId,
             year: selectedYear,
             month: selectedMonth,
-          }),
         });
       }
 

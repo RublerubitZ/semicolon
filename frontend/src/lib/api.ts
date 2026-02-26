@@ -195,7 +195,7 @@ export async function fetchWithAuth(
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
-  if (!headers.has('Content-Type') && options.method !== 'GET') {
+  if (!headers.has('Content-Type') && options.method !== 'GET' && !(options.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -331,4 +331,18 @@ export async function apiPatch(endpoint: string, data?: unknown): Promise<Respon
 export async function apiDelete(endpoint: string): Promise<Response> {
   const url = `${getApiUrl()}${endpoint}`;
   return fetchWithAuth(url, { method: 'DELETE' });
+}
+
+/**
+ * API 파일 업로드 헬퍼 함수 (FormData)
+ * @param endpoint - API 엔드포인트
+ * @param formData - FormData 객체
+ * @returns Response 객체
+ */
+export async function apiUpload(endpoint: string, formData: FormData): Promise<Response> {
+  const url = `${getApiUrl()}${endpoint}`;
+  return fetchWithAuth(url, {
+    method: 'POST',
+    body: formData,
+  });
 }

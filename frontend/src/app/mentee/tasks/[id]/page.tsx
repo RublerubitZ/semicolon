@@ -1,10 +1,11 @@
 'use client';
 
-import { getApiUrl } from '@/lib/api';
+import { getApiUrl, apiGet, apiPost, apiPatch, fetchWithAuth } from '@/lib/api';
 import ImageModal from '@/components/ImageModal';
 import { getSubjectLabel } from '@/constants/subjects';
 import { type SelfCheckStatus } from '@/constants/selfCheck';
 import HtmlContent from '@/components/HtmlContent';
+import { calculateDuration, isTimeOverlapping, validateStudyTime } from '@/lib/timeUtils';
 
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
@@ -189,10 +190,7 @@ export default function TaskDetailPage() {
   const fetchTaskDetail = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/mentee/tasks/${taskId}`);
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -211,9 +209,7 @@ export default function TaskDetailPage() {
       // 해당 날짜의 모든 과제 가져오기 (시간 중복 체크용)
       if (data.date) {
         const dateStr = data.date.split('T')[0];
-        const plannerRes = await fetch(`${getApiUrl()}/api/mentee/planner?date=${dateStr}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const plannerRes = await apiGet(`/api/mentee/planner?date=${dateStr}`);
         if (plannerRes.ok) {
           const plannerData = await plannerRes.json();
           setDailyTasks(plannerData.tasks || []);
@@ -228,10 +224,7 @@ export default function TaskDetailPage() {
 
   const fetchComments = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/tasks/${taskId}/comments`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/tasks/${taskId}/comments`);
       if (res.ok) {
         const data = await res.json();
         setComments(data.comments || []);
@@ -374,14 +367,12 @@ export default function TaskDetailPage() {
       if (targetFiles.length > 0) {
         setIsUploading(true);
         try {
-          const token = localStorage.getItem('token');
           const urls: string[] = [];
           for (const file of targetFiles) {
             const formData = new FormData();
             formData.append('image', file);
-            const res = await fetch(`${getApiUrl()}/api/upload/image`, {
+            const res = await fetchWithAuth(`${getApiUrl()}/api/upload/image`, {
               method: 'POST',
-              headers: { Authorization: `Bearer ${token}` },
               body: formData,
             });
             if (res.ok) {
@@ -403,20 +394,9 @@ export default function TaskDetailPage() {
     }
   };
 
-  const calculateDuration = (start: string, end: string): number => {
-    const [startH, startM] = start.split(':').map(Number);
-    const [endH, endM] = end.split(':').map(Number);
-    let diff = (endH * 60 + endM) - (startH * 60 + startM);
-    if (diff < 0) diff += 24 * 60;
-    return diff;
-  };
-
   // 시간 중복 체크 함수
   const checkTimeOverlap = (start: string, end: string): { overlaps: boolean; message?: string } => {
     if (!start || !end || !dailyTasks.length) return { overlaps: false };
-
-    const startMin = parseInt(start.split(':')[0]) * 60 + parseInt(start.split(':')[1]);
-    const endMin = parseInt(end.split(':')[0]) * 60 + parseInt(end.split(':')[1]);
 
     for (const t of dailyTasks) {
       if (t.id === taskId) continue; // 현재 과제는 제외
@@ -424,15 +404,7 @@ export default function TaskDetailPage() {
       for (const log of t.studyLogs) {
         if (!log.startTime || !log.endTime) continue;
 
-        const logStartMin = parseInt(log.startTime.split(':')[0]) * 60 + parseInt(log.startTime.split(':')[1]);
-        const logEndMin = parseInt(log.endTime.split(':')[0]) * 60 + parseInt(log.endTime.split(':')[1]);
-
-        // 시간 겹침 체크
-        if (
-          (startMin >= logStartMin && startMin < logEndMin) ||
-          (endMin > logStartMin && endMin <= logEndMin) ||
-          (startMin <= logStartMin && endMin >= logEndMin)
-        ) {
+        if (isTimeOverlapping(start, end, log.startTime, log.endTime)) {
           return {
             overlaps: true,
             message: `${t.title} : ${log.startTime} ~ ${log.endTime} 이 설정한 공부시간과 겹칩니다.`
@@ -451,9 +423,9 @@ export default function TaskDetailPage() {
         if (overlap.overlaps) {
           setTimeOverlapError(overlap.message || '시간이 겹칩니다.');
         } else {
-          const duration = calculateDuration(value, endTime);
-          if (duration <= 0) {
-            setTimeOverlapError('종료 시간은 시작 시간보다 늦어야 합니다.');
+          const timeError = validateStudyTime(value, endTime);
+          if (timeError) {
+            setTimeOverlapError(timeError);
           } else {
             setTimeOverlapError(null);
           }
@@ -466,9 +438,9 @@ export default function TaskDetailPage() {
         if (overlap.overlaps) {
           setTimeOverlapError(overlap.message || '시간이 겹칩니다.');
         } else {
-          const duration = calculateDuration(startTime, value);
-          if (duration <= 0) {
-            setTimeOverlapError('종료 시간은 시작 시간보다 늦어야 합니다.');
+          const timeError = validateStudyTime(startTime, value);
+          if (timeError) {
+            setTimeOverlapError(timeError);
           } else {
             setTimeOverlapError(null);
           }
@@ -517,35 +489,24 @@ export default function TaskDetailPage() {
 
     setIsSubmitting(true);
     try {
-      const token = localStorage.getItem('token');
-
       // 시간 기록이 없는 경우에만 시간 기록 API 호출
       if (task.studyLogs.length === 0) {
-        await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}/time`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            duration,
-            date: task.date.split('T')[0], // ISO 형식에서 날짜 부분만 추출 (YYYY-MM-DD)
-            startTime,
-            endTime
-          }),
+        await apiPost(`/api/mentee/tasks/${taskId}/time`, {
+          duration,
+          date: task.date.split('T')[0],
+          startTime,
+          endTime
         });
 
         // 자가점검도 완료로 업데이트
         if (task.selfCheck !== 'DONE') {
-          await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}/self-check`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ selfCheck: 'DONE' }),
-          });
+          await apiPatch(`/api/mentee/tasks/${taskId}/self-check`, { selfCheck: 'DONE' });
         }
       }
 
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ imageUrls: uploadedImageUrls, comment: submitComment }),
+      const res = await apiPost(`/api/mentee/tasks/${taskId}/submit`, {
+        imageUrls: uploadedImageUrls,
+        comment: submitComment
       });
 
       if (!res.ok) {
@@ -567,15 +528,10 @@ export default function TaskDetailPage() {
   const handleSendChat = async () => {
     if (!chatInput.trim()) return;
     const content = chatInput.trim();
-    setChatInput(''); // 즉시 비우기
-    
+    setChatInput('');
+
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/tasks/${taskId}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ content }),
-      });
+      const res = await apiPost(`/api/tasks/${taskId}/comments`, { content });
       if (res.ok) {
         fetchComments();
       }

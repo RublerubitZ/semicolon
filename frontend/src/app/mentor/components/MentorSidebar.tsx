@@ -9,7 +9,7 @@ import { RiBookFill } from "react-icons/ri";
 import { FiLogOut } from "react-icons/fi";
 import { FaRegFolderOpen } from "react-icons/fa6";
 import { PiAlignBottomFill } from "react-icons/pi";
-import { getApiUrl } from '@/lib/api';
+import { apiGet } from '@/lib/api';
 
 interface MentorSidebarProps {
   user: any;
@@ -77,11 +77,7 @@ export default function MentorSidebar({
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const response = await fetch(`${getApiUrl()}/api/auth/profile`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+        const response = await apiGet('/api/auth/profile');
 
         if (response.ok) {
           const data = await response.json();

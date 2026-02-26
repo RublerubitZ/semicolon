@@ -1,5 +1,5 @@
 'use client';
-import { getApiUrl } from '@/lib/api';
+import { apiGet } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/dateUtils';
 import HtmlContent from '@/components/HtmlContent';
 
@@ -64,13 +64,7 @@ export default function FeedbackDetail() {
     setIsLoading(true);
 
     try {
-      const token = localStorage.getItem('token');
-
-      const res = await fetch(`${getApiUrl()}/api/mentee/tasks/${taskId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const res = await apiGet(`/api/mentee/tasks/${taskId}`);
 
       if (!res.ok) {
         throw new Error('과제를 불러오는데 실패했습니다.');

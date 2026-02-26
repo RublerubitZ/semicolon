@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import { useMemo, useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getApiUrl } from '@/lib/api';
+import { apiGet } from '@/lib/api';
 
 import { RiUserFill } from 'react-icons/ri';
 import { FaBook } from 'react-icons/fa';
@@ -166,14 +166,7 @@ function MentorCalendarContent() {
     
     setIsTasksLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      // 백엔드 routes/mentor.ts의 /api/mentor/mentees/:id/planner/monthly 엔포인트는 tasksByDate를 반환함
-      // 일일 피드백 데이터는 별도로 가져와야 하거나 백엔드 수정이 필요할 수 있음
-      // 우선 tasksByDate와 함께 일일 피드백이 있는지 확인하기 위해 개별 날짜별로 체크하는 대신
-      // 백엔드에서 멘티의 일일 피드백 목록을 가져오는 API가 있다면 그것을 활용
-      const plannerRes = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}/planner/monthly?year=${y}&month=${m}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const plannerRes = await apiGet(`/api/mentor/mentees/${menteeId}/planner/monthly?year=${y}&month=${m}`);
 
       if (plannerRes.ok) {
         const data = await plannerRes.json();
@@ -199,10 +192,7 @@ function MentorCalendarContent() {
       }
 
       try {
-        const token = localStorage.getItem('token');
-        const res = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await apiGet(`/api/mentor/mentees/${menteeId}`);
         if (!res.ok) {
           console.warn('멘티 정보를 불러오는데 실패했습니다:', res.status);
           setIsLoading(false);
@@ -229,10 +219,7 @@ function MentorCalendarContent() {
   const fetchDailyFeedback = async (date: string) => {
     if (!menteeId) return;
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${getApiUrl()}/api/mentor/mentees/${menteeId}/daily-feedbacks?date=${date}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await apiGet(`/api/mentor/mentees/${menteeId}/daily-feedbacks?date=${date}`);
       if (res.ok) {
         const data = await res.json();
         setCurrentDailyFeedback(data);
