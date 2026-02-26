@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 설스터디 프론트엔드
 
-## Getting Started
+설스터디 학습 코칭 플랫폼의 Next.js 프론트엔드입니다.
 
-First, run the development server:
+## 기술 스택
+
+- **Next.js 16** (App Router)
+- **React 19**
+- **TypeScript**
+- **TailwindCSS v4**
+- **TanStack Query v5** - 서버 상태 관리
+- **Zustand v5** - 클라이언트 상태 관리
+- **Tiptap** - 리치 텍스트 에디터
+- **Framer Motion** - 애니메이션
+- **React Hook Form + Zod** - 폼 유효성 검사
+
+## 개발 서버 실행
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+[http://localhost:3000](http://localhost:3000)에서 확인할 수 있습니다.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 환경 변수
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+`.env.local` 파일을 생성하고 다음을 설정하세요:
 
-## Learn More
+```
+NEXT_PUBLIC_API_URL=http://localhost:4000
+```
 
-To learn more about Next.js, take a look at the following resources:
+## 페이지 구조
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+src/app/
+├── login/               # 로그인
+├── mentee/              # 멘티 (모바일 최적화)
+│   ├── page.tsx         # 일일 플래너 (홈)
+│   ├── planner/
+│   │   ├── weekly/      # 주간 플래너
+│   │   └── monthly/     # 월간 플래너
+│   ├── calendar/        # 캘린더
+│   ├── feedbacks/       # 피드백 목록
+│   ├── history/[id]/    # 과제 히스토리
+│   ├── reports/         # 보고서
+│   └── tasks/[id]/      # 과제 상세
+└── mentor/              # 멘토 (PC 최적화)
+    ├── page.tsx         # 멘티 목록 (홈)
+    ├── mentees/         # 멘티 상세 및 플래너
+    ├── tasks/           # 과제 관리
+    ├── feedbacks/       # 피드백 관리
+    ├── worksheets/      # 학습지 관리
+    ├── reports/         # 보고서
+    └── calendar/        # 캘린더
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 빌드
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run build
+npm run start
+```
